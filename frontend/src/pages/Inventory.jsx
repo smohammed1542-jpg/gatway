@@ -11,6 +11,8 @@ import {
   parseItemToForm,
 } from '../utils/inventoryHelpers';
 import { usePermissions } from '../hooks/usePermissions';
+import DataTable from '../components/ui/DataTable';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 const Inventory = () => {
   const { canManage } = usePermissions();
@@ -127,6 +129,13 @@ const Inventory = () => {
     }
   };
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingItem(null);
+  };
+
+  useEscapeClose(showModal, closeModal);
+
   return (
     <>
       <div className="animate-fade-in">
@@ -177,79 +186,78 @@ const Inventory = () => {
             <p style={{ fontSize: '14px', marginTop: '8px' }}>Try adjusting your search or add a new item.</p>
           </div>
         ) : (
-          <div className="card table-scroll">
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Item Name</th>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Category</th>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Stock / Allocated</th>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Price/Unit</th>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Status</th>
-                  <th style={{ padding: '16px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(item => {
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <DataTable
+              variant="erp"
+              sortable
+              showColumnChooser
+              pageSize={25}
+              emptyTitle="No items found"
+              emptyDescription="Try adjusting your search or add a new item."
+              columns={[
+                { key: 'name', label: 'Item Name' },
+                { key: 'category', label: 'Category' },
+                { key: 'quantity', label: 'Stock / Allocated' },
+                { key: 'price_per_unit', label: 'Price/Unit', width: '120px' },
+                { key: 'status', label: 'Status', width: '130px' },
+              ]}
+              data={items}
+              onRowClick={(item) => openItemDetail(item.id)}
+              getSortValue={(row, key) => {
+                if (key === 'quantity') return Number(row.quantity || 0);
+                if (key === 'price_per_unit') return Number(row.price_per_unit || 0);
+                if (key === 'category') return CATEGORY_LABELS[row.category] || row.category;
+                return row[key];
+              }}
+              rowActions={(item) => [
+                { label: 'Open', icon: <ChevronRight size={14} />, onClick: () => openItemDetail(item.id) },
+                ...(canManage ? [
+                  { label: 'Edit', icon: <Edit size={14} />, onClick: () => openModal(item) },
+                  { label: 'Remove', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDelete(item.id) },
+                ] : []),
+              ]}
+              renderCell={(item, key) => {
+                if (key === 'name') {
+                  return (
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{item.name}</div>
+                      {item.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{item.description}</div>}
+                    </div>
+                  );
+                }
+                if (key === 'category') return CATEGORY_LABELS[item.category] || item.category;
+                if (key === 'quantity') {
+                  return (
+                    <div>
+                      <div>{item.quantity} {item.unit} total</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Allocated: {item.allocated_quantity || 0} · Available: {Math.max(0, (item.quantity || 0) - (item.allocated_quantity || 0))}
+                      </div>
+                    </div>
+                  );
+                }
+                if (key === 'price_per_unit') {
+                  return (
+                    <>
+                      <span style={{ fontSize: '55%', fontWeight: 600, opacity: 0.65 }}>Rs</span>{' '}
+                      {parseFloat(item.price_per_unit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </>
+                  );
+                }
+                if (key === 'status') {
                   const statusStyle = STATUS_COLORS[item.status] || STATUS_COLORS.IN_STOCK;
                   return (
-                    <tr
-                      key={item.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openItemDetail(item.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openItemDetail(item.id);
-                        }
-                      }}
-                      style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}
-                      className="hover:bg-slate-50/50"
-                    >
-                      <td style={{ padding: '16px' }}>
-                        <div style={{ fontWeight: '600' }}>{item.name}</div>
-                        {item.description && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{item.description}</div>}
-                      </td>
-                      <td style={{ padding: '16px', fontSize: '14px' }}>{CATEGORY_LABELS[item.category] || item.category}</td>
-                      <td style={{ padding: '16px', fontSize: '14px', fontWeight: '500' }}>
-                        <div>{item.quantity} {item.unit} total</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                          Allocated: {item.allocated_quantity || 0} · Available: {Math.max(0, (item.quantity || 0) - (item.allocated_quantity || 0))}
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px', fontSize: '14px' }}>
-                        <span style={{ fontSize: '55%', fontWeight: '600', opacity: 0.65 }}>Rs</span>{' '}
-                        {parseFloat(item.price_per_unit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '16px' }}>
-                        <span style={{
-                          padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
-                          backgroundColor: statusStyle.bg, color: statusStyle.color
-                        }}>
-                          {statusStyle.label}
-                        </span>
-                      </td>
-                      <td style={{ padding: '16px' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <ChevronRight size={18} color="var(--text-muted)" />
-                          {canManage && (
-                          <>
-                          <button type="button" onClick={() => openModal(item)} style={{ color: 'var(--primary)', padding: '4px', background: 'transparent' }} title="Edit">
-                            <Edit size={16} />
-                          </button>
-                          <button type="button" onClick={() => handleDelete(item.id)} style={{ color: '#ef4444', padding: '4px', background: 'transparent' }} title="Delete">
-                            <Trash2 size={16} />
-                          </button>
-                          </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    <span style={{
+                      padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      backgroundColor: statusStyle.bg, color: statusStyle.color,
+                    }}>
+                      {statusStyle.label}
+                    </span>
                   );
-                })}
-              </tbody>
-            </table>
+                }
+                return item[key];
+              }}
+            />
           </div>
         )}
       </div>
@@ -261,10 +269,8 @@ const Inventory = () => {
               <h3 style={{ fontSize: '20px', fontWeight: '700' }}>{editingItem ? 'Edit Item' : 'Add New Item'}</h3>
               <button
                 type="button"
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingItem(null);
-                }}
+                onClick={closeModal}
+                aria-label="Close"
                 style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}
               >
                 <X size={24} />
@@ -328,7 +334,7 @@ const Inventory = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary" style={{ flex: 1, padding: '12px', textAlign: 'center', background: 'transparent', border: '1px solid var(--border-color)' }}>
+                <button type="button" onClick={closeModal} className="btn-secondary" style={{ flex: 1, padding: '12px', textAlign: 'center', background: 'transparent', border: '1px solid var(--border-color)' }}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" style={{ flex: 2, padding: '12px' }}>

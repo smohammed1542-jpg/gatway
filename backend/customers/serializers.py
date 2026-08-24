@@ -16,6 +16,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'tenant', 'created_at', 'first_name', 'last_name', 'outstanding_balance',
             'list_status_updated_at', 'list_status_updated_by', 'list_status_updated_by_name',
+            'created_by', 'updated_at',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_blank': True, 'allow_null': True},
@@ -167,4 +168,6 @@ class CustomerSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request.user, 'tenant') and request.user.tenant:
             validated_data['tenant'] = request.user.tenant
+        if request and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
         return super().create(validated_data)

@@ -41,6 +41,8 @@ class GuestHouseStayTests(TestCase):
             room_type='DOUBLE',
             beds=2,
             included_guests=2,
+            extra_bed_allowed=True,
+            extra_bed_limit=1,
             extra_guest_fee_per_night=Decimal('500'),
             price_per_night=Decimal('3000'),
             status='ACTIVE',

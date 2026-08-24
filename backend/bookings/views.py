@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,7 +5,6 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
-from django.utils import timezone
 
 from core.mixins import TenantQuerysetMixin, TenantAssignMixin
 from core.page_maintenance import page_maintenance_payload
@@ -35,34 +32,20 @@ class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewS
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        booking = self.get_object()
-        if booking.booking_status == 'CANCELLED':
-            return Response({'detail': 'Booking is already cancelled.'}, status=400)
-        if booking.booking_status == 'COMPLETED':
-            return Response({'detail': 'Completed booking cannot be cancelled.'}, status=400)
+        from bookings.services import SalesService
 
+        booking = self.get_object()
         reason = (request.data.get('reason') or '').strip()
         refund_advance = bool(request.data.get('refund_advance', False))
-
-        booking.booking_status = 'CANCELLED'
-        booking.cancellation_reason = reason
-        booking.cancelled_at = timezone.now()
-        booking.remaining_balance = Decimal('0')
-        booking.save()
-
-        if refund_advance:
-            paid = booking.advance_paid or Decimal('0')
-            if paid > 0:
-                from finance.models import Payment
-                Payment.objects.create(
-                    booking=booking,
-                    amount=-paid,
-                    payment_method='CASH',
-                    status='COMPLETED',
-                    notes='Refund on booking cancellation',
-                    tenant=booking.tenant,
-                    recorded_by=request.user if request.user.is_authenticated else None,
-                )
+        try:
+            SalesService.cancel(
+                booking,
+                reason=reason,
+                refund_advance=refund_advance,
+                user=request.user if request.user.is_authenticated else None,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=400)
 
         booking.refresh_from_db()
         return Response(BookingSerializer(booking, context={'request': request}).data)

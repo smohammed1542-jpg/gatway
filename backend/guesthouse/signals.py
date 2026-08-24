@@ -4,9 +4,10 @@ from django.db.models import Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
+from accounting.services import AccountingService
 from core.models import Tenant, UserSettings
 from core.notifications.service import dispatch_customer_notification
-from .models import StayPayment, StayBooking
+from .models import StayPayment, StayBooking, GhExpense
 from .page_visibility import ensure_tenant_gh_pages
 
 
@@ -54,10 +55,26 @@ def gh_stay_booking_notification(sender, instance, created, **kwargs):
     )
 
 
+@receiver(post_save, sender=StayBooking)
+def post_stay_ledger(sender, instance, **kwargs):
+    update_fields = kwargs.get('update_fields')
+    if update_fields and set(update_fields) <= {
+        'advance_paid', 'payment_status', 'total_amount', 'updated_at',
+    }:
+        return
+    AccountingService.sync_stay(instance, user=getattr(instance, 'created_by', None))
+
+
 @receiver(post_save, sender=StayPayment)
 def stay_payment_saved(sender, instance, **kwargs):
     if instance.stay_id:
         sync_stay_advance_paid(instance.stay)
+    if instance.status == 'COMPLETED':
+        AccountingService.post_stay_payment(instance, user=getattr(instance, 'recorded_by', None))
+    elif instance.status == 'VOIDED':
+        AccountingService.reverse_source(
+            instance.tenant, 'stay_payment', instance.pk, user=getattr(instance, 'recorded_by', None)
+        )
 
 
 @receiver(post_save, sender=StayPayment)
@@ -100,3 +117,19 @@ def stay_payment_deleted(sender, instance, **kwargs):
 @receiver(post_save, sender=Tenant)
 def seed_tenant_gh_pages(sender, instance, created, **kwargs):
     ensure_tenant_gh_pages(instance)
+
+
+@receiver(post_save, sender=GhExpense)
+def gh_expense_saved(sender, instance, created, **kwargs):
+    if instance.status == 'CANCELLED':
+        AccountingService.reverse_source(
+            instance.tenant, 'gh_expense', instance.pk, user=getattr(instance, 'created_by', None)
+        )
+        return
+    if not created:
+        AccountingService.reverse_source(
+            instance.tenant, 'gh_expense', instance.pk, user=getattr(instance, 'created_by', None)
+        )
+    AccountingService.post_expense(
+        instance, user=getattr(instance, 'created_by', None), source_type='gh_expense'
+    )

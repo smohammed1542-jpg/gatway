@@ -58,7 +58,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class TenantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
-        fields = ['id', 'name', 'subdomain', 'plan_type', 'phone', 'address']
+        fields = ['id', 'name', 'subdomain', 'plan_type', 'phone', 'address', 'tax_rate', 'overtime_rate_per_hour', 'default_currency']
 
 
 class UserSerializer(serializers.ModelSerializer):

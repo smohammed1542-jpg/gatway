@@ -16,7 +16,7 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = '__all__'
-        read_only_fields = ['tenant', 'created_by', 'remaining_balance', 'payment_status', 'guest_count']
+        read_only_fields = ['tenant', 'created_by', 'remaining_balance', 'payment_status', 'guest_count', 'updated_at']
 
     def validate(self, data):
         venue = data.get('venue')
@@ -95,6 +95,17 @@ class BookingSerializer(serializers.ModelSerializer):
             )
 
         return data
+
+    def update(self, instance, validated_data):
+        if instance.booking_status in ('COMPLETED', 'CANCELLED'):
+            raise serializers.ValidationError(
+                'Posted or cancelled bookings cannot be modified. Use cancel or a new document.'
+            )
+        request = self.context.get('request')
+        user = request.user if request and hasattr(request, 'user') else None
+        if user and user.is_authenticated:
+            validated_data['updated_by'] = user
+        return super().update(instance, validated_data)
 
     def create(self, validated_data):
         request = self.context.get('request')

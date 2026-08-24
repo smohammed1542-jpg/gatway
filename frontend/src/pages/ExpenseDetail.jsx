@@ -25,6 +25,8 @@ import {
   getCategoryLabel,
 } from '../utils/expenseHelpers';
 import AppLoader from '../components/AppLoader';
+import AuditMeta from '../components/ui/AuditMeta';
+import { isLockedExpense } from '../utils/erp';
 
 const ExpenseDetail = () => {
   const { expenseId } = useParams();
@@ -53,13 +55,13 @@ const ExpenseDetail = () => {
   }, [expenseId, navigate]);
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this payment voucher?')) return;
+    if (!window.confirm('Cancel this posted expense? The journal will be reversed; the voucher is kept for audit.')) return;
     try {
       await client.delete(`/finance/expenses/${expenseId}/`);
-      toast.success('Voucher deleted');
+      toast.success('Expense cancelled');
       navigate('/expenses');
     } catch {
-      toast.error('Failed to delete');
+      toast.error('Failed to cancel voucher');
     }
   };
 
@@ -122,7 +124,7 @@ const ExpenseDetail = () => {
             <button type="button" className="btn-secondary" onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Printer size={18} /> Print voucher
             </button>
-            {canEdit && (
+            {canEdit && !isLockedExpense(expense.status) && (
               <>
                 <button
                   type="button"
@@ -147,7 +149,7 @@ const ExpenseDetail = () => {
                     fontWeight: '600',
                   }}
                 >
-                  <Trash2 size={18} /> Delete
+                  <Trash2 size={18} /> Cancel voucher
                 </button>
               </>
             )}
@@ -193,6 +195,15 @@ const ExpenseDetail = () => {
             <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{notes}</p>
           </div>
         )}
+
+        <div className="premium-card" style={{ padding: '16px 24px', marginBottom: '24px' }}>
+          <AuditMeta
+            status={expense.status}
+            createdBy={expense.created_by_name}
+            createdAt={expense.created_at}
+            updatedAt={expense.updated_at}
+          />
+        </div>
 
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
           Official printable voucher preview below

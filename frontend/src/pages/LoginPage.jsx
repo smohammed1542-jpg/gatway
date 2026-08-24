@@ -90,7 +90,9 @@ const LoginPage = () => {
       const usernameMsg = fieldErrorMessage(data?.username);
       const passwordMsg = fieldErrorMessage(data?.password);
 
-      if (usernameMsg) {
+      if (!err.response) {
+        setError('Cannot reach the server. Start the backend, then try again.');
+      } else if (usernameMsg) {
         setUsernameError(usernameMsg);
       } else if (passwordMsg) {
         setPasswordError(passwordMsg);

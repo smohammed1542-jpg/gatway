@@ -57,7 +57,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
 
   const dashboardNavItem = isGuestHouse
     ? { name: 'Dashboard', icon: Calculator, path: '/gh/dashboard', pageKey: GH_PAGE_KEYS.DASHBOARD }
-    : { name: 'Accountant', icon: Calculator, path: '/dashboard', pageKey: HALL_PAGE_KEYS.DASHBOARD };
+    : { name: 'Financials', icon: Calculator, path: '/dashboard', pageKey: HALL_PAGE_KEYS.DASHBOARD };
 
   const mainNavItems = isGuestHouse ? guestHouseNavItems : hallNavItems;
 

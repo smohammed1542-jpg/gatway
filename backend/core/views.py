@@ -60,12 +60,12 @@ class DashboardStatsView(APIView):
         if tenant:
             base_payment_qs = Payment.objects.filter(tenant=tenant)
             payment_qs = Payment.objects.filter(tenant=tenant)
-            expense_qs = Expense.objects.filter(tenant=tenant)
+            expense_qs = Expense.objects.filter(tenant=tenant).exclude(status='CANCELLED')
             booking_qs = Booking.objects.filter(tenant=tenant)
         else:
             base_payment_qs = Payment.objects.all()
             payment_qs = Payment.objects.all()
-            expense_qs = Expense.objects.all()
+            expense_qs = Expense.objects.all().exclude(status='CANCELLED')
             booking_qs = Booking.objects.all()
         
         if start_date and end_date:

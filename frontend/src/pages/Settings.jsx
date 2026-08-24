@@ -71,7 +71,7 @@ const TAB_HEADINGS = {
     subtitle: 'Suites, suite rooms, and independent rooms in one parent–child inventory.',
   },
   'Add-on Services': { title: 'Add-on services', subtitle: 'Manage AC, breakfast, laundry, and other extras for stays.' },
-  Staff: { title: 'Staff management', subtitle: 'Team accounts, roles, and access for your organization.' },
+  Staff: { title: 'Employees', subtitle: 'Team accounts, roles, and access for your organization.' },
   'All Records': { title: 'All records', subtitle: 'Reservations, payments, and expense vouchers in one ledger.' },
   'Venue Info': {
     title: 'Venue information',
@@ -139,6 +139,8 @@ const Settings = () => {
     address: '',
     gh_default_check_in_time: '18:00',
     gh_default_check_out_time: '11:00',
+    tax_rate: 0.05,
+    overtime_rate_per_hour: 5000,
   });
   const [notifSettings, setNotifSettings] = useState({
     notify_new_bookings: true,
@@ -175,6 +177,8 @@ const Settings = () => {
           address: tenantRes.address || '',
           gh_default_check_in_time: stayTimes.checkInTime,
           gh_default_check_out_time: stayTimes.checkOutTime,
+          tax_rate: tenantRes.tax_rate ?? 0.05,
+          overtime_rate_per_hour: tenantRes.overtime_rate_per_hour ?? 5000,
         });
       }
       if (prefsRes) {
@@ -629,6 +633,35 @@ const Settings = () => {
                 <InputGroup label="Current Plan">
                   <input type="text" value={tenantData?.plan_type || ''} style={{ width: '100%' }} readOnly />
                 </InputGroup>
+                <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '28px 0 12px' }}>Tax & overtime</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Used on hall bookings and journal tax lines. Posted documents keep their original amounts.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                  <InputGroup label="Sales tax rate">
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={tenantForm.tax_rate}
+                      onChange={(e) => setTenantForm({ ...tenantForm, tax_rate: e.target.value })}
+                      style={{ width: '100%' }}
+                      aria-label="Sales tax rate"
+                    />
+                  </InputGroup>
+                  <InputGroup label="Overtime per hour (PKR)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={tenantForm.overtime_rate_per_hour}
+                      onChange={(e) => setTenantForm({ ...tenantForm, overtime_rate_per_hour: e.target.value })}
+                      style={{ width: '100%' }}
+                      aria-label="Overtime rate per hour"
+                    />
+                  </InputGroup>
+                </div>
                 {isGuestHouse && (
                   <>
                     <h4 style={{ fontSize: '16px', fontWeight: '700', margin: '28px 0 12px' }}>Default stay times</h4>

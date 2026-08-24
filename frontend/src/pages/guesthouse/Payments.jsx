@@ -23,6 +23,10 @@ import { formatRs, formatCollectDue, hasCollectDue } from '../../utils/currency'
 import { todayISO, matchesDateFilter } from '../../utils/ghDate';
 import StatusBadge from '../../components/ui/StatusBadge';
 import StatCard from '../../components/ui/StatCard';
+import DataTable from '../../components/ui/DataTable';
+import AuditMeta from '../../components/ui/AuditMeta';
+import useEscapeClose from '../../hooks/useEscapeClose';
+import { isLockedPayment } from '../../utils/erp';
 import GhFilterSelect, { GH_DATE_FILTER_OPTIONS } from '../../components/guesthouse/GhFilterSelect';
 import '../../styles/dashboard.css';
 
@@ -113,10 +117,10 @@ export default function GuestHousePayments() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this payment? The stay balance will be updated.')) return;
+    if (!window.confirm('Void this payment? The stay balance will be updated and a reversing journal will be posted.')) return;
     try {
       await deleteGhPayment(id);
-      toast.success('Payment deleted');
+      toast.success('Payment voided');
       if (selectedPayment?.id === id) setSelectedPayment(null);
       load();
     } catch {
@@ -125,6 +129,8 @@ export default function GuestHousePayments() {
   };
 
   const stayForPayment = (p) => stays.find((s) => String(s.id) === String(p.stay));
+
+  useEscapeClose(Boolean(selectedPayment), () => setSelectedPayment(null));
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '40px' }}>
@@ -207,6 +213,7 @@ export default function GuestHousePayments() {
               { value: 'ALL', label: 'All' },
               { value: 'COMPLETED', label: 'Completed' },
               { value: 'PENDING', label: 'Pending' },
+              { value: 'VOIDED', label: 'Voided' },
             ]}
             aria-label="Payment status filter"
           />
@@ -237,96 +244,69 @@ export default function GuestHousePayments() {
           {loading ? (
             <AppLoader inline message="Loading payments…" />
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--surface-elevated)', borderBottom: '1px solid var(--border)' }}>
-                  {['Payment', 'Guest', 'Stay / Room', 'Due', 'Amount', ''].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '14px 16px',
-                        textAlign: 'left',
-                        fontSize: '11px',
-                        fontWeight: '800',
-                        textTransform: 'uppercase',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      No payments match your filters.
-                    </td>
-                  </tr>
-                ) : filtered.map((p) => {
-                  const active = selectedPayment?.id === p.id;
-                  const stay = stayForPayment(p);
-                  const due = stay
-                    ? Math.max(0, Number(stay.total_amount) - Number(stay.advance_paid))
-                    : null;
+            <DataTable
+              variant="erp"
+              sortable
+              showColumnChooser
+              pageSize={25}
+              selectedId={selectedPayment?.id}
+              emptyTitle="No payments match your filters"
+              emptyDescription="Try another date, method, or search."
+              columns={[
+                { key: 'id', label: 'Payment' },
+                { key: 'customer_name', label: 'Guest' },
+                { key: 'stay_ref', label: 'Stay / Room' },
+                { key: 'due', label: 'Due', width: '110px' },
+                { key: 'amount', label: 'Amount', width: '120px' },
+              ]}
+              data={filtered}
+              onRowClick={setSelectedPayment}
+              getSortValue={(row, key) => {
+                if (key === 'amount') return Number(row.amount || 0);
+                if (key === 'due') {
+                  const stay = stayForPayment(row);
+                  return stay ? Math.max(0, Number(stay.total_amount) - Number(stay.advance_paid)) : 0;
+                }
+                return row[key];
+              }}
+              rowActions={(p) => [
+                { label: 'Print', icon: <Printer size={14} />, onClick: () => navigate(`/gh/print/payment/${p.id}`) },
+              ]}
+              renderCell={(p, key) => {
+                const stay = stayForPayment(p);
+                const due = stay ? Math.max(0, Number(stay.total_amount) - Number(stay.advance_paid)) : null;
+                if (key === 'id') {
                   return (
-                    <tr
-                      key={p.id}
-                      onClick={() => setSelectedPayment(p)}
-                      style={{
-                        borderBottom: '1px solid var(--border)',
-                        cursor: 'pointer',
-                        backgroundColor: active ? 'var(--primary-light)' : 'transparent',
-                      }}
-                    >
-                      <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontWeight: '800', fontFamily: 'monospace', fontSize: '12px' }}>
-                          PAY-{String(p.id).padStart(5, '0')}
-                        </span>
-                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                          {p.payment_date
-                            ? new Date(p.payment_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-                            : '-'}
-                        </p>
-                        <StatusBadge status={p.status} />
-                      </td>
-                      <td style={{ padding: '14px 16px', fontWeight: '700' }}>{p.customer_name || '-'}</td>
-                      <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontWeight: '600' }}>{p.stay_ref}</span>
-                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Room {p.room_number} · {METHOD_LABELS[p.payment_method] || p.payment_method}
-                        </p>
-                      </td>
-                      <td
-                        style={{
-                          padding: '14px 16px',
-                          fontWeight: '800',
-                          fontSize: '13px',
-                          color: due != null && hasCollectDue(due) ? 'var(--error)' : 'var(--text-muted)',
-                        }}
-                      >
-                        {due != null ? formatCollectDue(due) : '-'}
-                      </td>
-                      <td style={{ padding: '14px 16px', fontWeight: '800', color: '#166534', fontSize: '14px' }}>
-                        {formatRs(p.amount)}
-                        <ChevronRight size={14} style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
-                      </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          title="Print receipt"
-                          onClick={() => navigate(`/gh/print/payment/${p.id}`)}
-                        >
-                          <Printer size={16} />
-                        </button>
-                      </td>
-                    </tr>
+                    <div>
+                      <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 12 }}>PAY-{String(p.id).padStart(5, '0')}</span>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {p.payment_date ? new Date(p.payment_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '-'}
+                      </p>
+                      <StatusBadge status={p.status} />
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
+                }
+                if (key === 'stay_ref') {
+                  return (
+                    <div>
+                      <span style={{ fontWeight: 600 }}>{p.stay_ref}</span>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Room {p.room_number} · {METHOD_LABELS[p.payment_method] || p.payment_method}
+                      </p>
+                    </div>
+                  );
+                }
+                if (key === 'due') {
+                  return (
+                    <span style={{ fontWeight: 800, color: due != null && hasCollectDue(due) ? 'var(--error)' : 'var(--text-muted)' }}>
+                      {due != null ? formatCollectDue(due) : '-'}
+                    </span>
+                  );
+                }
+                if (key === 'amount') return <span style={{ fontWeight: 800, color: '#166534' }}>{formatRs(p.amount)}</span>;
+                return p[key] || '-';
+              }}
+            />
           )}
         </div>
 
@@ -339,7 +319,7 @@ export default function GuestHousePayments() {
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Payment details</p>
               </div>
-              <button type="button" onClick={() => setSelectedPayment(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+              <button type="button" onClick={() => setSelectedPayment(null)} aria-label="Close payment" style={{ background: 'transparent', color: 'var(--text-muted)' }}>
                 <X size={20} />
               </button>
             </div>
@@ -398,10 +378,16 @@ export default function GuestHousePayments() {
                   {selectedPayment.notes}
                 </p>
               )}
+              <AuditMeta
+                status={selectedPayment.status}
+                createdBy={selectedPayment.recorded_by_name}
+                createdAt={selectedPayment.created_at || selectedPayment.payment_date}
+                updatedAt={selectedPayment.updated_at}
+              />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {canManage && (
+              {canManage && !isLockedPayment(selectedPayment.status) && (
                 <button
                   type="button"
                   className="btn-secondary"
@@ -435,7 +421,7 @@ export default function GuestHousePayments() {
               >
                 <FileText size={16} /> View stay
               </button>
-              {canManage && (
+              {canManage && selectedPayment.status !== 'VOIDED' && (
                 <button
                   type="button"
                   onClick={() => handleDelete(selectedPayment.id)}
@@ -451,7 +437,7 @@ export default function GuestHousePayments() {
                     gap: '8px',
                   }}
                 >
-                  <Trash2 size={16} /> Delete payment
+                  <Trash2 size={16} /> Void payment
                 </button>
               )}
             </div>

@@ -61,10 +61,19 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Expense
         fields = '__all__'
         read_only_fields = ['tenant', 'created_by', 'created_at']
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return ''
+        user = obj.created_by
+        name = f'{user.first_name or ""} {user.last_name or ""}'.strip()
+        return name or user.username or user.email or 'Staff'
 
     def create(self, validated_data):
         request = self.context.get('request')

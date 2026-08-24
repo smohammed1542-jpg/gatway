@@ -17,7 +17,7 @@ export const HALL_PAGE_KEYS = {
 };
 
 export const HALL_PAGE_LABELS = {
-  [HALL_PAGE_KEYS.DASHBOARD]: 'Accountant / Dashboard',
+  [HALL_PAGE_KEYS.DASHBOARD]: 'Financials',
   [HALL_PAGE_KEYS.BOOKINGS]: 'Bookings',
   [HALL_PAGE_KEYS.CALENDAR]: 'Calendar',
   [HALL_PAGE_KEYS.CUSTOMERS]: 'Customers',

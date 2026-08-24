@@ -19,6 +19,19 @@ class Tenant(models.Model):
     default_country_code = models.CharField(max_length=5, default='+92')
     gh_default_check_in_time = models.TimeField(default=datetime.time(18, 0))
     gh_default_check_out_time = models.TimeField(default=datetime.time(11, 0))
+    tax_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=0.0500,
+        help_text='Sales tax rate, e.g. 0.0500 for 5%.',
+    )
+    overtime_rate_per_hour = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=5000,
+        help_text='Hall overtime charge per hour.',
+    )
+    default_currency = models.CharField(max_length=8, default='PKR')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

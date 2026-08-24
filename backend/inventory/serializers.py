@@ -1,6 +1,6 @@
 from django.db.models import Sum
 from rest_framework import serializers
-from .models import InventoryItem, BookingInventoryItem
+from .models import InventoryItem, BookingInventoryItem, InventoryTransaction
 
 
 class InventoryItemSerializer(serializers.ModelSerializer):
@@ -40,4 +40,30 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
             validated_data['tenant'] = request.user.tenant
         elif booking.tenant_id:
             validated_data['tenant'] = booking.tenant
-        return super().create(validated_data)
+        obj = super().create(validated_data)
+        from .services import InventoryService
+        InventoryService.apply_booking_allocation(
+            obj, previous_qty=0, user=request.user if request else None
+        )
+        return obj
+
+    def update(self, instance, validated_data):
+        previous = instance.quantity_used
+        obj = super().update(instance, validated_data)
+        from .services import InventoryService
+        request = self.context.get('request')
+        user = request.user if request else None
+        InventoryService.apply_booking_allocation(obj, previous_qty=previous, user=user)
+        return obj
+
+
+class InventoryTransactionSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source='item.name', read_only=True)
+
+    class Meta:
+        model = InventoryTransaction
+        fields = [
+            'id', 'item', 'item_name', 'booking', 'quantity', 'txn_type',
+            'notes', 'created_by', 'created_at',
+        ]
+        read_only_fields = fields

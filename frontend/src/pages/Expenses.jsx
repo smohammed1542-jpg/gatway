@@ -26,6 +26,9 @@ import {
   getNotesOnly,
   parseExpenseToForm,
 } from '../utils/expenseHelpers';
+import DataTable from '../components/ui/DataTable';
+import useEscapeClose from '../hooks/useEscapeClose';
+import { isLockedExpense } from '../utils/erp';
 
 const Expenses = () => {
   const navigate = useNavigate();
@@ -63,6 +66,10 @@ const Expenses = () => {
   }, []);
 
   const openEditExpense = (expense) => {
+    if (isLockedExpense(expense.status)) {
+      toast.error('Cancelled vouchers are read-only.');
+      return;
+    }
     setEditingExpenseId(expense.id);
     setFormData(parseExpenseToForm(expense));
     setShowModal(true);
@@ -81,6 +88,13 @@ const Expenses = () => {
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [expenses, location.state?.editExpenseId, navigate, location.pathname]);
+
+  const closeExpenseModal = () => {
+    setShowModal(false);
+    setEditingExpenseId(null);
+  };
+
+  useEscapeClose(showModal, closeExpenseModal);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -125,13 +139,13 @@ const Expenses = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to cancel and delete this payment receipt voucher?')) {
+    if (window.confirm('Cancel this posted expense? The journal will be reversed; the voucher is kept for audit.')) {
       try {
         await client.delete(`/finance/expenses/${id}/`);
-        toast.success('Voucher deleted from accounts');
+        toast.success('Expense cancelled');
         fetchExpenses();
       } catch (err) {
-        toast.error('Failed to delete voucher');
+        toast.error(err.response?.data?.detail || 'Failed to cancel voucher');
       }
     }
   };
@@ -257,96 +271,59 @@ const Expenses = () => {
       </div>
 
       {/* Main Expenses Table */}
-      <div className="card table-scroll" style={{ padding: 0, borderRadius: '12px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ backgroundColor: 'var(--surface-muted)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Voucher / Reason</th>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Account Title</th>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Payee Vendor</th>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Date</th>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Amount</th>
-              <th style={{ padding: '18px 24px', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredExpenses.map((expense) => (
-              <tr
-                key={expense.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openExpenseDetail(expense.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openExpenseDetail(expense.id);
-                  }
-                }}
-                style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s', cursor: 'pointer' }}
-                className="hover:bg-slate-50/50"
-              >
-                <td style={{ padding: '20px 24px' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                      <FileText size={16} />
-                    </div>
-                    <div>
-                      <p style={{ fontWeight: '700', fontSize: '14px', color: 'var(--secondary)' }}>{expense.title}</p>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{getNotesOnly(expense) || 'N/A'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td style={{ padding: '20px 24px' }}>
-                  <span style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '20px', fontWeight: '700', backgroundColor: 'var(--surface-elevated)', color: 'var(--text-muted)', display: 'inline-block' }}>
-                    {getAccountTitleLabel(expense)}
-                  </span>
-                </td>
-                <td style={{ padding: '20px 24px', fontSize: '14px', fontWeight: '600', color: 'var(--secondary)' }}>
-                  {getPayeeName(expense)}
-                </td>
-                <td style={{ padding: '20px 24px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <CalendarIcon size={14} color="var(--text-muted)" />
-                    {new Date(expense.expense_date).toLocaleDateString()}
-                  </div>
-                </td>
-                <td style={{ padding: '20px 24px', fontWeight: '800', fontSize: '15px', color: '#ef4444' }}>
-                  -<span style={{ fontSize: '80%', opacity: 0.6, marginRight: '2px' }}>PKR</span> 
+      <div className="card" style={{ padding: 0, borderRadius: '12px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+        <DataTable
+          variant="erp"
+          sortable
+          showColumnChooser
+          pageSize={25}
+          emptyTitle="No payment vouchers matching your criteria"
+          emptyDescription="Try another search or record a voucher."
+          columns={[
+            { key: 'title', label: 'Voucher / Reason' },
+            { key: 'account', label: 'Account Title' },
+            { key: 'payee', label: 'Payee Vendor' },
+            { key: 'expense_date', label: 'Date', width: '130px' },
+            { key: 'amount', label: 'Amount', width: '120px' },
+            { key: 'status', label: 'Status', width: '110px' },
+          ]}
+          data={filteredExpenses}
+          onRowClick={(expense) => openExpenseDetail(expense.id)}
+          getSortValue={(row, key) => {
+            if (key === 'amount') return Number(row.amount || 0);
+            if (key === 'account') return getAccountTitleLabel(row);
+            if (key === 'payee') return getPayeeName(row);
+            return row[key];
+          }}
+          rowActions={(expense) => [
+            { label: 'Open', icon: <ChevronRight size={14} />, onClick: () => openExpenseDetail(expense.id) },
+            ...(!isLockedExpense(expense.status) ? [{ label: 'Edit', icon: <Edit2 size={14} />, onClick: () => openEditExpense(expense) }] : []),
+            ...(!isLockedExpense(expense.status) ? [{ label: 'Cancel', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDelete(expense.id) }] : []),
+          ]}
+          renderCell={(expense, key) => {
+            if (key === 'title') {
+              return (
+                <div>
+                  <p style={{ fontWeight: 700, margin: 0 }}>{expense.title}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{getNotesOnly(expense) || 'N/A'}</p>
+                </div>
+              );
+            }
+            if (key === 'account') return getAccountTitleLabel(expense);
+            if (key === 'payee') return getPayeeName(expense);
+            if (key === 'expense_date') return new Date(expense.expense_date).toLocaleDateString();
+            if (key === 'amount') {
+              return (
+                <span style={{ fontWeight: 800, color: '#ef4444' }}>
+                  -<span style={{ fontSize: '80%', opacity: 0.6, marginRight: 2 }}>PKR</span>
                   {parseFloat(expense.amount).toLocaleString()}
-                </td>
-                <td style={{ padding: '20px 24px' }} onClick={(e) => e.stopPropagation()}>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <ChevronRight size={18} color="var(--text-muted)" />
-                    <button
-                      type="button"
-                      onClick={() => openEditExpense(expense)}
-                      style={{ color: 'var(--secondary)', backgroundColor: 'transparent', padding: '6px', borderRadius: '6px' }}
-                      className="hover:bg-slate-100"
-                      title="Edit"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(expense.id)}
-                      style={{ color: '#ef4444', backgroundColor: 'transparent', padding: '6px', borderRadius: '6px' }}
-                      className="hover:bg-red-50"
-                      title="Delete Voucher"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredExpenses.length === 0 && !isLoading && (
-          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <FileText size={36} style={{ margin: '0 auto 12px', opacity: 0.3, display: 'block' }} />
-            <p style={{ fontSize: '15px', fontWeight: '500' }}>No payment vouchers matching your criteria.</p>
-          </div>
-        )}
+                </span>
+              );
+            }
+            if (key === 'status') return expense.status || 'POSTED';
+            return expense[key];
+          }}
+        />
       </div>
 
     </div>
@@ -365,10 +342,8 @@ const Expenses = () => {
             </div>
             <button
               type="button"
-              onClick={() => {
-                setShowModal(false);
-                setEditingExpenseId(null);
-              }}
+              onClick={closeExpenseModal}
+              aria-label="Close"
               style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}
             >
               <X size={24} />

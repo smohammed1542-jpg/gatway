@@ -26,6 +26,8 @@ import {
   hasCollectDue,
 } from '../utils/currency';
 import { usePermissions } from '../hooks/usePermissions';
+import DataTable from '../components/ui/DataTable';
+import useEscapeClose from '../hooks/useEscapeClose';
 
 const PAYMENT_STATUS_STYLE = {
   PAID: { bg: '#dcfce7', color: '#166534', label: 'Paid' },
@@ -130,6 +132,9 @@ const CustomerManagement = () => {
   const handleSelectCustomer = (customer) => {
     navigate(`/customers/${customer.id}`);
   };
+
+  useEscapeClose(showFormModal, () => setShowFormModal(false));
+  useEscapeClose(showPayModal, () => setShowPayModal(false));
 
   const handleOpenFormModal = (customer = null, e) => {
     e?.stopPropagation();
@@ -268,62 +273,48 @@ const CustomerManagement = () => {
               />
             </div>
 
-            <div className="card table-scroll" style={{ padding: 0 }}>
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               {isLoading ? (
                 <AppLoader inline message="Loading customers…" />
-              ) : filteredCustomers.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>No customers found.</div>
               ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {filteredCustomers.map((customer) => {
-                    const active = selectedId === customer.id;
-                    return (
-                      <li key={customer.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectCustomer(customer)}
-                          style={{
-                            width: '100%',
-                            textAlign: 'left',
-                            padding: '16px 20px',
-                            border: 'none',
-                            borderBottom: '1px solid var(--border)',
-                            background: active ? 'var(--primary-light)' : 'transparent',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: '44px',
-                              height: '44px',
-                              borderRadius: '12px',
-                              backgroundColor: active ? 'var(--primary)' : 'var(--primary-light)',
-                              color: active ? 'white' : 'var(--primary)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: '700',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {customerInitials(customer)}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontWeight: '700', fontSize: '14px' }}>{customerDisplayName(customer)}</p>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{customer.phone}</p>
-                            <p style={{ fontSize: '11px', marginTop: '4px', fontWeight: '700', color: hasCollectDue(customer.outstanding_balance) ? '#b91c1c' : 'var(--text-dim)' }}>
-                              Due: {formatCollectDue(customer.outstanding_balance)}
-                            </p>
-                          </div>
-                          <ChevronRight size={18} color={active ? 'var(--primary)' : 'var(--icon-muted)'} />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <DataTable
+                  variant="erp"
+                  sortable
+                  showColumnChooser
+                  pageSize={25}
+                  selectedId={selectedId}
+                  emptyTitle="No customers found"
+                  emptyDescription="Try another search or add a customer."
+                  columns={[
+                    { key: 'name', label: 'Customer' },
+                    { key: 'phone', label: 'Phone', width: '130px' },
+                    { key: 'cnic', label: 'CNIC', width: '140px' },
+                    { key: 'outstanding_balance', label: 'Due', width: '110px' },
+                  ]}
+                  data={filteredCustomers}
+                  onRowClick={handleSelectCustomer}
+                  getSortValue={(row, key) => {
+                    if (key === 'name') return customerDisplayName(row);
+                    if (key === 'outstanding_balance') return Number(row.outstanding_balance || 0);
+                    return row[key];
+                  }}
+                  rowActions={(customer) => [
+                    { label: 'Open', icon: <ChevronRight size={14} />, onClick: () => handleSelectCustomer(customer) },
+                    ...(canManage ? [{ label: 'Edit', icon: <Edit2 size={14} />, onClick: () => handleOpenFormModal(customer) }] : []),
+                    ...(canManage ? [{ label: 'Remove', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDelete(customer.id) }] : []),
+                  ]}
+                  renderCell={(customer, key) => {
+                    if (key === 'name') return <span style={{ fontWeight: 700 }}>{customerDisplayName(customer)}</span>;
+                    if (key === 'outstanding_balance') {
+                      return (
+                        <span style={{ fontWeight: 700, color: hasCollectDue(customer.outstanding_balance) ? '#b91c1c' : 'var(--text-dim)' }}>
+                          {formatCollectDue(customer.outstanding_balance)}
+                        </span>
+                      );
+                    }
+                    return customer[key] || '—';
+                  }}
+                />
               )}
             </div>
           </div>
@@ -572,7 +563,7 @@ const CustomerManagement = () => {
           <div className="card" style={{ width: '100%', maxWidth: '500px', padding: '32px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '20px', fontWeight: '700' }}>{isEditing ? 'Edit Customer' : 'Add New Customer'}</h3>
-              <button type="button" onClick={() => setShowFormModal(false)} style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}>
+              <button type="button" onClick={() => setShowFormModal(false)} aria-label="Close" style={{ backgroundColor: 'transparent', color: 'var(--text-muted)' }}>
                 <X size={24} />
               </button>
             </div>

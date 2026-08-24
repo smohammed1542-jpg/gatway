@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'inventory.apps.InventoryConfig',
     'decorations.apps.DecorationsConfig',
     'landing.apps.LandingConfig',
+    'accounting.apps.AccountingConfig',
 ]
 
 MIDDLEWARE = [

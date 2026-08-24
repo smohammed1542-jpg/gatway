@@ -46,6 +46,7 @@ def api_root(request):
             'decorations': '/api/decorations/',
             'guesthouse': '/api/guesthouse/',
             'landing': '/api/landing/',
+            'accounting': '/api/accounting/',
         },
         'message': 'API server running. Frontend is on Vercel.',
     })
@@ -98,6 +99,7 @@ urlpatterns = [
     path('api/decorations/', include('decorations.urls')),
     path('api/guesthouse/', include('guesthouse.urls')),
     path('api/landing/', include('landing.urls')),
+    path('api/accounting/', include('accounting.urls')),
 ]
 
 urlpatterns += [

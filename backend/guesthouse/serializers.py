@@ -670,6 +670,10 @@ class StayBookingSerializer(serializers.ModelSerializer):
         return stay
 
     def update(self, instance, validated_data):
+        if instance.status in ('CANCELLED', 'CHECKED_OUT'):
+            raise serializers.ValidationError(
+                'Posted or cancelled stays cannot be modified.'
+            )
         validated_data.pop('advance_payment_method', None)
         guest_roster = validated_data.pop('guest_roster', None)
         if guest_roster is None and 'guest_roster' in self.initial_data:

@@ -1,0 +1,17 @@
+---
+description: ERP backend, database, and accounting standards for Hallora
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# ERP Backend
+
+- Keep modules loosely coupled: models hold structure, services hold business rules, APIs stay thin.
+- Transaction tables use `id` PKs, `<table>_id` FKs, and FK constraints. Prefer junction tables over duplicated relations.
+- Master data (`customers`, venues/rooms, taxes, accounts) is referenced by ID from transactions.
+- Finance-first: operational events (booking, stay, payment, expense, stock) post immutable journal entries. Never overwrite posted history; reverse with a new entry.
+- Posted/cancelled financial rows are not deleted. Use `Draft → Posted → Cancelled/Voided`.
+- Important tables include `created_at`, `updated_at`, `created_by`/`updated_by`, and `status`.
+- Put pricing, tax, overtime, stock movements, and GL posting in services (`SalesService`, `PaymentService`, `InventoryService`, `AccountingService`). Do not hardcode rates in models or views.
+- REST: plural resources, validation, tenant + role authorization, pagination, `select_related`/`prefetch_related`.
+- Multi-step writes use `transaction.atomic`.

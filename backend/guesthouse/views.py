@@ -12,6 +12,7 @@ from datetime import timedelta, datetime, time
 from decimal import Decimal
 
 from core.mixins import TenantQuerysetMixin, TenantAssignMixin
+from finance.services import SoftVoidMixin
 from core.page_maintenance import page_maintenance_payload
 from core.permissions import (
     IsAdminOrManagerOrReadOnly,
@@ -80,7 +81,7 @@ class GuestHouseDashboardStatsView(APIView):
         stays = all_stays.exclude(status='CANCELLED')
         base_payments = StayPayment.objects.filter(tenant=tenant, status='COMPLETED')
         payments = base_payments
-        expenses_qs = GhExpense.objects.filter(tenant=tenant)
+        expenses_qs = GhExpense.objects.filter(tenant=tenant).exclude(status='CANCELLED')
         period_stays = stays
 
         if start_dt and end_dt:
@@ -714,13 +715,15 @@ class StayBookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelV
         return Response(StayBookingSerializer(stay, context={'request': request}).data)
 
 
-class StayPaymentViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
+class StayPaymentViewSet(SoftVoidMixin, TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
     queryset = StayPayment.objects.select_related('stay', 'stay__customer', 'stay__room').all()
     serializer_class = StayPaymentSerializer
     permission_classes = [IsGuestHouseApp, IsGhStaffOrAbove, IsTenantOwner]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'payment_method', 'stay']
     ordering_fields = ['payment_date', 'amount']
+    void_status = 'VOIDED'
+    source_type = 'stay_payment'
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -733,20 +736,22 @@ class StayPaymentViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelV
         role = getattr(request.user, 'role', None)
         if not request.user.is_superuser and role not in ('ADMIN', 'MANAGER'):
             return Response(
-                {'detail': 'Only managers can delete payment records.'},
+                {'detail': 'Only managers can void payment records.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().destroy(request, *args, **kwargs)
 
 
-class GhExpenseViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
+class GhExpenseViewSet(SoftVoidMixin, TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
     queryset = GhExpense.objects.all().order_by('-expense_date')
     serializer_class = GhExpenseSerializer
     permission_classes = [IsGuestHouseApp, IsAdminOrManagerNoStaff, IsTenantOwner]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['category']
+    filterset_fields = ['category', 'status']
     search_fields = ['title', 'description']
     ordering_fields = ['expense_date', 'amount']
+    void_status = 'CANCELLED'
+    source_type = 'gh_expense'
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -754,6 +759,15 @@ class GhExpenseViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelVie
         if user.tenant_id:
             extra['tenant'] = user.tenant
         serializer.save(**extra)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.status == 'CANCELLED':
+            return Response(
+                {'detail': 'Cancelled expenses cannot be modified.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super(SoftVoidMixin, self).update(request, *args, **kwargs)
 
 
 def _gh_target_date(request):

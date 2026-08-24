@@ -22,6 +22,8 @@ import toast from 'react-hot-toast';
 import { resolveMediaUrl } from '../utils/media';
 import { useAppType } from '../hooks/useAppType';
 import './staff.css';
+import DataTable from '../components/ui/DataTable';
+import SearchInput from '../components/SearchInput';
 
 const ROLE_COLORS = {
   ADMIN: { bg: '#fef3c7', color: '#92400e', label: 'Admin' },
@@ -116,6 +118,7 @@ const Staff = ({ embedded = false }) => {
   });
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchStaff = async () => {
     setIsLoading(true);
@@ -173,6 +176,17 @@ const Staff = ({ embedded = false }) => {
   const handleSelectStaff = (member) => {
     setSelectedId(member.id);
   };
+
+  const filteredStaff = staff.filter((member) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      staffDisplayName(member).toLowerCase().includes(q)
+      || (member.email || '').toLowerCase().includes(q)
+      || (member.username || '').toLowerCase().includes(q)
+      || (member.role || '').toLowerCase().includes(q)
+    );
+  });
 
   const openAddModal = () => {
     setEditingMember(null);
@@ -342,80 +356,48 @@ const Staff = ({ embedded = false }) => {
         ) : (
           <div className={`split-layout ${selectedId ? 'split-layout--customers' : ''}`}>
             <div>
-              <div className="halls-grid" style={{ marginBottom: 0 }}>
-                {staff.map((member) => {
-                  const rs = ROLE_COLORS[member.role] || ROLE_COLORS.STAFF;
-                  const active = selectedId === member.id;
-                  return (
-                    <button
-                      key={member.id}
-                      type="button"
-                      onClick={() => handleSelectStaff(member)}
-                      className="premium-card"
-                      style={{
-                        position: 'relative',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        border: active ? '2px solid var(--primary)' : '1px solid var(--border)',
-                        boxShadow: active ? '0 0 0 3px rgba(91, 213, 30, 0.15)' : undefined,
-                        width: '100%',
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '16px',
-                          right: '16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                      >
-                        <ChevronRight
-                          size={18}
-                          color={active ? 'var(--primary)' : '#94a3b8'}
-                        />
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                        <StaffAvatar member={member} active={active} />
-                        <div style={{ paddingRight: '28px' }}>
-                          <h3 style={{ fontSize: '15px', fontWeight: '700' }}>
-                            {staffDisplayName(member)}
-                          </h3>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              marginTop: '4px',
-                              padding: '2px 10px',
-                              borderRadius: '20px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              backgroundColor: rs.bg,
-                              color: rs.color,
-                            }}
-                          >
-                            {rs.label}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          fontSize: '13px',
-                          color: 'var(--text-muted)',
-                          textAlign: 'center',
-                        }}
-                      >
-                        <Mail size={14} /> {member.email}
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="search-toolbar search-toolbar--compact" style={{ marginBottom: 8 }}>
+                <SearchInput
+                  variant="inset"
+                  placeholder="Search employees by name, username, role…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <DataTable
+                  variant="erp"
+                  sortable
+                  showColumnChooser
+                  pageSize={25}
+                  selectedId={selectedId}
+                  emptyTitle="No employees match your search"
+                  emptyDescription="Try another name or add a staff member."
+                  columns={[
+                    { key: 'name', label: 'Employee' },
+                    { key: 'username', label: 'Username' },
+                    { key: 'role', label: 'Role', width: '110px' },
+                    { key: 'email', label: 'Email' },
+                  ]}
+                  data={filteredStaff}
+                  onRowClick={handleSelectStaff}
+                  getSortValue={(row, key) => (key === 'name' ? staffDisplayName(row) : row[key])}
+                  renderCell={(member, key) => {
+                    const rs = ROLE_COLORS[member.role] || ROLE_COLORS.STAFF;
+                    if (key === 'name') return <span style={{ fontWeight: 700 }}>{staffDisplayName(member)}</span>;
+                    if (key === 'role') {
+                      return (
+                        <span style={{
+                          display: 'inline-block', padding: '2px 10px', borderRadius: 20,
+                          fontSize: 11, fontWeight: 700, backgroundColor: rs.bg, color: rs.color,
+                        }}>
+                          {rs.label}
+                        </span>
+                      );
+                    }
+                    return member[key] || '—';
+                  }}
+                />
               </div>
             </div>
 

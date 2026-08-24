@@ -12,6 +12,10 @@ import { formatRs } from '../../utils/currency';
 import { voucherDisplayId } from '../../utils/ghExpenseHelpers';
 import SearchInput from '../../components/SearchInput';
 import StatCard from '../../components/ui/StatCard';
+import DataTable from '../../components/ui/DataTable';
+import AuditMeta from '../../components/ui/AuditMeta';
+import useEscapeClose from '../../hooks/useEscapeClose';
+import { isLockedExpense } from '../../utils/erp';
 import GhFilterSelect, { GH_DATE_FILTER_OPTIONS } from '../../components/guesthouse/GhFilterSelect';
 import { todayISO, matchesDateFilter } from '../../utils/ghDate';
 import '../../styles/dashboard.css';
@@ -103,14 +107,14 @@ export default function GuestHouseExpenses() {
   }, [expenses, filtered]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this expense voucher?')) return;
+    if (!window.confirm('Cancel this posted expense? The journal will be reversed; the voucher is kept for audit.')) return;
     try {
       await deleteGhExpense(id);
-      toast.success('Expense deleted');
+      toast.success('Expense cancelled');
       if (selected?.id === id) setSelected(null);
       load();
-    } catch {
-      toast.error('Failed to delete');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to cancel voucher');
     }
   };
 
@@ -121,6 +125,8 @@ export default function GuestHouseExpenses() {
     }
     navigate('/gh/expenses/new');
   };
+
+  useEscapeClose(Boolean(selected), () => setSelected(null));
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '40px' }}>
@@ -217,75 +223,53 @@ export default function GuestHouseExpenses() {
           {loading ? (
             <AppLoader inline message="Loading expenses…" />
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--surface-elevated)', borderBottom: '1px solid var(--border)' }}>
-                  {['Voucher', 'Category', 'Date', 'Amount', ''].map((h) => (
-                    <th key={h} style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                      <FileText size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                      <p>No expenses match your filters.</p>
-                    </td>
-                  </tr>
-                ) : filtered.map((exp) => {
-                  const active = selected?.id === exp.id;
+            <DataTable
+              variant="erp"
+              sortable
+              showColumnChooser
+              pageSize={25}
+              selectedId={selected?.id}
+              emptyTitle="No expenses match your filters"
+              emptyDescription="Try another category, date, or search."
+              columns={[
+                { key: 'title', label: 'Voucher' },
+                { key: 'category', label: 'Category', width: '130px' },
+                { key: 'expense_date', label: 'Date', width: '120px' },
+                { key: 'amount', label: 'Amount', width: '120px' },
+                { key: 'status', label: 'Status', width: '110px' },
+              ]}
+              data={filtered}
+              onRowClick={setSelected}
+              getSortValue={(row, key) => (key === 'amount' ? Number(row.amount || 0) : row[key])}
+              rowActions={(exp) => [
+                { label: 'Print', icon: <Printer size={14} />, onClick: () => navigate(`/gh/print/expense/${exp.id}`) },
+              ]}
+              renderCell={(exp, key) => {
+                if (key === 'title') {
+                  return (
+                    <div>
+                      <p style={{ fontWeight: 700, margin: 0 }}>{exp.title}</p>
+                      {exp.description && (
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {exp.description}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+                if (key === 'category') {
                   const st = CATEGORY_STYLE[exp.category] || CATEGORY_STYLE.OTHER;
                   return (
-                    <tr
-                      key={exp.id}
-                      onClick={() => setSelected(exp)}
-                      style={{
-                        borderBottom: '1px solid var(--border)',
-                        cursor: 'pointer',
-                        backgroundColor: active ? 'var(--primary-light)' : 'transparent',
-                      }}
-                    >
-                      <td style={{ padding: '16px' }}>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                            <FileText size={16} />
-                          </div>
-                          <div>
-                            <p style={{ fontWeight: '700', margin: 0 }}>{exp.title}</p>
-                            {exp.description && (
-                              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {exp.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px' }}>
-                        <span style={{ fontSize: '11px', padding: '6px 12px', borderRadius: '20px', fontWeight: '700', background: st.bg, color: st.color }}>
-                          {CATEGORY_LABELS[exp.category] || exp.category}
-                        </span>
-                      </td>
-                      <td style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Calendar size={14} />
-                          {exp.expense_date}
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px', fontWeight: '800', color: '#ef4444', fontSize: '15px' }}>
-                        −{formatRs(exp.amount)}
-                        <ChevronRight size={14} style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
-                      </td>
-                      <td style={{ padding: '16px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <button type="button" className="btn-ghost" title="Print" onClick={() => navigate(`/gh/print/expense/${exp.id}`)}>
-                          <Printer size={16} />
-                        </button>
-                      </td>
-                    </tr>
+                    <span style={{ fontSize: 11, padding: '6px 12px', borderRadius: 20, fontWeight: 700, background: st.bg, color: st.color }}>
+                      {CATEGORY_LABELS[exp.category] || exp.category}
+                    </span>
                   );
-                })}
-              </tbody>
-            </table>
+                }
+                if (key === 'amount') return <span style={{ fontWeight: 800, color: '#ef4444' }}>−{formatRs(exp.amount)}</span>;
+                if (key === 'status') return exp.status || 'POSTED';
+                return exp[key] || '—';
+              }}
+            />
           )}
         </div>
 
@@ -298,7 +282,7 @@ export default function GuestHouseExpenses() {
                 </p>
                 <h3 style={{ fontSize: '18px', fontWeight: '800', margin: 0 }}>{selected.title}</h3>
               </div>
-              <button type="button" onClick={() => setSelected(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+              <button type="button" onClick={() => setSelected(null)} aria-label="Close voucher" style={{ background: 'transparent', color: 'var(--text-muted)' }}>
                 <X size={20} />
               </button>
             </div>
@@ -323,6 +307,12 @@ export default function GuestHouseExpenses() {
                 Recorded by: <strong>{selected.created_by_name}</strong>
               </p>
             )}
+            <AuditMeta
+              status={selected.status}
+              createdBy={selected.created_by_name}
+              createdAt={selected.created_at}
+              updatedAt={selected.updated_at}
+            />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button type="button" className="btn-primary" onClick={() => navigate(`/gh/expenses/${selected.id}`)} style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -336,18 +326,18 @@ export default function GuestHouseExpenses() {
                   <Copy size={16} /> Use again
                 </button>
               )}
-              {canManage && (
+              {canManage && !isLockedExpense(selected.status) && (
                 <button type="button" className="btn-secondary" onClick={() => navigate(`/gh/expenses/${selected.id}/edit`)} style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                   <Edit2 size={16} /> Edit voucher
                 </button>
               )}
-              {canManage && (
+              {canManage && !isLockedExpense(selected.status) && (
                 <button
                   type="button"
                   onClick={() => handleDelete(selected.id)}
                   style={{ padding: '10px', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'transparent' }}
                 >
-                  <Trash2 size={16} /> Delete
+                  <Trash2 size={16} /> Cancel voucher
                 </button>
               )}
             </div>

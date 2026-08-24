@@ -9,6 +9,7 @@ class TenantSerializer(serializers.ModelSerializer):
             'id', 'name', 'subdomain', 'plan_type', 'phone', 'address',
             'sms_enabled', 'default_country_code',
             'gh_default_check_in_time', 'gh_default_check_out_time',
+            'tax_rate', 'overtime_rate_per_hour', 'default_currency',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'subdomain', 'plan_type', 'created_at', 'updated_at']

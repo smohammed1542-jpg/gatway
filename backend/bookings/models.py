@@ -3,10 +3,9 @@ from core.models import Tenant
 from customers.models import Customer
 from venues.models import Venue
 from django.conf import settings
-from decimal import Decimal
+from django.utils import timezone
 import datetime
 import random
-from django.utils import timezone
 
 class Booking(models.Model):
     STATUS_CHOICES = (
@@ -76,7 +75,15 @@ class Booking(models.Model):
     cancellation_reason = models.TextField(blank=True, default='')
     cancelled_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bookings_updated',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
@@ -95,47 +102,16 @@ class Booking(models.Model):
         return value
 
     def save(self, *args, **kwargs):
+        from .pricing import apply_booking_totals
+
         # Auto generate booking_id if not present
         if not self.booking_id:
             today_str = datetime.date.today().strftime('%Y')
             random_num = random.randint(1000, 9999)
             self.booking_id = f"BK-{today_str}-{random_num}"
-            
-        # Aggregate guest count
-        self.guest_count = self.gents_count + self.ladies_count
-        
-        # Calculate subtotal = guest_count * rate_per_head
-        subtotal = Decimal(str(self.guest_count)) * Decimal(str(self.rate_per_head))
-        
-        if self.decoration_package_id and self.decoration_charge <= 0:
-            self.decoration_charge = Decimal(str(self.decoration_package.base_price))
 
-        # Calculate extra services = (overtime_hours * 5000) + kitchen_charge + decoration_charge + generator_charge
-        extra_services = (Decimal(str(self.overtime_hours)) * Decimal('5000.00')) + \
-                         Decimal(str(self.kitchen_charge)) + \
-                         Decimal(str(self.decoration_charge)) + \
-                         Decimal(str(self.generator_charge))
-        
-        # Grand Total = Subtotal + Extra Services + Taxes (5% of Subtotal + Extra Services)
-        total_before_tax = subtotal + extra_services
-        tax = total_before_tax * Decimal('0.05')
-        
-        self.total_price = total_before_tax + tax
-        
-        # Cancelled bookings have no balance due
-        if self.booking_status == 'CANCELLED':
-            self.remaining_balance = Decimal('0')
-        else:
-            self.remaining_balance = self.total_price - self.advance_paid
-        
-        # Update payment status
-        if self.advance_paid <= 0:
-            self.payment_status = 'UNPAID'
-        elif self.remaining_balance <= 0:
-            self.payment_status = 'PAID'
-        else:
-            self.payment_status = 'PARTIAL'
-            
+        apply_booking_totals(self)
+
         # Also auto-calculate start_date and end_date if they are not provided but event_date and slot are provided
         if self.event_date:
             if self.slot == 'morning':

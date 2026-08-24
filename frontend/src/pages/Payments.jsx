@@ -27,6 +27,10 @@ import {
   bookingCollectDue,
   hasCollectDue,
 } from '../utils/currency';
+import DataTable from '../components/ui/DataTable';
+import AuditMeta from '../components/ui/AuditMeta';
+import useEscapeClose from '../hooks/useEscapeClose';
+import { isLockedPayment } from '../utils/erp';
 
 const Payments = () => {
   const location = useLocation();
@@ -96,21 +100,9 @@ const Payments = () => {
     if (formData.booking) {
       const selected = bookings.find(b => String(b.id) === String(formData.booking));
       if (selected) {
-        // Calculate grand total including tax and extras
-        const gents = Number(selected.gents_count || 0);
-        const ladies = Number(selected.ladies_count || 0);
-        const rate = Number(selected.rate_per_head || 0);
-        const attendanceSubtotal = (gents + ladies) * rate;
-        
-        const extraCharges = (Number(selected.overtime_hours || 0) * 5000) + 
-                             Number(selected.kitchen_charge || 0) + 
-                             Number(selected.decoration_charge || 0) + 
-                             Number(selected.generator_charge || 0);
-        
-        const subtotal = attendanceSubtotal + extraCharges;
-        const grandTotal = subtotal * 1.05; // 5% Flat Tax
+        const grandTotal = Number(selected.total_price || 0);
         const balancePaid = Number(selected.advance_paid || 0);
-        const remaining = Math.max(0, grandTotal - balancePaid);
+        const remaining = Math.max(0, Number(selected.remaining_balance ?? (grandTotal - balancePaid)));
 
         setSelectedBookingSpecs({
           grandTotal,
@@ -197,6 +189,10 @@ const Payments = () => {
     });
   };
 
+  useEscapeClose(showModal, closePaymentModal);
+  useEscapeClose(Boolean(selectedPayment), () => setSelectedPayment(null));
+  useEscapeClose(showReceiptModal, () => setShowReceiptModal(false));
+
   const handleDelete = async (paymentId) => {
     if (window.confirm('Are you sure you want to delete/void this transaction? The payment ledger will be reversed!')) {
       try {
@@ -205,7 +201,7 @@ const Payments = () => {
         if (selectedPayment?.id === paymentId) setSelectedPayment(null);
         fetchData();
       } catch (err) {
-        toast.error('Failed to void transaction');
+        toast.error(err.response?.data?.detail || 'Failed to void transaction');
       }
     }
   };
@@ -255,17 +251,7 @@ const Payments = () => {
   const pendingRevenue = payments.filter(p => p.status === 'PENDING').reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
   
   // Calculate total outstanding billing for context
-  const totalBookingsValue = bookings.reduce((sum, b) => {
-    const gents = Number(b.gents_count || 0);
-    const ladies = Number(b.ladies_count || 0);
-    const rate = Number(b.rate_per_head || 0);
-    const subtotal = ((gents + ladies) * rate) + 
-                     (Number(b.overtime_hours || 0) * 5000) + 
-                     Number(b.kitchen_charge || 0) + 
-                     Number(b.decoration_charge || 0) + 
-                     Number(b.generator_charge || 0);
-    return sum + (subtotal * 1.05);
-  }, 0);
+  const totalBookingsValue = bookings.reduce((sum, b) => sum + Number(b.total_price || 0), 0);
 
   const filteredPayments = payments.filter(p => {
     const q = searchQuery.toLowerCase().trim();
@@ -391,6 +377,7 @@ const Payments = () => {
             <option value="COMPLETED">Completed</option>
             <option value="PENDING">Pending</option>
             <option value="FAILED">Failed</option>
+            <option value="VOIDED">Voided</option>
           </select>
         </div>
 
@@ -414,68 +401,68 @@ const Payments = () => {
           <p style={{ padding: '12px 20px', fontSize: '12px', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', margin: 0 }}>
             Click a row to view customer, order, and payment details
           </p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr className="table-header-row">
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Payment</th>
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Customer (paid)</th>
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Event / Order</th>
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Received by</th>
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Due</th>
-                <th style={{ padding: '14px 16px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPayments.map((payment) => {
-                const active = selectedPayment?.id === payment.id;
+          <DataTable
+            variant="erp"
+            sortable
+            showColumnChooser
+            pageSize={25}
+            selectedId={selectedPayment?.id}
+            emptyTitle="No payments match your search"
+            emptyDescription="Try another filter or record a deposit."
+            columns={[
+              { key: 'id', label: 'Payment' },
+              { key: 'customer_name', label: 'Customer' },
+              { key: 'booking_event_name', label: 'Event / Order' },
+              { key: 'recorded_by_name', label: 'Received by' },
+              { key: 'booking_remaining', label: 'Due', width: '110px' },
+              { key: 'amount', label: 'Amount', width: '120px' },
+            ]}
+            data={filteredPayments}
+            onRowClick={setSelectedPayment}
+            getSortValue={(row, key) => {
+              if (key === 'amount' || key === 'booking_remaining') return Number(row[key] || 0);
+              if (key === 'id') return Number(row.id);
+              return row[key];
+            }}
+            renderCell={(payment, key) => {
+              if (key === 'id') {
                 return (
-                  <tr
-                    key={payment.id}
-                    onClick={() => setSelectedPayment(payment)}
-                    style={{
-                      borderBottom: '1px solid var(--border)',
-                      cursor: 'pointer',
-                      backgroundColor: active ? 'var(--primary-light)' : 'transparent',
-                    }}
-                  >
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontWeight: '800', fontFamily: 'monospace', fontSize: '12px' }}>PAY-{String(payment.id).padStart(5, '0')}</span>
-                      <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        {new Date(payment.payment_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                      </p>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontWeight: '700', fontSize: '14px' }}>{payment.customer_name || '-'}</span>
-                      {payment.customer_phone && (
-                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{payment.customer_phone}</p>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontWeight: '600', fontSize: '13px' }}>{payment.booking_event_name || '-'}</span>
-                      {payment.booking_reference && (
-                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{payment.booking_reference}</p>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                      {payment.recorded_by_name || '-'}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontWeight: '800', fontSize: '13px', color: hasCollectDue(payment.booking_remaining) ? '#b91c1c' : 'var(--text-dim)' }}>
-                      {formatCollectDue(payment.booking_remaining)}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontWeight: '800', color: '#166534', fontSize: '14px' }}>
-                      {formatRs(payment.amount)}
-                      <ChevronRight size={14} style={{ display: 'inline', marginLeft: '4px', verticalAlign: 'middle' }} />
-                    </td>
-                  </tr>
+                  <div>
+                    <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 12 }}>PAY-{String(payment.id).padStart(5, '0')}</span>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      {new Date(payment.payment_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                    </p>
+                  </div>
                 );
-              })}
-            </tbody>
-          </table>
-          {filteredPayments.length === 0 && !isLoading && (
-            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
-              No payments match your search.
-            </div>
-          )}
+              }
+              if (key === 'customer_name') {
+                return (
+                  <div>
+                    <span style={{ fontWeight: 700 }}>{payment.customer_name || '-'}</span>
+                    {payment.customer_phone && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{payment.customer_phone}</p>}
+                  </div>
+                );
+              }
+              if (key === 'booking_event_name') {
+                return (
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{payment.booking_event_name || '-'}</span>
+                    {payment.booking_reference && <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{payment.booking_reference}</p>}
+                  </div>
+                );
+              }
+              if (key === 'recorded_by_name') return payment.recorded_by_name || '-';
+              if (key === 'booking_remaining') {
+                return (
+                  <span style={{ fontWeight: 800, color: hasCollectDue(payment.booking_remaining) ? '#b91c1c' : 'var(--text-dim)' }}>
+                    {formatCollectDue(payment.booking_remaining)}
+                  </span>
+                );
+              }
+              if (key === 'amount') return <span style={{ fontWeight: 800, color: '#166534' }}>{formatRs(payment.amount)}</span>;
+              return payment[key];
+            }}
+          />
         </div>
 
         {selectedPayment && (
@@ -485,7 +472,7 @@ const Payments = () => {
                 <h3 style={{ fontSize: '18px', fontWeight: '800' }}>PAY-{String(selectedPayment.id).padStart(5, '0')}</h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Payment & order details</p>
               </div>
-              <button type="button" onClick={() => setSelectedPayment(null)} style={{ background: 'transparent', color: 'var(--text-muted)', padding: '4px' }}>
+              <button type="button" onClick={() => setSelectedPayment(null)} aria-label="Close payment" style={{ background: 'transparent', color: 'var(--text-muted)', padding: '4px' }}>
                 <X size={20} />
               </button>
             </div>
@@ -546,9 +533,16 @@ const Payments = () => {
               {selectedPayment.notes && (
                 <p style={{ fontSize: '12px', marginTop: '8px', fontStyle: 'italic' }}>Notes: {selectedPayment.notes}</p>
               )}
+              <AuditMeta
+                status={selectedPayment.status}
+                createdBy={selectedPayment.recorded_by_name}
+                createdAt={selectedPayment.created_at || selectedPayment.payment_date}
+                updatedAt={selectedPayment.updated_at}
+              />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {!isLockedPayment(selectedPayment.status) && (
               <button
                 type="button"
                 className="btn-secondary"
@@ -557,6 +551,7 @@ const Payments = () => {
               >
                 <Edit2 size={16} /> Edit payment
               </button>
+              )}
               <button type="button" className="btn-primary" onClick={() => handlePrintSlip(selectedPayment)} style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <Printer size={16} /> Print receipt
               </button>
@@ -570,6 +565,7 @@ const Payments = () => {
                   <FileText size={16} /> View booking invoice
                 </button>
               )}
+              {selectedPayment.status !== 'VOIDED' && (
               <button
                 type="button"
                 onClick={() => handleDelete(selectedPayment.id)}
@@ -577,6 +573,7 @@ const Payments = () => {
               >
                 <Trash2 size={16} /> Void payment
               </button>
+              )}
             </div>
           </div>
         )}
@@ -596,7 +593,9 @@ const Payments = () => {
                 <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>کلائنٹ ادائیگی ریکارڈ فارم</p>
               </div>
               <button 
+                type="button"
                 onClick={closePaymentModal}
+                aria-label="Close"
                 style={{ backgroundColor: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}
               >
                 <X size={24} />

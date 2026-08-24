@@ -3,8 +3,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from core.mixins import TenantQuerysetMixin, TenantAssignMixin
 from core.permissions import IsAdminOrManagerOrReadOnly, IsTenantOwner, IsMarriageHallApp
-from .models import InventoryItem, BookingInventoryItem
-from .serializers import InventoryItemSerializer, BookingInventoryItemSerializer
+from .models import InventoryItem, BookingInventoryItem, InventoryTransaction
+from .serializers import (
+    InventoryItemSerializer,
+    BookingInventoryItemSerializer,
+    InventoryTransactionSerializer,
+)
+from .services import InventoryService
 
 
 class InventoryItemViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
@@ -26,3 +31,16 @@ class BookingInventoryItemViewSet(TenantQuerysetMixin, TenantAssignMixin, viewse
 
     def get_queryset(self):
         return super().get_queryset().select_related('booking', 'inventory_item')
+
+    def perform_destroy(self, instance):
+        InventoryService.reverse_booking_allocation(instance, user=self.request.user)
+        instance.delete()
+
+
+class InventoryTransactionViewSet(TenantQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = InventoryTransaction.objects.all().select_related('item', 'booking', 'created_by')
+    serializer_class = InventoryTransactionSerializer
+    permission_classes = [IsMarriageHallApp, IsAdminOrManagerOrReadOnly, IsTenantOwner]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['item', 'txn_type', 'booking']
+    ordering_fields = ['created_at', 'id']

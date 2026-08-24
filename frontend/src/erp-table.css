@@ -1,0 +1,142 @@
+/* Dense ERP workspace table */
+.erp-table-wrap {
+  overflow: auto;
+  max-height: min(70vh, 720px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.erp-table-toolbar {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.erp-table-chooser {
+  position: absolute;
+  right: 8px;
+  top: 100%;
+  z-index: 20;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  padding: 8px;
+}
+
+.erp-table-chooser__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+
+.erp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.erp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background: var(--surface-elevated);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.erp-table__th--sort {
+  cursor: pointer;
+  user-select: none;
+}
+
+.erp-table__th-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.erp-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.erp-table tbody tr:hover {
+  background: var(--surface-elevated);
+}
+
+.erp-table__row--selected {
+  background: var(--primary-light) !important;
+}
+
+.erp-table thead th:first-child,
+.erp-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.erp-table thead th:first-child {
+  z-index: 3;
+  background: var(--surface-elevated);
+}
+
+.erp-table tbody tr:hover td:first-child,
+.erp-table__row--selected td:first-child {
+  background: var(--primary-light);
+}
+
+.erp-doc-readonly {
+  font-size: 12px;
+  font-weight: 700;
+  color: #92400e;
+  background: #fef3c7;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.erp-audit {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: 12px;
+}
+
+.erp-audit__row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.erp-audit dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.erp-audit dd {
+  margin: 0;
+  font-weight: 600;
+}

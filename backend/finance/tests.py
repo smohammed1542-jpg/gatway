@@ -57,6 +57,7 @@ class AdvancePaidSyncTests(TestCase):
         self.assertEqual(self.booking.advance_paid, Decimal('75000'))
 
         p = Payment.objects.filter(booking=self.booking).first()
-        p.delete()
+        p.status = 'VOIDED'
+        p.save(update_fields=['status'])
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.advance_paid, Decimal('25000'))

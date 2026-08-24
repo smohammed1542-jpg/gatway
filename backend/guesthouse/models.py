@@ -442,10 +442,11 @@ class StayPayment(models.Model):
         ('COMPLETED', 'Completed'),
         ('PENDING', 'Pending'),
         ('FAILED', 'Failed'),
+        ('VOIDED', 'Voided'),
     )
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='gh_payments')
-    stay = models.ForeignKey(StayBooking, on_delete=models.CASCADE, related_name='payments')
+    stay = models.ForeignKey(StayBooking, on_delete=models.PROTECT, related_name='payments')
     receipt_ref = models.CharField(max_length=50, blank=True, unique=True, null=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='CASH')
@@ -460,6 +461,8 @@ class StayPayment(models.Model):
         blank=True,
         related_name='gh_payments_recorded',
     )
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-payment_date']
@@ -493,6 +496,10 @@ class GhExpense(models.Model):
         ('MARKETING', 'Marketing'),
         ('OTHER', 'Other'),
     )
+    STATUS_CHOICES = (
+        ('POSTED', 'Posted'),
+        ('CANCELLED', 'Cancelled'),
+    )
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='gh_expenses')
     title = models.CharField(max_length=255)
@@ -500,6 +507,7 @@ class GhExpense(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     expense_date = models.DateField()
     description = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='POSTED')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -508,6 +516,7 @@ class GhExpense(models.Model):
         related_name='gh_expenses_created',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-expense_date', '-id']

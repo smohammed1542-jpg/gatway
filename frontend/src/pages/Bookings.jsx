@@ -28,6 +28,9 @@ import CancelBookingModal from '../components/bookings/CancelBookingModal';
 import CnicScannerPanel from '../components/guesthouse/CnicScannerPanel';
 import ScannedGuestPanel from '../components/guesthouse/ScannedGuestPanel';
 import { resolveGuestFromIdScan, isPhoneCompleteForAutoSave, saveGuestFromDraft } from '../utils/idCardCustomer';
+import DataTable from '../components/ui/DataTable';
+import { getTenant } from '../api/core';
+import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 
 const BOOKING_STATUS_STYLE = {
   PENDING: { bg: '#fef3c7', color: '#92400e', label: 'Pending' },
@@ -110,6 +113,8 @@ const Bookings = () => {
   const [scannedClient, setScannedClient] = useState(null);
   const [savingScannedClient, setSavingScannedClient] = useState(false);
   const savingClientRef = useRef(false);
+  const [taxRate, setTaxRate] = useState(0.05);
+  const [overtimeRate, setOvertimeRate] = useState(5000);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -137,6 +142,12 @@ const Bookings = () => {
 
   useEffect(() => {
     fetchData();
+    getTenant()
+      .then((tenant) => {
+        setTaxRate(taxRateFromTenant(tenant));
+        setOvertimeRate(overtimeRateFromTenant(tenant));
+      })
+      .catch(() => {});
   }, []);
 
   // Recalculate calculations in real-time
@@ -144,15 +155,16 @@ const Bookings = () => {
   const subtotal = totalAttendance * Number(formData.rate_per_head || 0);
   
   // Overtime rate: 5000 PKR per hour
-  const extraServices = (Number(formData.overtime_hours || 0) * 5000) + 
+  const extraServices = (Number(formData.overtime_hours || 0) * overtimeRate) + 
                         Number(formData.kitchen_charge || 0) + 
                         Number(formData.decoration_charge || 0) + 
                         Number(formData.generator_charge || 0);
                         
   const totalBeforeTax = subtotal + extraServices;
-  const taxAmount = totalBeforeTax * 0.05;
+  const taxAmount = totalBeforeTax * taxRate;
   const grandTotal = totalBeforeTax + taxAmount;
   const remainingBalance = grandTotal - Number(formData.advance_paid || 0);
+  const isPosted = isPostedBooking(formData.booking_status);
 
   const resetForm = () => {
     setFormData({
@@ -442,6 +454,10 @@ const Bookings = () => {
 
   const handleSubmit = async (e, statusOverride) => {
     e.preventDefault();
+    if (isPosted) {
+      toast.error('Posted or cancelled bookings cannot be modified.');
+      return;
+    }
     setBookingError('');
 
     // Select active venue
@@ -591,153 +607,90 @@ const Bookings = () => {
               />
             </div>
 
-            {/* Bookings table */}
-            <div className="card table-scroll" style={{ padding: 0, borderRadius: '12px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead>
-                  <tr className="table-header-row">
-                    {[
-                      { label: 'Customer / Event', title: 'Customer name & event' },
-                      { label: 'Hall', title: 'Venue / marriage hall' },
-                      { label: 'Date', title: 'Event date & time slot' },
-                      { label: 'Status', title: 'Booking status' },
-                      { label: 'Payment', title: 'Payment status' },
-                      { label: 'Due', title: 'Balance due' },
-                      { label: 'Total', title: 'Grand total amount' },
-                      { label: '', title: 'Actions' },
-                    ].map((col) => (
-                      <th
-                        key={col.label || 'actions'}
-                        title={col.title}
-                        style={{
-                          padding: '14px 16px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          color: 'var(--text-muted)',
-                          whiteSpace: 'nowrap',
-                        }}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <DataTable
+                variant="erp"
+                sortable
+                showColumnChooser
+                pageSize={0}
+                emptyTitle="No bookings match your criteria"
+                emptyDescription="Try another search or create a new booking."
+                columns={[
+                  { key: 'customer', label: 'Customer / Event' },
+                  { key: 'hall', label: 'Hall' },
+                  { key: 'date', label: 'Date' },
+                  { key: 'status', label: 'Status', width: '110px' },
+                  { key: 'payment', label: 'Payment', width: '110px' },
+                  { key: 'due', label: 'Due', width: '110px' },
+                  { key: 'total', label: 'Total', width: '120px' },
+                ]}
+                data={filteredBookings}
+                getSortValue={(row, key) => {
+                  if (key === 'customer') return row.customer_name || row.event_name;
+                  if (key === 'hall') return row.venue_name;
+                  if (key === 'date') return row.event_date || row.start_date;
+                  if (key === 'status') return row.booking_status;
+                  if (key === 'payment') return row.payment_status;
+                  if (key === 'due') return Number(row.remaining_balance || 0);
+                  if (key === 'total') return Number(row.total_price || 0);
+                  return row[key];
+                }}
+                onRowClick={(booking) => handleEditClick(booking)}
+                rowActions={(booking) => [
+                  ...(canManage ? [{ label: isPostedBooking(booking.booking_status) ? 'View' : 'Edit', icon: <Edit2 size={14} />, onClick: () => handleEditClick(booking) }] : []),
+                  { label: 'Print', icon: <Printer size={14} />, onClick: () => handlePrintRowClick(booking) },
+                  ...(canManage && !isPostedBooking(booking.booking_status) ? [{ label: 'Cancel', icon: <XCircle size={14} />, danger: true, onClick: () => setCancelTarget(booking) }] : []),
+                ]}
+                renderCell={(booking, key) => {
+                  if (key === 'customer') {
+                    return (
+                      <div>
+                        <p style={{ fontSize: '11px', fontWeight: '600', fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: '2px' }}>{booking.booking_id || `BK-${booking.id}`}</p>
+                        {booking.customer ? (
+                          <Link to={`/customers/${booking.customer}`} onClick={(e) => e.stopPropagation()} style={{ fontWeight: 700, color: 'var(--primary)' }}>{booking.customer_name}</Link>
+                        ) : (
+                          <span style={{ fontWeight: 700 }}>{booking.customer_name}</span>
+                        )}
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{booking.event_name}</p>
+                      </div>
+                    );
+                  }
+                  if (key === 'hall') return booking.venue_name;
+                  if (key === 'date') {
+                    const d = booking.event_date || booking.start_date;
+                    return (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                          <CalendarIcon size={14} color="var(--text-muted)" />
+                          {d ? new Date(d).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: booking.slot === 'evening' ? '#6366f1' : '#92400e' }}>{booking.slot || 'Morning'}</span>
+                      </div>
+                    );
+                  }
+                  if (key === 'status') {
+                    const st = BOOKING_STATUS_STYLE[booking.booking_status] || BOOKING_STATUS_STYLE.PENDING;
+                    return <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>{st.label}</span>;
+                  }
+                  if (key === 'payment') {
+                    return (
+                      <span
+                        onClick={canAccessPayments ? (e) => { e.stopPropagation(); navigate('/payments', { state: { preselectedBookingId: booking.id, bookingEventName: booking.event_name, autoOpenRecord: booking.payment_status !== 'PAID' } }); } : undefined}
+                        style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: booking.payment_status === 'PAID' ? '#dcfce7' : booking.payment_status === 'PARTIAL' ? '#ffedd5' : '#fee2e2', color: booking.payment_status === 'PAID' ? '#166534' : booking.payment_status === 'PARTIAL' ? '#c2410c' : '#991b1b', cursor: canAccessPayments ? 'pointer' : 'default' }}
                       >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBookings.map((booking) => (
-                    <tr key={booking.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background-color 0.2s' }} className="hover:bg-slate-50/50">
-                      <td 
-                        style={{ padding: '20px 24px', cursor: 'pointer' }}
-                        onClick={() => handleEditClick(booking)}
-                        title="Click to view or edit this reservation details"
-                      >
-                        <div style={{ transition: 'opacity 0.2s' }} className="hover:opacity-85">
-                          <p style={{ fontSize: '11px', fontWeight: '600', fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: '4px', letterSpacing: '0.02em' }}>{booking.booking_id || `BK-2026-${booking.id}`}</p>
-                          {booking.customer ? (
-                            <Link
-                              to={`/customers/${booking.customer}`}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ fontWeight: '700', fontSize: '16px', color: 'var(--primary)', display: 'inline-block', lineHeight: 1.3 }}
-                            >
-                              {booking.customer_name}
-                            </Link>
-                          ) : (
-                            <p style={{ fontWeight: '700', fontSize: '16px', color: 'var(--secondary)', lineHeight: 1.3 }}>{booking.customer_name}</p>
-                          )}
-                          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500', lineHeight: 1.35 }}>{booking.event_name}</p>
-                        </div>
-                      </td>
-                      <td style={{ padding: '20px 24px', fontSize: '14px', fontWeight: '500', color: 'var(--secondary)' }}>{booking.venue_name}</td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: 'var(--secondary)' }}>
-                            <CalendarIcon size={14} color="var(--text-muted)" />
-                            {booking.event_date ? new Date(booking.event_date).toLocaleDateString() : (booking.start_date ? new Date(booking.start_date).toLocaleDateString() : 'N/A')}
-                          </div>
-                          <span style={{
-                            display: 'inline-block',
-                            fontSize: '10px',
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            color: booking.slot === 'evening' ? '#6366f1' : '#f59e0b',
-                            backgroundColor: booking.slot === 'evening' ? '#e0e7ff' : '#fef3c7',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            marginTop: '4px'
-                          }}>
-                            {booking.slot || 'Morning'}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <span style={{
-                          padding: '4px 12px',
-                          borderRadius: '20px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          backgroundColor: booking.booking_status === 'CONFIRMED' ? '#dcfce7' : booking.booking_status === 'COMPLETED' ? '#dbeafe' : '#fef3c7',
-                          color: booking.booking_status === 'CONFIRMED' ? '#166534' : booking.booking_status === 'COMPLETED' ? '#1e40af' : '#92400e'
-                        }}>
-                          {booking.booking_status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <span 
-                          onClick={canAccessPayments ? () => navigate('/payments', { 
-                            state: { 
-                              preselectedBookingId: booking.id,
-                              bookingEventName: booking.event_name,
-                              autoOpenRecord: booking.payment_status !== 'PAID' 
-                            } 
-                          }) : undefined}
-                          style={{
-                            padding: '4px 12px',
-                            borderRadius: '20px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            backgroundColor: booking.payment_status === 'PAID' ? '#dcfce7' : booking.payment_status === 'PARTIAL' ? '#ffedd5' : '#fee2e2',
-                            color: booking.payment_status === 'PAID' ? '#166534' : booking.payment_status === 'PARTIAL' ? '#c2410c' : '#991b1b',
-                            cursor: canAccessPayments ? 'pointer' : 'default',
-                            display: 'inline-block',
-                            transition: canAccessPayments ? 'transform 0.15s, box-shadow 0.15s' : undefined
-                          }}
-                          className={canAccessPayments ? 'hover:scale-105 hover:shadow-sm' : undefined}
-                          title={canAccessPayments ? 'Click to view payment history or record new payment' : undefined}
-                        >
-                          {booking.payment_status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '20px 24px', fontWeight: '800', fontSize: '14px', color: hasCollectDue(bookingCollectDue(booking)) ? '#b91c1c' : 'var(--text-dim)' }}>
-                        {formatCollectDue(bookingCollectDue(booking))}
-                      </td>
-                      <td style={{ padding: '20px 24px', fontWeight: '700', fontSize: '14px', color: 'var(--secondary)' }}>
-                        <span style={{ fontSize: '80%', opacity: 0.6, marginRight: '2px' }}>PKR</span> 
-                        {parseFloat(booking.total_price || 0).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '20px 24px' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {canManage && (
-                          <button onClick={() => handleEditClick(booking)} style={{ color: 'var(--secondary)', backgroundColor: 'transparent', padding: '4px', borderRadius: '4px' }} className="hover:bg-slate-200" title="Edit booking"><Edit2 size={16} /></button>
-                          )}
-                          <button onClick={() => handlePrintRowClick(booking)} style={{ color: 'var(--primary)', backgroundColor: 'transparent', padding: '4px', borderRadius: '4px' }} className="hover:bg-orange-50" title="Print receipts & reports"><Printer size={16} /></button>
-                          {canManage && booking.booking_status !== 'CANCELLED' && booking.booking_status !== 'COMPLETED' && (
-                          <button onClick={() => setCancelTarget(booking)} style={{ color: '#b91c1c', backgroundColor: 'transparent', padding: '4px', borderRadius: '4px' }} className="hover:bg-red-50" title="Cancel booking"><XCircle size={16} /></button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredBookings.length === 0 && !isLoading && (
-                <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <p style={{ fontSize: '15px', fontWeight: '500' }}>No reservations match your criteria.</p>
-                  {canManage && (
-                  <button className="btn-secondary" onClick={handleCreateNewClick} style={{ marginTop: '16px' }}>+ Create New Booking</button>
-                  )}
-                </div>
-              )}
+                        {booking.payment_status}
+                      </span>
+                    );
+                  }
+                  if (key === 'due') {
+                    return <span style={{ fontWeight: 800, color: hasCollectDue(bookingCollectDue(booking)) ? '#b91c1c' : 'var(--text-dim)' }}>{formatCollectDue(bookingCollectDue(booking))}</span>;
+                  }
+                  if (key === 'total') {
+                    return <span style={{ fontWeight: 700 }}>PKR {parseFloat(booking.total_price || 0).toLocaleString()}</span>;
+                  }
+                  return null;
+                }}
+              />
             </div>
           </>
         )}
@@ -775,10 +728,14 @@ const Bookings = () => {
                     </span>
                   );
                 })()}
+                {isPosted && (
+                  <p className="erp-doc-readonly">This booking is posted or cancelled and cannot be edited. Print or cancel/reverse from the list if needed.</p>
+                )}
                 <select
                   value={formData.booking_status}
                   onChange={(e) => setFormData({ ...formData, booking_status: e.target.value })}
                   aria-label="Booking status"
+                  disabled={isPosted}
                   style={{
                     padding: '6px 10px',
                     borderRadius: '8px',
@@ -1233,12 +1190,12 @@ const Bookings = () => {
                         <span style={{ fontWeight: '600' }}>PKR {extraServices.toLocaleString()}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Taxes (5%)</span>
+                        <span style={{ color: 'var(--text-muted)' }}>Taxes ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
                         <span style={{ fontWeight: '600' }}>PKR {taxAmount.toLocaleString()}</span>
                       </div>
                     </div>
 
-                    {isEdit && (
+                    {isEdit && !isPosted && (
                       <div className="input-group" style={{ marginBottom: '4px' }}>
                         <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>Booking status</label>
                         <select
@@ -1279,11 +1236,13 @@ const Bookings = () => {
 
                     {/* Action buttons */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                      {!isPosted && (
                       <button type="submit" className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '14px', borderRadius: '10px', fontWeight: '700', fontSize: '14px' }}>
                         <CheckCircle size={18} />
                         {formData.booking_status === 'CONFIRMED' ? 'Confirm & Save' : 'Save booking'}
                       </button>
-                      {viewMode === 'create' && (
+                      )}
+                      {!isPosted && viewMode === 'create' && (
                         <button
                           type="button"
                           className="btn-secondary"
@@ -1324,7 +1283,7 @@ const Bookings = () => {
                     <HelpCircle size={14} /> Manager's Note
                   </h4>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6', fontWeight: '500' }}>
-                    Ensure all client identification documents (CNIC copy, mobile registration) are uploaded within 48 hours of advance payment. Overtime is charged flat at <span style={{ fontWeight: '700' }}>PKR 5,000/hr</span>.
+                    Ensure all client identification documents (CNIC copy, mobile registration) are uploaded within 48 hours of advance payment. Overtime is charged at <span style={{ fontWeight: '700' }}>PKR {Number(overtimeRate).toLocaleString()}/hr</span>. Tax is {(taxRate * 100).toFixed(1).replace(/\.0$/, '')}%.
                   </p>
                 </div>
 

@@ -56,8 +56,9 @@ _running_tests = (
     os.environ.get('DJANGO_TEST', '').lower() in ('1', 'true', 'yes')
     or any(arg == 'test' or arg.endswith('pytest') for arg in sys.argv)
 )
+_collectstatic = any(arg == 'collectstatic' for arg in sys.argv)
 if not _secret:
-    if DEBUG or _running_tests:
+    if DEBUG or _running_tests or _collectstatic:
         _secret = 'django-insecure-gateway-hall-dev-only-do-not-use-in-production'
     else:
         raise RuntimeError(
@@ -65,9 +66,14 @@ if not _secret:
             'Generate a long random value and set it before starting the server.'
         )
 SECRET_KEY = _secret
-if not DEBUG and not _running_tests and (
-    SECRET_KEY.startswith('django-insecure-')
-    or len(SECRET_KEY) < 40
+if (
+    not DEBUG
+    and not _running_tests
+    and not _collectstatic
+    and (
+        SECRET_KEY.startswith('django-insecure-')
+        or len(SECRET_KEY) < 40
+    )
 ):
     raise RuntimeError(
         'SECRET_KEY is too weak for production (DEBUG=False). '
@@ -162,10 +168,19 @@ _require_postgres = (
 if os.environ.get('DATABASE_URL'):
     import dj_database_url
 
+    _db_ssl_raw = os.environ.get('DB_SSL', '').strip().lower()
+    if _db_ssl_raw in ('1', 'true', 'yes'):
+        _db_ssl = True
+    elif _db_ssl_raw in ('0', 'false', 'no'):
+        _db_ssl = False
+    else:
+        # Railway internal Postgres often fails with forced SSL — follow URL default.
+        _db_ssl = not bool(os.environ.get('RAILWAY_ENVIRONMENT'))
+
     DATABASES = {
         'default': dj_database_url.config(
             conn_max_age=0 if _running_tests else 600,
-            ssl_require=os.environ.get('DB_SSL', 'true').lower() == 'true' and not _running_tests,
+            ssl_require=_db_ssl and not _running_tests,
         )
     }
     if DATABASES['default'].get('ENGINE', '').endswith('sqlite3') and _require_postgres:

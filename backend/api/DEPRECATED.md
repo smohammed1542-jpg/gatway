@@ -1,9 +1,11 @@
-# Deprecated - do not use
+"""
+Legacy `api` package — DEPRECATED.
 
-The `api` app is not registered in `INSTALLED_APPS` and is not mounted in URLs.
+These ViewSets are NOT registered in hallora_backend.urls and must never be
+mounted without TenantQuerysetMixin + role permissions.
 
-Use these apps instead:
+Canonical APIs live under:
+  /api/venues/, /api/bookings/, /api/customers/, /api/finance/, etc.
 
-- `venues`, `customers`, `bookings`, `finance`, `inventory`, `decorations`, `authentication`, `core`
-
-Seed data: `python seed_db.py`
+Do not import models/views from this package in new code.
+"""

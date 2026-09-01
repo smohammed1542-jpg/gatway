@@ -19,7 +19,16 @@ import DecorationPackages from './pages/DecorationPackages';
 import DecorationPackageDetail from './pages/DecorationPackageDetail';
 import Reports from './pages/Reports';
 import JournalEntries from './pages/JournalEntries';
-import TrialBalance from './pages/TrialBalance';
+import AccountingDashboard from './pages/accounting/AccountingDashboard';
+import ChartOfAccounts from './pages/accounting/ChartOfAccounts';
+import {
+  TrialBalancePage, ProfitLossPage, BalanceSheetPage, CashFlowPage,
+  GeneralLedgerPage, CashBookPage, BankBookPage, HealthCheckPage,
+} from './pages/accounting/ReportsPages';
+import {
+  ReceivablesPage, PayablesPage, CustomerLedgerPage, VendorsPage,
+  BankAccountsPage, BankReconPage, InvoicesPage, FiscalPeriodsPage, OpeningBalancesPage,
+} from './pages/accounting/OpsPages';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import PrintDocument from './pages/PrintDocument';
@@ -101,7 +110,26 @@ function App() {
           <Route path="/customers/:customerId" element={hallPage(HALL_PAGE_KEYS.CUSTOMERS, <CustomerManagement />)} />
           <Route path="/payments" element={hallPage(HALL_PAGE_KEYS.PAYMENTS, <ManagerRoute><Payments /></ManagerRoute>)} />
           <Route path="/journal-entries" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><JournalEntries /></ManagerRoute>)} />
-          <Route path="/trial-balance" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><TrialBalance /></ManagerRoute>)} />
+          <Route path="/trial-balance" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><Navigate to="/accounting/trial-balance" replace /></ManagerRoute>)} />
+          <Route path="/accounting" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><AccountingDashboard /></ManagerRoute>)} />
+          <Route path="/accounting/accounts" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><ChartOfAccounts /></ManagerRoute>)} />
+          <Route path="/accounting/general-ledger" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><GeneralLedgerPage /></ManagerRoute>)} />
+          <Route path="/accounting/customer-ledger" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><CustomerLedgerPage /></ManagerRoute>)} />
+          <Route path="/accounting/vendors" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><VendorsPage /></ManagerRoute>)} />
+          <Route path="/accounting/receivables" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><ReceivablesPage /></ManagerRoute>)} />
+          <Route path="/accounting/payables" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><PayablesPage /></ManagerRoute>)} />
+          <Route path="/accounting/cash-book" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><CashBookPage /></ManagerRoute>)} />
+          <Route path="/accounting/bank-book" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankBookPage /></ManagerRoute>)} />
+          <Route path="/accounting/banks" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankAccountsPage /></ManagerRoute>)} />
+          <Route path="/accounting/reconciliation" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankReconPage /></ManagerRoute>)} />
+          <Route path="/accounting/invoices" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><InvoicesPage /></ManagerRoute>)} />
+          <Route path="/accounting/trial-balance" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><TrialBalancePage /></ManagerRoute>)} />
+          <Route path="/accounting/profit-loss" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><ProfitLossPage /></ManagerRoute>)} />
+          <Route path="/accounting/balance-sheet" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><BalanceSheetPage /></ManagerRoute>)} />
+          <Route path="/accounting/cash-flow" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><CashFlowPage /></ManagerRoute>)} />
+          <Route path="/accounting/opening-balances" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><OpeningBalancesPage /></ManagerRoute>)} />
+          <Route path="/accounting/periods" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><FiscalPeriodsPage /></ManagerRoute>)} />
+          <Route path="/accounting/health" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><HealthCheckPage /></ManagerRoute>)} />
           <Route path="/expenses" element={hallPage(HALL_PAGE_KEYS.EXPENSES, <ManagerRoute><Expenses /></ManagerRoute>)} />
           <Route path="/expenses/:expenseId" element={hallPage(HALL_PAGE_KEYS.EXPENSES, <ManagerRoute><ExpenseDetail /></ManagerRoute>)} />
           <Route path="/staff" element={<Navigate to="/settings?tab=staff" replace />} />
@@ -143,7 +171,26 @@ function App() {
           <Route path="/gh/payments/:paymentId/edit" element={ghPage(GH_PAGE_KEYS.PAYMENTS, <ManagerRoute><PaymentFormPage /></ManagerRoute>)} />
           <Route path="/gh/payments" element={ghPage(GH_PAGE_KEYS.PAYMENTS, <ManagerRoute><GuestHousePayments /></ManagerRoute>)} />
           <Route path="/gh/journal-entries" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><JournalEntries /></ManagerRoute>)} />
-          <Route path="/gh/trial-balance" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><TrialBalance /></ManagerRoute>)} />
+          <Route path="/gh/trial-balance" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><Navigate to="/gh/accounting/trial-balance" replace /></ManagerRoute>)} />
+          <Route path="/gh/accounting" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><AccountingDashboard /></ManagerRoute>)} />
+          <Route path="/gh/accounting/accounts" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><ChartOfAccounts /></ManagerRoute>)} />
+          <Route path="/gh/accounting/general-ledger" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><GeneralLedgerPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/customer-ledger" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><CustomerLedgerPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/vendors" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><VendorsPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/receivables" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><ReceivablesPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/payables" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><PayablesPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/cash-book" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><CashBookPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/bank-book" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankBookPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/banks" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankAccountsPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/reconciliation" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><BankReconPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/invoices" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><InvoicesPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/trial-balance" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><TrialBalancePage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/profit-loss" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><ProfitLossPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/balance-sheet" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><BalanceSheetPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/cash-flow" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><CashFlowPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/opening-balances" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><OpeningBalancesPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/periods" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><FiscalPeriodsPage /></ManagerRoute>)} />
+          <Route path="/gh/accounting/health" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><HealthCheckPage /></ManagerRoute>)} />
           <Route path="/gh/expenses/new" element={ghPage(GH_PAGE_KEYS.EXPENSES, <ManagerRoute><ExpenseFormPage /></ManagerRoute>)} />
           <Route path="/gh/expenses/:expenseId/edit" element={ghPage(GH_PAGE_KEYS.EXPENSES, <ManagerRoute><ExpenseFormPage /></ManagerRoute>)} />
           <Route path="/gh/expenses/:expenseId" element={ghPage(GH_PAGE_KEYS.EXPENSES, <ManagerRoute><GhExpenseDetail /></ManagerRoute>)} />

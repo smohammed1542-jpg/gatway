@@ -5,9 +5,75 @@ from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _load_dotenv(path: Path):
+    """Load local .env into os.environ without overriding existing vars."""
+    if not path.is_file():
+        return
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, val = line.partition('=')
+        key = key.strip()
+        if not key:
+            continue
+        val = val.strip().strip('"').strip("'")
+        os.environ.setdefault(key, val)
+
+
+_load_dotenv(BASE_DIR / '.env')
+# Map alternate env names some local .env files use
+if not os.environ.get('DB_NAME') and os.environ.get('DATABASE_NAME'):
+    os.environ['DB_NAME'] = os.environ['DATABASE_NAME']
+if not os.environ.get('DB_USER') and os.environ.get('DATABASE_USER'):
+    os.environ['DB_USER'] = os.environ['DATABASE_USER']
+if not os.environ.get('DB_PASSWORD') and os.environ.get('DATABASE_PASSWORD'):
+    os.environ['DB_PASSWORD'] = os.environ['DATABASE_PASSWORD']
+if not os.environ.get('DB_HOST') and os.environ.get('DATABASE_HOST'):
+    os.environ['DB_HOST'] = os.environ['DATABASE_HOST']
+if not os.environ.get('DB_PORT') and os.environ.get('DATABASE_PORT'):
+    os.environ['DB_PORT'] = os.environ['DATABASE_PORT']
+
+# Local Vite/dev escape hatch: ignore DB_* so SQLite is used
+if os.environ.get('ALLOW_SQLITE', '').lower() in ('1', 'true', 'yes'):
+    for _k in (
+        'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DATABASE_URL',
+        'DATABASE_NAME', 'DATABASE_USER', 'DATABASE_PASSWORD', 'DATABASE_HOST', 'DATABASE_PORT',
+    ):
+        os.environ.pop(_k, None)
+
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-gateway-hall-fallback-key-2024')
+import sys
+
+_secret = os.environ.get('SECRET_KEY', '').strip()
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+_running_tests = (
+    os.environ.get('DJANGO_TEST', '').lower() in ('1', 'true', 'yes')
+    or any(arg == 'test' or arg.endswith('pytest') for arg in sys.argv)
+)
+if not _secret:
+    if DEBUG or _running_tests:
+        _secret = 'django-insecure-gateway-hall-dev-only-do-not-use-in-production'
+    else:
+        raise RuntimeError(
+            'SECRET_KEY environment variable is required when DEBUG=False. '
+            'Generate a long random value and set it before starting the server.'
+        )
+SECRET_KEY = _secret
+if not DEBUG and not _running_tests and (
+    SECRET_KEY.startswith('django-insecure-')
+    or len(SECRET_KEY) < 40
+):
+    raise RuntimeError(
+        'SECRET_KEY is too weak for production (DEBUG=False). '
+        'Use a long random secret (40+ characters), not a django-insecure fallback.'
+    )
+
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 for _railway_var in ('RAILWAY_PUBLIC_DOMAIN', 'RAILWAY_STATIC_URL'):
     _railway_domain = os.environ.get(_railway_var, '')
@@ -79,7 +145,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'hallora_backend.wsgi.application'
 
 # Database Setup (Supports PyInstaller dynamic writable storage)
-import sys
 IS_BUNDLED = getattr(sys, 'frozen', False)
 
 if IS_BUNDLED:
@@ -89,17 +154,28 @@ if IS_BUNDLED:
 else:
     DB_PATH = BASE_DIR / 'db.sqlite3'
 
+_require_postgres = (
+    os.environ.get('REQUIRE_POSTGRES', '').lower() in ('1', 'true', 'yes')
+    or (not DEBUG and not _running_tests and os.environ.get('ALLOW_SQLITE', 'false').lower() != 'true')
+)
+
 if os.environ.get('DATABASE_URL'):
     import dj_database_url
 
     DATABASES = {
         'default': dj_database_url.config(
-            default=f'sqlite:///{DB_PATH}',
-            conn_max_age=600,
-            ssl_require=os.environ.get('DB_SSL', 'true').lower() == 'true',
+            conn_max_age=0 if _running_tests else 600,
+            ssl_require=os.environ.get('DB_SSL', 'true').lower() == 'true' and not _running_tests,
         )
     }
+    if DATABASES['default'].get('ENGINE', '').endswith('sqlite3') and _require_postgres:
+        raise RuntimeError(
+            'DATABASE_URL resolved to SQLite but PostgreSQL is required for this environment. '
+            'Set a postgres:// DATABASE_URL or DB_NAME/DB_USER/DB_PASSWORD/DB_HOST.'
+        )
 elif os.environ.get('DB_NAME'):
+    if not os.environ.get('DB_PASSWORD') and _require_postgres and not _running_tests:
+        raise RuntimeError('DB_PASSWORD is required when using PostgreSQL in production.')
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -108,9 +184,15 @@ elif os.environ.get('DB_NAME'):
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
+            'CONN_MAX_AGE': 0 if _running_tests else 600,
         }
     }
 else:
+    if _require_postgres:
+        raise RuntimeError(
+            'PostgreSQL is required (DEBUG=False). Set DATABASE_URL or DB_NAME/DB_USER/'
+            'DB_PASSWORD/DB_HOST. For local SQLite-only development set DEBUG=True or ALLOW_SQLITE=true.'
+        )
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -198,6 +280,29 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+    # DEBUG: only scoped login/register limits — dashboard polling easily
+    # burns a global user budget and sticky LocMem 429s block the UI.
+    'DEFAULT_THROTTLE_CLASSES': (
+        (
+            'rest_framework.throttling.ScopedRateThrottle',
+        )
+        if DEBUG
+        else (
+            'rest_framework.throttling.AnonRateThrottle',
+            'rest_framework.throttling.UserRateThrottle',
+            'rest_framework.throttling.ScopedRateThrottle',
+        )
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.environ.get('DRF_THROTTLE_ANON', '60/min'),
+        'user': os.environ.get('DRF_THROTTLE_USER', '1200/min'),
+        'login': os.environ.get(
+            'DRF_THROTTLE_LOGIN', '100/min' if DEBUG else '20/min'
+        ),
+        'register': os.environ.get(
+            'DRF_THROTTLE_REGISTER', '50/min' if DEBUG else '10/min'
+        ),
+    },
 }
 
 # SimpleJWT Settings
@@ -209,7 +314,7 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS Settings
+# CORS: explicit origins from env. Optional regex for Vercel only when enabled.
 _cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
 if _cors_origins:
     CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(',') if o.strip()]
@@ -227,10 +332,11 @@ else:
         'http://127.0.0.1',
     ]
 
-# Allow any Vercel preview/production frontend without manual env updates.
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r'^https://.*\.vercel\.app$',
-]
+# Prefer setting CORS_ALLOWED_ORIGINS to the real frontend URL(s).
+# Broad *.vercel.app is OFF by default; set CORS_ALLOW_VERCEL_PREVIEWS=true only if needed.
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if os.environ.get('CORS_ALLOW_VERCEL_PREVIEWS', 'false').lower() == 'true':
+    CORS_ALLOWED_ORIGIN_REGEXES = [r'^https://.*\.vercel\.app$']
 CORS_ALLOW_CREDENTIALS = True
 
 # HTTPS cookies — enable only behind TLS (Railway, production HTTPS).
@@ -261,10 +367,37 @@ for _host in ALLOWED_HOSTS:
                 _origin = f'http://{_host}:{_port}'
                 if _origin not in CSRF_TRUSTED_ORIGINS:
                     CSRF_TRUSTED_ORIGINS.append(_origin)
+
 if os.environ.get('RAILWAY_ENVIRONMENT') or (not DEBUG and USE_HTTPS):
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# Full HTTPS hardening when explicitly enabled (public internet / Railway TLS).
+# Disabled during `manage.py test` so APIClient HTTP requests are not 301-redirected.
+if USE_HTTPS and not _running_tests:
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() == 'true'
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+elif _running_tests:
+    SECURE_SSL_REDIRECT = False
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # SPA may need to read CSRF cookie if cookie auth is used
+
+# Public self-service tenant signup (creates ADMIN + new Tenant). Off by default.
+ALLOW_PUBLIC_REGISTRATION = os.environ.get('ALLOW_PUBLIC_REGISTRATION', 'false').lower() == 'true'
+
+# Upload limits (bytes)
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('DATA_UPLOAD_MAX_MEMORY_SIZE', str(5 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get('FILE_UPLOAD_MAX_MEMORY_SIZE', str(5 * 1024 * 1024)))
 
 WHITENOISE_USE_FINDERS = DEBUG
 

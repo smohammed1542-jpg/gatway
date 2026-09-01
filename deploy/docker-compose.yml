@@ -8,6 +8,9 @@ services:
       POSTGRES_DB: ${DB_NAME:-hallora}
       POSTGRES_USER: ${DB_USER:-hallora}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in deploy/.env}
+    ports:
+      # Host access for local manage.py tests / tooling (container stays on 5432)
+      - "${DB_PUBLISH_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -42,6 +45,7 @@ services:
       SERVE_FRONTEND: "false"
       USE_HTTPS: "false"
       RUN_SEED_ON_START: ${RUN_SEED_ON_START:-false}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

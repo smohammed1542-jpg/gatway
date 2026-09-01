@@ -323,9 +323,13 @@
 
 .app-sidebar__nav {
   flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-right: 4px;
   margin-right: -8px;
+  padding-bottom: 16px;
 }
 
 .app-sidebar__nav--collapsed {
@@ -351,18 +355,95 @@
 .app-sidebar__nav-item {
   width: 100%;
   display: flex;
-  justify-content: stretch;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
 }
 
 .app-sidebar--collapsed .app-sidebar__nav-item {
   width: auto;
-  justify-content: center;
+  align-items: center;
 }
 
 .app-sidebar__nav-item--divider {
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-sidebar__nav-item--accordion {
+  flex-shrink: 0;
+  gap: 0;
+}
+
+/* Same size/spacing as main nav links; only chevron is extra */
+.app-sidebar__nav-link--accordion {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.app-sidebar__nav-link--accordion .app-sidebar__nav-label {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.app-sidebar__accordion-chevron {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  color: inherit;
+  opacity: 0.85;
+  transition: transform 0.2s ease;
+}
+
+.app-sidebar__accordion-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.app-sidebar__submenu {
+  list-style: none;
+  margin: 0 0 0 38px;
+  padding: 2px 0 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: calc(100% - 38px);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.app-sidebar__submenu-item {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-sidebar__submenu-link {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-sidebar__submenu-link:hover {
+  color: #e2e8f0;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.app-sidebar__submenu-link--active {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .app-sidebar--collapsed .app-sidebar__nav-item--divider {

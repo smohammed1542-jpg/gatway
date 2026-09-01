@@ -157,6 +157,8 @@ Run `deploy\backup_database.bat`. Backups are saved to:
 deploy/backups/backup_hallora_YYYYMMDD_HHMMSS.sql
 ```
 
+**Production requirement:** schedule this script (Windows Task Scheduler weekly, or Linux cron) — the repository does not ship an always-on scheduler daemon. Verify restore with `deploy\restore_database.bat` on a non-production copy before relying on backups.
+
 Copy this folder to an external drive or cloud storage for disaster recovery.
 
 ### Restore from backup

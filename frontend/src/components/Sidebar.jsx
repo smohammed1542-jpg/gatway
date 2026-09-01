@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Calculator,
@@ -14,6 +14,8 @@ import {
   X,
   CalendarCheck,
   Plus,
+  BookOpen,
+  ChevronDown,
 } from 'lucide-react';
 import AppLoader from '../components/AppLoader';
 import { usePermissions } from '../hooks/usePermissions';
@@ -35,6 +37,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
   } = usePermissions();
   const { isPageVisible: isGhPageVisible } = useGhPageVisibility();
   const { isPageVisible: isHallPageVisible } = useHallPageVisibility();
+  const [acctOpen, setAcctOpen] = useState(false);
 
   const hallNavItems = [
     { name: 'Bookings', icon: Calendar, path: '/bookings', pageKey: HALL_PAGE_KEYS.BOOKINGS },
@@ -58,6 +61,30 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
   const dashboardNavItem = isGuestHouse
     ? { name: 'Dashboard', icon: Calculator, path: '/gh/dashboard', pageKey: GH_PAGE_KEYS.DASHBOARD }
     : { name: 'Financials', icon: Calculator, path: '/dashboard', pageKey: HALL_PAGE_KEYS.DASHBOARD };
+
+  const acctBase = isGuestHouse ? '/gh/accounting' : '/accounting';
+  const accountingLinks = [
+    { name: 'Acct. Dashboard', path: acctBase },
+    { name: 'Chart of Accounts', path: `${acctBase}/accounts` },
+    { name: 'Journal Entries', path: isGuestHouse ? '/gh/journal-entries' : '/journal-entries' },
+    { name: 'General Ledger', path: `${acctBase}/general-ledger` },
+    { name: 'Customer Ledger', path: `${acctBase}/customer-ledger` },
+    { name: 'Vendors', path: `${acctBase}/vendors` },
+    { name: 'Receivables', path: `${acctBase}/receivables` },
+    { name: 'Payables', path: `${acctBase}/payables` },
+    { name: 'Cash Book', path: `${acctBase}/cash-book` },
+    { name: 'Bank Book', path: `${acctBase}/bank-book` },
+    { name: 'Bank Accounts / Transfers', path: `${acctBase}/banks` },
+    { name: 'Bank Recon', path: `${acctBase}/reconciliation` },
+    { name: 'Invoices', path: `${acctBase}/invoices` },
+    { name: 'Trial Balance', path: `${acctBase}/trial-balance` },
+    { name: 'Profit & Loss', path: `${acctBase}/profit-loss` },
+    { name: 'Balance Sheet', path: `${acctBase}/balance-sheet` },
+    { name: 'Cash Flow', path: `${acctBase}/cash-flow` },
+    { name: 'Opening Balances', path: `${acctBase}/opening-balances` },
+    { name: 'Fiscal Periods', path: `${acctBase}/periods` },
+    { name: 'Health Check', path: `${acctBase}/health` },
+  ];
 
   const mainNavItems = isGuestHouse ? guestHouseNavItems : hallNavItems;
 
@@ -157,6 +184,51 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
               {renderNavLink(dashboardNavItem)}
             </li>
           ))}
+          {canAccessDashboard && (!isCollapsed || isMobile) && (
+            <li className={`app-sidebar__nav-item app-sidebar__nav-item--divider app-sidebar__nav-item--accordion${acctOpen ? ' is-open' : ''}`}>
+              <button
+                type="button"
+                className={`app-sidebar__nav-link app-sidebar__nav-link--accordion${acctOpen ? ' is-open' : ''}`}
+                onClick={() => setAcctOpen((o) => !o)}
+                aria-expanded={acctOpen}
+                aria-controls="sidebar-accounting-menu"
+              >
+                <BookOpen size={24} className="app-sidebar__nav-icon" aria-hidden />
+                <span className="app-sidebar__nav-label">Accounting</span>
+                <ChevronDown
+                  size={18}
+                  className={`app-sidebar__accordion-chevron${acctOpen ? ' is-open' : ''}`}
+                  aria-hidden
+                />
+              </button>
+              {acctOpen && (
+                <ul id="sidebar-accounting-menu" className="app-sidebar__submenu" role="list">
+                  {accountingLinks.map((link) => (
+                    <li key={link.path} className="app-sidebar__submenu-item">
+                      <NavLink
+                        to={link.path}
+                        end={link.path === acctBase}
+                        onClick={handleNavClick}
+                        className={({ isActive }) => [
+                          'app-sidebar__submenu-link',
+                          isActive ? 'app-sidebar__submenu-link--active' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        {link.name}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          )}
+          {canAccessDashboard && isCollapsed && !isMobile && (
+            <li className="app-sidebar__nav-item">
+              <NavLink to={acctBase} title="Accounting" onClick={handleNavClick} className={({ isActive }) => navLinkClass(isActive)}>
+                <BookOpen size={24} className="app-sidebar__nav-icon" aria-hidden />
+              </NavLink>
+            </li>
+          )}
         </ul>
       </nav>
     </aside>

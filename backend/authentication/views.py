@@ -18,6 +18,7 @@ from .models import StaffProfile, User
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_scope = 'login'
 
 
 class PortalHintView(APIView):
@@ -41,6 +42,16 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
+    throttle_scope = 'register'
+
+    def create(self, request, *args, **kwargs):
+        from django.conf import settings as dj_settings
+        if not getattr(dj_settings, 'ALLOW_PUBLIC_REGISTRATION', False):
+            return Response(
+                {'detail': 'Public registration is disabled. Ask an administrator to create your account.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
 
 
 class UserDetailView(generics.RetrieveUpdateAPIView):

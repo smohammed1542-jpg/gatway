@@ -40,8 +40,14 @@ def compute_booking_totals(booking, tax_rate=None, overtime_rate=None):
         + Decimal(str(booking.generator_charge or 0))
     )
     total_before_tax = subtotal + extra_services
-    tax_amount = (total_before_tax * tax_rate).quantize(Decimal('0.01'))
-    total_price = total_before_tax + tax_amount
+    discount = Decimal(str(getattr(booking, 'discount_amount', 0) or 0))
+    if discount < 0:
+        discount = Decimal('0.00')
+    if discount > total_before_tax:
+        discount = total_before_tax
+    taxable_base = (total_before_tax - discount).quantize(Decimal('0.01'))
+    tax_amount = (taxable_base * tax_rate).quantize(Decimal('0.01'))
+    total_price = taxable_base + tax_amount
 
     advance = Decimal(str(booking.advance_paid or 0))
     if booking.booking_status == 'CANCELLED':
@@ -56,14 +62,23 @@ def compute_booking_totals(booking, tax_rate=None, overtime_rate=None):
     else:
         payment_status = 'PARTIAL'
 
+    overtime_charge = Decimal(str(booking.overtime_hours or 0)) * overtime_rate
+    kitchen_charge = Decimal(str(booking.kitchen_charge or 0))
+    generator_charge = Decimal(str(booking.generator_charge or 0))
+
     return {
         'guest_count': guest_count,
         'subtotal': subtotal,
         'extra_services': extra_services,
         'decoration_charge': decoration_charge,
+        'overtime_charge': overtime_charge,
+        'kitchen_charge': kitchen_charge,
+        'generator_charge': generator_charge,
+        'discount_amount': discount,
         'tax_rate': tax_rate,
         'tax_amount': tax_amount,
         'total_before_tax': total_before_tax,
+        'taxable_base': taxable_base,
         'total_price': total_price,
         'remaining_balance': remaining,
         'payment_status': payment_status,

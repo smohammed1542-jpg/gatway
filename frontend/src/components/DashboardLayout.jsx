@@ -31,7 +31,8 @@ const DashboardLayoutContent = () => {
   const profilePath = isGuestHouse ? '/gh/profile' : '/profile';
   const paymentsPath = isGuestHouse ? '/gh/payments' : '/payments';
   const journalPath = isGuestHouse ? '/gh/journal-entries' : '/journal-entries';
-  const trialBalancePath = isGuestHouse ? '/gh/trial-balance' : '/trial-balance';
+  const accountingPath = isGuestHouse ? '/gh/accounting' : '/accounting';
+  const trialBalancePath = isGuestHouse ? '/gh/accounting/trial-balance' : '/accounting/trial-balance';
   const settingsPath = isGuestHouse ? '/gh/settings' : '/settings';
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,7 +88,8 @@ const DashboardLayoutContent = () => {
   const profileMenuItems = [
     ...(showPaymentsMenu ? [{ label: 'Payments', icon: Wallet, path: paymentsPath }] : []),
     ...(canAccessDashboard ? [{ label: 'Journal Entries', icon: BookOpen, path: journalPath }] : []),
-    ...(canAccessDashboard ? [{ label: 'General Ledger', icon: Scale, path: trialBalancePath }] : []),
+    ...(canAccessDashboard ? [{ label: 'Accounting', icon: Scale, path: accountingPath }] : []),
+    ...(canAccessDashboard ? [{ label: 'Trial Balance', icon: Scale, path: trialBalancePath }] : []),
     ...(showProfileMenu ? [{ label: 'Profile', icon: User, path: profilePath }] : []),
     ...(showSettingsMenu ? [{ label: 'Settings', icon: Settings, path: settingsPath }] : []),
   ];

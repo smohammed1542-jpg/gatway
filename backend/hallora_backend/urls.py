@@ -7,6 +7,8 @@ from django.views.static import serve
 from django.contrib.staticfiles.views import serve as staticfiles_serve
 from django.views.decorators.cache import never_cache
 
+from core.media_views import serve_protected_media
+
 FRONTEND_DIST = os.path.normpath(os.path.join(settings.BASE_DIR, '..', 'frontend', 'dist'))
 FRONTEND_ASSETS = os.path.join(FRONTEND_DIST, 'assets')
 FRONTEND_INDEX = os.path.join(FRONTEND_DIST, 'index.html')
@@ -105,8 +107,8 @@ urlpatterns = [
 urlpatterns += [
     re_path(
         r'^media/(?P<path>.*)$',
-        serve,
-        {'document_root': settings.MEDIA_ROOT},
+        serve_protected_media,
+        name='protected-media',
     ),
 ]
 

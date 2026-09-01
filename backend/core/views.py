@@ -62,11 +62,13 @@ class DashboardStatsView(APIView):
             payment_qs = Payment.objects.filter(tenant=tenant)
             expense_qs = Expense.objects.filter(tenant=tenant).exclude(status='CANCELLED')
             booking_qs = Booking.objects.filter(tenant=tenant)
-        else:
+        elif request.user.is_superuser:
             base_payment_qs = Payment.objects.all()
             payment_qs = Payment.objects.all()
             expense_qs = Expense.objects.all().exclude(status='CANCELLED')
             booking_qs = Booking.objects.all()
+        else:
+            return Response({'detail': 'No tenant assigned to this account.'}, status=status.HTTP_400_BAD_REQUEST)
         
         if start_date and end_date:
             payment_qs = payment_qs.filter(payment_date__gte=start_date, payment_date__lte=end_date)
@@ -111,7 +113,12 @@ class DashboardStatsView(APIView):
             .order_by('-value')
 
         # Inventory (tenant-wide; not filtered by booking date range)
-        inv_qs = InventoryItem.objects.filter(tenant=tenant) if tenant else InventoryItem.objects.all()
+        if tenant:
+            inv_qs = InventoryItem.objects.filter(tenant=tenant)
+        elif request.user.is_superuser:
+            inv_qs = InventoryItem.objects.all()
+        else:
+            inv_qs = InventoryItem.objects.none()
         category_labels = dict(InventoryItem.CATEGORY_CHOICES)
         inventory_by_category = inv_qs.values('category').annotate(value=Count('id')).order_by('-value')
         stock_value = inv_qs.aggregate(
@@ -301,7 +308,12 @@ class AlertsView(APIView):
         week_ahead = today + timedelta(days=7)
         month_ahead = today + timedelta(days=30)
 
-        booking_qs = Booking.objects.filter(tenant=tenant) if tenant else Booking.objects.all()
+        if tenant:
+            booking_qs = Booking.objects.filter(tenant=tenant)
+        elif request.user.is_superuser:
+            booking_qs = Booking.objects.all()
+        else:
+            return Response({'detail': 'No tenant assigned to this account.'}, status=status.HTTP_400_BAD_REQUEST)
         booking_qs = booking_qs.filter(booking_status__in=['PENDING', 'CONFIRMED']).select_related('customer', 'venue')
 
         upcoming_events = booking_qs.filter(
@@ -316,10 +328,15 @@ class AlertsView(APIView):
             booking_status__in=['PENDING', 'CONFIRMED', 'COMPLETED'],
         ).order_by('event_date')[:15]
 
-        low_stock = InventoryItem.objects.filter(
-            tenant=tenant,
-            status__in=['LOW_STOCK', 'OUT_OF_STOCK'],
-        ) if tenant else InventoryItem.objects.filter(status__in=['LOW_STOCK', 'OUT_OF_STOCK'])
+        if tenant:
+            low_stock = InventoryItem.objects.filter(
+                tenant=tenant,
+                status__in=['LOW_STOCK', 'OUT_OF_STOCK'],
+            )
+        elif request.user.is_superuser:
+            low_stock = InventoryItem.objects.filter(status__in=['LOW_STOCK', 'OUT_OF_STOCK'])
+        else:
+            low_stock = InventoryItem.objects.none()
         low_stock = low_stock[:10]
 
         return Response({

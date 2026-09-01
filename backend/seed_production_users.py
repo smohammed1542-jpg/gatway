@@ -3,10 +3,14 @@ Seed production admin users for Marriage Hall + Guest House.
 
 Usage:
   set DATABASE_URL=postgresql://...
+  set SEED_ADMIN_PASSWORD=<strong-password>   # required (min 12 chars)
   cd backend
   python seed_production_users.py
+
+Never commit real passwords. Prefer rotating after first login.
 """
 import os
+import sys
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'hallora_backend.settings')
@@ -17,7 +21,16 @@ from core.models import Tenant, UserSettings
 
 User = get_user_model()
 
-PASSWORD = 'admin123'
+PASSWORD = (os.environ.get('SEED_ADMIN_PASSWORD') or '').strip()
+WEAK = {'admin123', 'password', 'Password1', 'changeme', '12345678'}
+
+if not PASSWORD or len(PASSWORD) < 12 or PASSWORD in WEAK:
+    print(
+        'ERROR: Set SEED_ADMIN_PASSWORD to a strong password (12+ characters). '
+        'Refusing to seed with a weak/default password.',
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 USERS = [
     {
@@ -84,7 +97,7 @@ def upsert_user(spec):
     UserSettings.objects.get_or_create(user=user)
 
     action = 'Created' if created else 'Updated'
-    print(f'{action}: {spec["app_type"]} | username={spec["username"]} | password={PASSWORD}')
+    print(f'{action}: {spec["app_type"]} | username={spec["username"]} | password=<from SEED_ADMIN_PASSWORD>')
     return user
 
 
@@ -92,6 +105,6 @@ if __name__ == '__main__':
     for spec in USERS:
         upsert_user(spec)
 
-    print('Done. Marriage Hall: admin / admin123')
-    print('Done. Guest House: gh_admin / admin123 (portal auto-detects on login)')
-    print('Django admin: https://YOUR-RAILWAY-URL/admin/  (use admin / admin123)')
+    print('Done. Marriage Hall username: admin')
+    print('Done. Guest House username: gh_admin')
+    print('Password was set from SEED_ADMIN_PASSWORD (not printed). Change it after first login.')

@@ -1,16 +1,19 @@
-django
-djangorestframework
-djangorestframework-simplejwt
-django-cors-headers
-psycopg2-binary
-dj-database-url
-python-decouple
-django-filter
-whitenoise
-Pillow
-gunicorn
-django-cloudinary-storage
-cloudinary
-waitress
-pyinstaller
-twilio
+# Pinned for reproducible production builds (versions from project venv freeze).
+# Do not upgrade blindly — re-run tests after any version change.
+
+Django==6.0.8
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+psycopg2-binary==2.9.12
+dj-database-url==3.1.2
+python-decouple==3.8
+django-filter==25.2
+whitenoise==6.12.0
+Pillow==12.3.0
+gunicorn==26.0.0
+django-cloudinary-storage==0.3.0
+cloudinary==1.44.2
+waitress==3.0.2
+pyinstaller==6.20.0
+twilio==9.10.9

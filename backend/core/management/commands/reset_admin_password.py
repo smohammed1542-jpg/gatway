@@ -37,12 +37,37 @@ class Command(BaseCommand):
         User = get_user_model()
         user = User.objects.filter(username=username).first()
         if not user:
-            raise CommandError(f'User "{username}" not found.')
+            if username != 'admin':
+                raise CommandError(f'User "{username}" not found.')
+            from core.models import Tenant
+            tenant, _ = Tenant.objects.get_or_create(
+                subdomain='gateway',
+                defaults={'name': 'Gateway Marriage Hall', 'plan_type': 'premium'},
+            )
+            user = User.objects.create_superuser(
+                username='admin',
+                email='admin@gateway.com',
+                password=password,
+            )
+            user.tenant = tenant
+            user.role = 'ADMIN'
+            user.app_type = 'MARRIAGE_HALL'
+            user.first_name = 'Admin'
+            user.last_name = 'Hall'
+            user.is_staff = True
+            user.is_superuser = True
+            user.save()
+            self.stdout.write(self.style.SUCCESS(
+                f'Created superuser "admin". Log in at /admin/ with this username.'
+            ))
+            return
 
         user.set_password(password)
         if not user.is_staff:
             user.is_staff = True
-        user.save(update_fields=['password', 'is_staff'] if not user.is_superuser else ['password'])
+        if username == 'admin' and not user.is_superuser:
+            user.is_superuser = True
+        user.save()
 
         self.stdout.write(
             self.style.SUCCESS(

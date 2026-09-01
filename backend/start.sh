@@ -45,16 +45,26 @@ if ! python manage.py migrate --noinput; then
     echo "WARNING: migrate failed — check DATABASE_URL and deploy logs."
 fi
 
-if [ "${RUN_SEED_ON_START:-false}" = "true" ]; then
-    echo "==> Seeding production admin users..."
-    python seed_production_users.py || echo "WARNING: seed_production_users failed (check SEED_ADMIN_PASSWORD)."
-    echo "==> Seeding landing page content..."
-    python manage.py seed_landing || echo "WARNING: seed_landing failed."
+# Apply admin password on deploy when any of these flags is true (set SEED_ADMIN_PASSWORD on Railway).
+_apply_admin=false
+if [ "${APPLY_ADMIN_PASSWORD:-false}" = "true" ] \
+    || [ "${RUN_SEED_ON_START:-false}" = "true" ] \
+    || [ "${RESET_ADMIN_ON_START:-false}" = "true" ]; then
+    _apply_admin=true
 fi
 
-if [ "${RESET_ADMIN_ON_START:-false}" = "true" ]; then
-    echo "==> Resetting admin password..."
-    python manage.py reset_admin_password || echo "WARNING: reset_admin_password failed (check ADMIN_RESET_PASSWORD)."
+if [ "$_apply_admin" = "true" ]; then
+    echo "==> Applying Django admin password (SEED_ADMIN_PASSWORD)..."
+    python seed_production_users.py || echo "WARNING: seed_production_users failed — set SEED_ADMIN_PASSWORD (12+ chars)."
+    python manage.py reset_admin_password --username admin \
+        || echo "WARNING: reset_admin_password failed for admin."
+    python manage.py reset_admin_password --username gh_admin \
+        || echo "WARNING: reset_admin_password failed for gh_admin (optional)."
+fi
+
+if [ "${RUN_SEED_ON_START:-false}" = "true" ]; then
+    echo "==> Seeding landing page content..."
+    python manage.py seed_landing || echo "WARNING: seed_landing failed."
 fi
 
 echo "==> Ensuring media upload directory exists at ${MEDIA_ROOT:-media}..."

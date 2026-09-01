@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import ThemeToggle from '../components/ThemeToggle';
 import AppLogo from '../components/AppLogo';
 import { getPortalHint } from '../api/auth';
+import { API_BASE } from '../api/client';
 import { hasAuthSession } from '../utils/authSession';
 import {
   APP_GUEST_HOUSE,
@@ -91,7 +92,12 @@ const LoginPage = () => {
       const passwordMsg = fieldErrorMessage(data?.password);
 
       if (!err.response) {
-        setError('Cannot reach the server. Start the backend, then try again.');
+        const isCrossOrigin = API_BASE.startsWith('http');
+        setError(
+          isCrossOrigin
+            ? 'Cannot reach the API server. Check Railway is running and CORS allows this site (FRONTEND_URL on backend).'
+            : 'Cannot reach the server. Start the backend, then try again.',
+        );
       } else if (usernameMsg) {
         setUsernameError(usernameMsg);
       } else if (passwordMsg) {

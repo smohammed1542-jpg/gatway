@@ -353,10 +353,22 @@ if _frontend_url:
         CORS_ALLOWED_ORIGINS.append(_frontend_url)
 
 # Prefer setting CORS_ALLOWED_ORIGINS to the real frontend URL(s).
-# Broad *.vercel.app is OFF by default; set CORS_ALLOW_VERCEL_PREVIEWS=true only if needed.
+# On Railway, *.vercel.app is allowed by default (override with CORS_ALLOW_VERCEL_PREVIEWS=false).
 CORS_ALLOWED_ORIGIN_REGEXES = []
-if os.environ.get('CORS_ALLOW_VERCEL_PREVIEWS', 'false').lower() == 'true':
+_allow_vercel = os.environ.get('CORS_ALLOW_VERCEL_PREVIEWS', '').strip().lower()
+if _allow_vercel in ('1', 'true', 'yes') or (
+    _allow_vercel != 'false' and os.environ.get('RAILWAY_ENVIRONMENT')
+):
     CORS_ALLOWED_ORIGIN_REGEXES = [r'^https://.*\.vercel\.app$']
+
+# Production Gateway Centre frontend (always allow when deployed on Railway)
+if os.environ.get('RAILWAY_ENVIRONMENT'):
+    for _prod_origin in (
+        'https://gatway-silk.vercel.app',
+        'https://gatway.vercel.app',
+    ):
+        if _prod_origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(_prod_origin)
 CORS_ALLOW_CREDENTIALS = True
 
 # HTTPS cookies — enable only behind TLS (Railway, production HTTPS).

@@ -1,6 +1,5 @@
 import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+import { API_BASE } from './client';
 
 /** Public landing CMS - no auth required. */
 export const getLandingContent = () =>

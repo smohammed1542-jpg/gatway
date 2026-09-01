@@ -6,8 +6,15 @@ import {
   persistAuthSession,
 } from '../utils/authSession';
 
-/** Dev: Vite proxy `/api` → Django. Docker/local prod: `/api` via nginx. Vercel: set VITE_API_BASE_URL. */
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+/** Dev: Vite proxy `/api` → Django. Prod: VITE_API_BASE_URL or same-origin /api. */
+function normalizeApiBase(raw) {
+  if (!raw || !String(raw).trim()) return '/api';
+  const trimmed = String(raw).trim().replace(/\/$/, '');
+  if (trimmed.endsWith('/api')) return trimmed;
+  return `${trimmed}/api`;
+}
+
+export const API_BASE = normalizeApiBase(import.meta.env.VITE_API_BASE_URL);
 
 const client = axios.create({
   baseURL: API_BASE,

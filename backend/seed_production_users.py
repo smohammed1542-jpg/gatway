@@ -26,11 +26,11 @@ WEAK = {'admin123', 'password', 'Password1', 'changeme', '12345678'}
 
 if not PASSWORD or len(PASSWORD) < 12 or PASSWORD in WEAK:
     print(
-        'ERROR: Set SEED_ADMIN_PASSWORD to a strong password (12+ characters). '
-        'Refusing to seed with a weak/default password.',
+        'SKIP: Set SEED_ADMIN_PASSWORD to a strong password (12+ characters) to seed admin users. '
+        'Startup continues without seeding.',
         file=sys.stderr,
     )
-    sys.exit(1)
+    sys.exit(0)
 
 USERS = [
     {

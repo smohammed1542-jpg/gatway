@@ -347,6 +347,11 @@ else:
         'http://127.0.0.1',
     ]
 
+_frontend_url = os.environ.get('FRONTEND_URL', '').strip().rstrip('/')
+if _frontend_url:
+    if _frontend_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_frontend_url)
+
 # Prefer setting CORS_ALLOWED_ORIGINS to the real frontend URL(s).
 # Broad *.vercel.app is OFF by default; set CORS_ALLOW_VERCEL_PREVIEWS=true only if needed.
 CORS_ALLOWED_ORIGIN_REGEXES = []
@@ -360,6 +365,10 @@ USE_HTTPS = os.environ.get('USE_HTTPS', 'false').lower() == 'true'
 
 _csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()] if _csrf_origins else []
+
+if _frontend_url:
+    if _frontend_url not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_frontend_url)
 
 for _railway_var in ('RAILWAY_PUBLIC_DOMAIN', 'RAILWAY_STATIC_URL'):
     _railway_origin = os.environ.get(_railway_var, '')

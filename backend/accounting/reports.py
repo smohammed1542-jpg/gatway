@@ -97,6 +97,7 @@ def general_ledger(
     customer_id=None,
     vendor_id=None,
     booking_id=None,
+    cost_center_id=None,
     limit=2000,
 ):
     AccountingService.ensure_chart(tenant)
@@ -123,6 +124,8 @@ def general_ledger(
         qs = qs.filter(vendor_id=vendor_id)
     if booking_id:
         qs = qs.filter(booking_id=booking_id)
+    if cost_center_id:
+        qs = qs.filter(cost_center_id=cost_center_id)
     qs = qs.order_by('journal_entry__entry_date', 'journal_entry_id', 'id')
 
     running = opening

@@ -6,6 +6,7 @@ from .models import (
     BankAccount,
     BankReconciliation,
     BankTransfer,
+    CostCenter,
     FiscalPeriod,
     Invoice,
     JournalEntry,
@@ -245,6 +246,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
         if not obj.customer_id:
             return ''
         return obj.customer.display_name
+
+
+class CostCenterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CostCenter
+        fields = ['id', 'code', 'name', 'kind', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class OpeningBalanceSerializer(serializers.Serializer):

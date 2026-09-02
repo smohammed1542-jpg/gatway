@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, Trash2, Edit, X, Plus, ChevronRight } from 'lucide-react';
+import { Sparkles, Trash2, Edit, X, Plus } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
+import DataTable from '../components/ui/DataTable';
+import ErpPageShell from '../components/ui/ErpPageShell';
+import StatusBadge from '../components/ui/StatusBadge';
 import GhFilterSelect from '../components/guesthouse/GhFilterSelect';
 import client from '../api/client';
 import toast from 'react-hot-toast';
@@ -149,148 +152,107 @@ const DecorationPackages = () => {
 
   return (
     <>
-      <div className="animate-fade-in">
-        <div className="page-header">
-          <div>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Create pricing bundles for stage, lighting, florals, and themed décor.</p>
-          </div>
-          {canManage && (
-          <button type="button" className="btn-primary" onClick={() => openModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <ErpPageShell
+        description="Pricing bundles for stage, lighting, florals, and themed décor."
+        actions={canManage && (
+          <button type="button" className="btn-primary" onClick={() => openModal()}>
             <Plus size={18} /> New package
           </button>
-          )}
-        </div>
-
-        <div className="search-filter-bar" style={{ marginBottom: '24px' }}>
-          <div className="search-filter-bar__search">
-            <SearchInput
-              variant="inset"
-              placeholder="Search packages..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+        )}
+        toolbar={(
+          <div className="search-filter-bar" style={{ margin: 0, flex: 1 }}>
+            <div className="search-filter-bar__search">
+              <SearchInput
+                variant="inset"
+                placeholder="Search packages…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <GhFilterSelect
+              value={filterTier}
+              onChange={setFilterTier}
+              options={TIER_FILTER_OPTIONS}
+              aria-label="Filter by tier"
+              className="decoration-filter-select"
+            />
+            <GhFilterSelect
+              value={filterActive}
+              onChange={setFilterActive}
+              options={STATUS_FILTER_OPTIONS}
+              aria-label="Filter by status"
+              className="decoration-filter-select"
             />
           </div>
-          <GhFilterSelect
-            value={filterTier}
-            onChange={setFilterTier}
-            options={TIER_FILTER_OPTIONS}
-            aria-label="Filter by tier"
-            className="decoration-filter-select"
-          />
-          <GhFilterSelect
-            value={filterActive}
-            onChange={setFilterActive}
-            options={STATUS_FILTER_OPTIONS}
-            aria-label="Filter by status"
-            className="decoration-filter-select"
-          />
-        </div>
-
+        )}
+      >
         {isLoading ? (
           <AppLoader inline message="Loading packages…" />
         ) : packages.length === 0 ? (
-          <div className="card" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <Sparkles size={48} style={{ margin: '0 auto 16px', opacity: 0.35 }} />
-            <p style={{ fontSize: '16px', fontWeight: '600' }}>No decoration packages yet</p>
-            <p style={{ fontSize: '14px', marginTop: '8px' }}>Add your first package to quote events faster.</p>
+          <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Sparkles size={40} style={{ margin: '0 auto 12px', opacity: 0.35 }} />
+            <p style={{ fontSize: '15px', fontWeight: '600', margin: 0 }}>No decoration packages yet</p>
+            <p style={{ fontSize: '13px', marginTop: '8px' }}>Add your first package to quote events faster.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {packages.map((pkg) => {
-              const tierStyle = TIER_STYLES[pkg.tier] || TIER_STYLES.CLASSIC;
-              const items = Array.isArray(pkg.included_items) ? pkg.included_items : [];
-              return (
-                <div
-                  key={pkg.id}
-                  role="button"
-                  tabIndex={0}
-                  className="card"
-                  style={{ padding: '24px', cursor: 'pointer' }}
-                  onClick={() => openPackageDetail(pkg.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openPackageDetail(pkg.id);
-                    }
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1', minWidth: '220px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{pkg.name}</h3>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '20px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            backgroundColor: tierStyle.bg,
-                            color: tierStyle.color,
-                          }}
-                        >
-                          {TIER_LABELS[pkg.tier] || pkg.tier}
-                        </span>
-                        {!pkg.is_active && (
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-dim)' }}>Inactive</span>
-                        )}
-                      </div>
-                      {pkg.description && (
-                        <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: 1.5 }}>{pkg.description}</p>
-                      )}
-                      <p style={{ fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--text)' }}>Included</p>
-                      <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                        {items.length ? (
-                          items.slice(0, 4).map((line, idx) => (
-                            <li key={idx}>{line}</li>
-                          ))
-                        ) : (
-                          <li style={{ listStyle: 'none', marginLeft: '-20px', fontStyle: 'italic' }}>No line items listed</li>
-                        )}
-                        {items.length > 4 && (
-                          <li style={{ listStyle: 'none', marginLeft: '-20px', fontStyle: 'italic' }}>+{items.length - 4} more…</li>
-                        )}
-                      </ul>
-                    </div>
-                    <div style={{ textAlign: 'right', minWidth: '140px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>From</p>
-                      <p style={{ fontSize: '26px', fontWeight: '800', marginTop: '4px' }}>
-                        <span style={{ fontSize: '55%', fontWeight: '600', opacity: 0.65 }}>Rs</span> {parseFloat(pkg.base_price || 0).toLocaleString()}
-                      </p>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Setup ~{pkg.setup_hours}h</p>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '16px', alignItems: 'center' }}>
-                        {canManage && (
-                        <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openModal(pkg);
-                          }}
-                          style={{ color: 'var(--primary)', padding: '8px', background: 'transparent' }}
-                          title="Edit"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDelete(pkg.id, e)}
-                          style={{ color: '#ef4444', padding: '8px', background: 'transparent' }}
-                          title="Delete"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                        </>
-                        )}
-                        <ChevronRight size={20} color="var(--text-muted)" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="erp-card erp-card--flat">
+            <DataTable
+              variant="erp"
+              sortable
+              showColumnChooser
+              pageSize={20}
+              columns={[
+                { key: 'name', label: 'Package', sortable: true },
+                { key: 'tier', label: 'Tier', sortable: true },
+                { key: 'base_price', label: 'Base price', sortable: true },
+                { key: 'setup_hours', label: 'Setup (h)', sortable: true },
+                { key: 'items_count', label: 'Items', sortable: true },
+                { key: 'is_active', label: 'Status', sortable: true },
+              ]}
+              data={packages.map((pkg) => ({
+                ...pkg,
+                items_count: Array.isArray(pkg.included_items) ? pkg.included_items.length : 0,
+              }))}
+              getSortValue={(row, key) => {
+                if (key === 'base_price' || key === 'setup_hours' || key === 'items_count') {
+                  return Number(row[key]) || 0;
+                }
+                return row[key];
+              }}
+              renderCell={(row, key) => {
+                if (key === 'tier') {
+                  const tierStyle = TIER_STYLES[row.tier] || TIER_STYLES.CLASSIC;
+                  return (
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor: tierStyle.bg,
+                      color: tierStyle.color,
+                    }}
+                    >
+                      {TIER_LABELS[row.tier] || row.tier}
+                    </span>
+                  );
+                }
+                if (key === 'base_price') {
+                  return `Rs ${parseFloat(row.base_price || 0).toLocaleString()}`;
+                }
+                if (key === 'is_active') {
+                  return <StatusBadge status={row.is_active ? 'ACTIVE' : 'INACTIVE'} />;
+                }
+                return row[key] ?? '—';
+              }}
+              onRowClick={(row) => openPackageDetail(row.id)}
+              rowActions={canManage ? (row) => [
+                { label: 'Edit', icon: <Edit size={14} />, onClick: () => openModal(row) },
+                { label: 'Delete', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDelete(row.id) },
+              ] : undefined}
+            />
           </div>
         )}
-      </div>
+      </ErpPageShell>
 
       {showModal && (
         <div

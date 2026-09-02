@@ -32,6 +32,10 @@ class Tenant(models.Model):
         help_text='Hall overtime charge per hour.',
     )
     default_currency = models.CharField(max_length=8, default='PKR')
+    auto_post_journals = models.BooleanField(
+        default=True,
+        help_text='When False, operational events create DRAFT journals for manual posting.',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

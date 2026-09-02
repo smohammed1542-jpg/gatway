@@ -4,6 +4,7 @@ from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 
+from accounting.models import AuditLog
 from accounting.services import AccountingService
 from .models import Payment, Expense
 
@@ -21,6 +22,14 @@ class PaymentService:
             tenant=booking.tenant,
             recorded_by=user if getattr(user, 'is_authenticated', False) else None,
         )
+        AuditLog.record(
+            booking.tenant,
+            action='CREATE',
+            entity_type='payment',
+            entity_id=payment.pk,
+            message=f'Refund {payment.pk}',
+            actor=user,
+        )
         return payment
 
     @staticmethod
@@ -32,6 +41,14 @@ class PaymentService:
         payment.save(update_fields=['status', 'updated_at'] if hasattr(payment, 'updated_at') else ['status'])
         AccountingService.reverse_source(
             payment.tenant, 'payment', payment.pk, user=user
+        )
+        AuditLog.record(
+            payment.tenant,
+            action='VOID',
+            entity_type='payment',
+            entity_id=payment.pk,
+            message=f'Payment {payment.pk} voided',
+            actor=user,
         )
         return payment
 
@@ -52,6 +69,14 @@ class ExpenseService:
         expense.save(update_fields=update)
         AccountingService.reverse_source(
             expense.tenant, 'expense', expense.pk, user=user
+        )
+        AuditLog.record(
+            expense.tenant,
+            action='VOID',
+            entity_type='expense',
+            entity_id=expense.pk,
+            message=f'Expense {expense.pk} cancelled',
+            actor=user,
         )
         return expense
 

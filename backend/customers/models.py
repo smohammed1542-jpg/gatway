@@ -67,7 +67,10 @@ class Customer(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'customers'
         indexes = [
+            models.Index(fields=['tenant', 'phone']),
+            models.Index(fields=['tenant', 'email']),
             models.Index(fields=['email']),
             models.Index(fields=['phone']),
         ]

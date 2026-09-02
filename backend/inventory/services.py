@@ -26,7 +26,7 @@ class InventoryService:
         item.quantity = int(item.quantity or 0) + signed
         InventoryService._sync_status(item)
         item.save(update_fields=['quantity', 'status'] if hasattr(item, 'status') else ['quantity'])
-        return InventoryTransaction.objects.create(
+        txn = InventoryTransaction.objects.create(
             tenant=tenant or item.tenant,
             item=item,
             quantity=signed,
@@ -35,6 +35,9 @@ class InventoryService:
             notes=notes or '',
             created_by=user if getattr(user, 'is_authenticated', False) else None,
         )
+        from accounting.services import AccountingService
+        AccountingService.post_inventory_movement(txn, user=user)
+        return txn
 
     @staticmethod
     def apply_booking_allocation(allocation, previous_qty=0, user=None):

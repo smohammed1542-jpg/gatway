@@ -507,6 +507,36 @@ class GhExpense(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     expense_date = models.DateField()
     description = models.TextField(blank=True, default='')
+    account = models.ForeignKey(
+        'accounting.Account',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gh_expenses',
+    )
+    vendor = models.ForeignKey(
+        'accounting.Vendor',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gh_expenses',
+    )
+    paid_through = models.CharField(
+        max_length=10,
+        choices=(
+            ('CASH', 'Cash'),
+            ('BANK', 'Bank'),
+            ('AP', 'Accounts Payable'),
+        ),
+        default='CASH',
+    )
+    bank_account = models.ForeignKey(
+        'accounting.BankAccount',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gh_expenses',
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='POSTED')
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -515,11 +545,23 @@ class GhExpense(models.Model):
         blank=True,
         related_name='gh_expenses_created',
     )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gh_expenses_updated',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'gh_expenses'
         ordering = ['-expense_date', '-id']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['tenant', 'expense_date']),
+        ]
         verbose_name = 'GH expense'
         verbose_name_plural = '7 · GH — Expenses'
 

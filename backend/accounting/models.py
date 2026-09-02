@@ -160,6 +160,7 @@ class JournalEntry(models.Model):
         ('reversal', 'Reversal'),
         ('manual', 'Manual'),
         ('adjustment', 'Adjustment'),
+        ('inventory', 'Inventory movement'),
     )
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='journal_entries')
@@ -257,6 +258,20 @@ class JournalLine(models.Model):
         null=True,
         blank=True,
         related_name='journal_lines',
+    )
+    cost_center = models.ForeignKey(
+        'CostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='journal_lines',
+    )
+    profit_center = models.ForeignKey(
+        'CostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='profit_journal_lines',
     )
     reconciled = models.BooleanField(default=False)
     reconciliation = models.ForeignKey(
@@ -534,6 +549,47 @@ class Invoice(models.Model):
         return self.invoice_no or f'INV-{self.pk}'
 
 
+class CostCenter(models.Model):
+    """ERP cost / profit center master (tenant-scoped)."""
+
+    KIND_CHOICES = (
+        ('COST', 'Cost center'),
+        ('PROFIT', 'Profit center'),
+    )
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='cost_centers')
+    code = models.CharField(max_length=20)
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default='COST')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'cost_centers'
+        unique_together = [('tenant', 'code')]
+        ordering = ['code']
+
+    def __str__(self):
+        return f'{self.code} {self.name}'
+
+
+class DocumentSequence(models.Model):
+    """Per-tenant sequential document numbers."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='document_sequences')
+    doc_type = models.CharField(max_length=10)
+    last_number = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'document_sequences'
+        unique_together = [('tenant', 'doc_type')]
+
+    def __str__(self):
+        return f'{self.tenant_id}:{self.doc_type}={self.last_number}'
+
+
 class AuditLog(models.Model):
     ACTION_CHOICES = (
         ('POST', 'Post'),
@@ -541,6 +597,7 @@ class AuditLog(models.Model):
         ('VOID', 'Void'),
         ('CREATE', 'Create'),
         ('UPDATE', 'Update'),
+        ('APPROVE', 'Approve'),
         ('CLOSE', 'Close period'),
         ('REOPEN', 'Reopen period'),
         ('DEACTIVATE', 'Deactivate'),

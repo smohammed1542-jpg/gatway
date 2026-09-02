@@ -34,6 +34,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     canAccessExpenses,
     canAccessNotifications,
     canAccessDashboard,
+    isAdmin,
   } = usePermissions();
   const { isPageVisible: isGhPageVisible } = useGhPageVisibility();
   const { isPageVisible: isHallPageVisible } = useHallPageVisibility();
@@ -63,28 +64,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     : { name: 'Financials', icon: Calculator, path: '/dashboard', pageKey: HALL_PAGE_KEYS.DASHBOARD };
 
   const acctBase = isGuestHouse ? '/gh/accounting' : '/accounting';
+  const journalPath = isGuestHouse ? '/gh/journal-entries' : '/journal-entries';
   const accountingLinks = [
-    { name: 'Acct. Dashboard', path: acctBase },
+    { name: 'Overview', path: acctBase },
     { name: 'Chart of Accounts', path: `${acctBase}/accounts` },
-    { name: 'Journal Entries', path: isGuestHouse ? '/gh/journal-entries' : '/journal-entries' },
-    { name: 'General Ledger', path: `${acctBase}/general-ledger` },
-    { name: 'Customer Ledger', path: `${acctBase}/customer-ledger` },
-    { name: 'Vendors', path: `${acctBase}/vendors` },
-    { name: 'Receivables', path: `${acctBase}/receivables` },
-    { name: 'Payables', path: `${acctBase}/payables` },
-    { name: 'Cash Book', path: `${acctBase}/cash-book` },
-    { name: 'Bank Book', path: `${acctBase}/bank-book` },
-    { name: 'Bank Accounts / Transfers', path: `${acctBase}/banks` },
-    { name: 'Bank Recon', path: `${acctBase}/reconciliation` },
-    { name: 'Invoices', path: `${acctBase}/invoices` },
-    { name: 'Trial Balance', path: `${acctBase}/trial-balance` },
-    { name: 'Profit & Loss', path: `${acctBase}/profit-loss` },
-    { name: 'Balance Sheet', path: `${acctBase}/balance-sheet` },
-    { name: 'Cash Flow', path: `${acctBase}/cash-flow` },
-    { name: 'Opening Balances', path: `${acctBase}/opening-balances` },
-    { name: 'Fiscal Periods', path: `${acctBase}/periods` },
-    { name: 'Health Check', path: `${acctBase}/health` },
+    { name: 'Journal Entries', path: journalPath },
+    { name: 'Reports', path: `${acctBase}/reports` },
   ];
+  const accountingAdminLink = { name: 'Setup (Admin)', path: `${acctBase}/setup` };
 
   const mainNavItems = isGuestHouse ? guestHouseNavItems : hallNavItems;
 
@@ -203,7 +190,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
               </button>
               {acctOpen && (
                 <ul id="sidebar-accounting-menu" className="app-sidebar__submenu" role="list">
-                  {accountingLinks.map((link) => (
+                  {[...accountingLinks, ...(isAdmin ? [accountingAdminLink] : [])].map((link) => (
                     <li key={link.path} className="app-sidebar__submenu-item">
                       <NavLink
                         to={link.path}

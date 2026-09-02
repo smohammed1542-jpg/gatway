@@ -3,7 +3,7 @@ from django.contrib import admin
 from core.admin_mixins import TenantScopedAdminMixin
 from .models import (
     Account, AuditLog, BankAccount, BankReconciliation, BankTransfer,
-    FiscalPeriod, Invoice, JournalEntry, JournalLine, Tax,
+    CostCenter, FiscalPeriod, Invoice, JournalEntry, JournalLine, Tax,
     Vendor, VendorBill, VendorPayment,
 )
 
@@ -92,3 +92,10 @@ class BankReconciliationAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
 class InvoiceAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
     list_display = ('invoice_no', 'customer', 'invoice_date', 'total', 'status', 'tenant')
     list_filter = ('status',)
+
+
+@admin.register(CostCenter)
+class CostCenterAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
+    list_display = ('code', 'name', 'kind', 'is_active', 'tenant')
+    list_filter = ('kind', 'is_active')
+    search_fields = ('code', 'name')

@@ -12,6 +12,7 @@ from rest_framework.test import APIClient
 from accounting import reports
 from accounting.chart import BANK, CASH, REVENUE_STAYS
 from accounting.models import (
+    Account,
     BankTransfer,
     JournalEntry,
     Vendor,
@@ -517,6 +518,7 @@ class AccountingAPISmokeTests(TestCase):
             '/api/accounting/bank_transfers/',
             '/api/accounting/invoices/',
             '/api/accounting/fiscal_periods/',
+            '/api/accounting/cost_centers/',
         ]:
             r = self.client.get(path)
             self.assertEqual(r.status_code, 200, path)
@@ -526,3 +528,58 @@ class AccountingAPISmokeTests(TestCase):
         staff_client.force_authenticate(user=self.staff)
         r = staff_client.post('/api/accounting/opening_balances/', {'lines': []}, format='json')
         self.assertIn(r.status_code, (400, 403))
+
+
+class ERPAlignmentTests(TestCase):
+    """Regression tests for ERP alignment (sequences, inventory GL, tenant integrity)."""
+
+    def setUp(self):
+        self.tenant = Tenant.objects.create(
+            name='ERP', subdomain='erpalign', tax_rate=Decimal('0'), overtime_rate_per_hour=0
+        )
+        self.admin = User.objects.create_user(
+            username='erp-admin', email='erp@ex.com', password='pass12345',
+            tenant=self.tenant, role='ADMIN',
+        )
+        AccountingService.ensure_chart(self.tenant)
+
+    def test_document_sequence_increments(self):
+        from accounting.sequences import next_document_no
+        n1 = next_document_no(self.tenant, 'JE')
+        n2 = next_document_no(self.tenant, 'JE')
+        self.assertNotEqual(n1, n2)
+        self.assertTrue(n1.startswith('JE-'))
+
+    def test_inventory_movement_posts_gl(self):
+        from inventory.models import InventoryItem
+        from inventory.services import InventoryService
+
+        item = InventoryItem.objects.create(
+            tenant=self.tenant, name='Chairs', quantity=0, unit='pcs', price_per_unit=Decimal('100'),
+        )
+        txn = InventoryService.move(item, 5, txn_type='IN', user=self.admin, tenant=self.tenant)
+        entry = JournalEntry.objects.filter(
+            tenant=self.tenant, source_type='inventory', source_id=txn.pk, status='POSTED',
+        ).first()
+        self.assertIsNotNone(entry)
+        self.assertTrue(entry.lines.filter(account__code='1200', debit=Decimal('500.00')).exists())
+
+    def test_expense_uses_account_fk_not_description(self):
+        from finance.models import Expense
+        acct = Account.objects.filter(tenant=self.tenant, code='5020').first()
+        exp = Expense.objects.create(
+            tenant=self.tenant, title='Power', category='UTILITIES',
+            amount=Decimal('50'), expense_date=date.today(),
+            account=acct, created_by=self.admin,
+        )
+        code = AccountingService.resolve_expense_account_code(exp)
+        self.assertEqual(code, '5020')
+
+    def test_cost_centers_api(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin)
+        r = client.post('/api/accounting/cost_centers/', {
+            'code': 'CC01', 'name': 'Hall Ops', 'kind': 'COST',
+        }, format='json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.data['code'], 'CC01')

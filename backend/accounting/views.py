@@ -19,6 +19,7 @@ from .models import (
     BankAccount,
     BankReconciliation,
     BankTransfer,
+    CostCenter,
     FiscalPeriod,
     Invoice,
     JournalEntry,
@@ -29,12 +30,14 @@ from .models import (
     VendorPayment,
 )
 from . import reports
+from . import sequences
 from .serializers import (
     AccountSerializer,
     AuditLogSerializer,
     BankAccountSerializer,
     BankReconciliationSerializer,
     BankTransferSerializer,
+    CostCenterSerializer,
     FiscalPeriodSerializer,
     InvoiceSerializer,
     JournalEntryCreateSerializer,
@@ -133,6 +136,19 @@ class TaxViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
     queryset = Tax.objects.all().order_by('name')
     serializer_class = TaxSerializer
     permission_classes = [IsAuthenticated, IsAdminOrManagerOrReadOnly, IsTenantOwner]
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=self.request.user.tenant)
+
+
+class CostCenterViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
+    queryset = CostCenter.objects.all().order_by('code')
+    serializer_class = CostCenterSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrManagerOrReadOnly, IsTenantOwner]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['kind', 'is_active']
+    search_fields = ['code', 'name']
     http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def perform_create(self, serializer):
@@ -376,13 +392,14 @@ class VendorBillViewSet(TenantQuerysetMixin, viewsets.ModelViewSet):
         ser = self.get_serializer(data=request.data)
         ser.is_valid(raise_exception=True)
         import uuid
+        from accounting import sequences as seq_mod
         bill = ser.save(
             tenant=request.user.tenant,
             created_by=request.user,
             status='POSTED',
             bill_no=f'TMP-{uuid.uuid4().hex[:12]}',
         )
-        bill.bill_no = f'VB-{bill.pk:06d}'
+        bill.bill_no = seq_mod.next_document_no(request.user.tenant, 'VB')
         bill.save(update_fields=['bill_no'])
         try:
             AccountingService.post_vendor_bill(bill, user=request.user)
@@ -606,6 +623,7 @@ class ReportAPIView(APIView):
                 customer_id=request.query_params.get('customer'),
                 vendor_id=request.query_params.get('vendor'),
                 booking_id=request.query_params.get('booking'),
+                cost_center_id=request.query_params.get('cost_center'),
             ),
             'cash_book': lambda: reports.cash_book(
                 tenant, start=start, end=end,

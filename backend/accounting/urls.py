@@ -7,6 +7,7 @@ from .views import (
     BankAccountViewSet,
     BankReconciliationViewSet,
     BankTransferViewSet,
+    CostCenterViewSet,
     FiscalPeriodViewSet,
     InvoiceViewSet,
     JournalEntryViewSet,
@@ -21,6 +22,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet, basename='account')
 router.register(r'taxes', TaxViewSet, basename='tax')
+router.register(r'cost_centers', CostCenterViewSet, basename='cost-center')
 router.register(r'fiscal_periods', FiscalPeriodViewSet, basename='fiscal-period')
 router.register(r'journal_entries', JournalEntryViewSet, basename='journal-entry')
 router.register(r'audit_logs', AuditLogViewSet, basename='audit-log')

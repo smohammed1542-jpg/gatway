@@ -1,15 +1,17 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   format, parseISO, differenceInCalendarDays, isSameDay, addDays,
 } from 'date-fns';
 import {
   Plus, Eye, Pencil, Printer, CalendarCheck,
-  BedDouble, Wallet, CreditCard, CalendarDays, User, Phone, XCircle,
+  BedDouble, Wallet, CreditCard, CalendarDays, User, XCircle,
   ChevronLeft, ChevronRight, Archive,
 } from 'lucide-react';
 import CancelStayModal from '../../components/guesthouse/CancelStayModal';
 import SearchInput from '../../components/SearchInput';
+import DataTable from '../../components/ui/DataTable';
+import ErpPageShell from '../../components/ui/ErpPageShell';
 import { listStays } from '../../api/guesthouse';
 import toast from 'react-hot-toast';
 import AppLoader from '../../components/AppLoader';
@@ -28,6 +30,20 @@ const FILTER_TABS = [
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'pending', label: 'Pending' },
   { id: 'balance_due', label: 'Due' },
+];
+
+const STAY_COLUMNS = [
+  { key: 'booking_ref', label: 'Ref', sortable: true },
+  { key: 'customer_name', label: 'Customer', sortable: true },
+  { key: 'room_number', label: 'Room', sortable: true },
+  { key: 'check_in', label: 'Check-in', sortable: true },
+  { key: 'check_out', label: 'Check-out', sortable: true },
+  { key: 'nights', label: 'Nights', sortable: true },
+  { key: 'status', label: 'Status', sortable: true },
+  { key: 'payment_status', label: 'Payment', sortable: true },
+  { key: 'total_amount', label: 'Total', sortable: true },
+  { key: 'advance_paid', label: 'Paid', sortable: true },
+  { key: 'due', label: 'Due', sortable: true },
 ];
 
 const formatStayDate = (d) => {
@@ -62,125 +78,9 @@ const formatDayHeading = (dateStr, todayStr) => {
   }
 };
 
-function StayCard({ stay, today, canManage, canCancelStay, onOpen, onPay, onPrint, onEdit, onCancel, showDates }) {
-  const due = stay.status === 'CANCELLED'
-    ? 0
-    : Math.max(0, Number(stay.total_amount) - Number(stay.advance_paid));
-  const nights = stayNights(stay.check_in, stay.check_out);
-  const isUpcoming = stay.check_in >= today && !['CANCELLED', 'CHECKED_OUT'].includes(stay.status);
-  const paidPct = Number(stay.total_amount) > 0
-    ? Math.min(100, Math.round((Number(stay.advance_paid) / Number(stay.total_amount)) * 100))
-    : 0;
-
-  return (
-    <article className="stay-card" onClick={onOpen}>
-      <div className="stay-card__top">
-        <div className="stay-card__top-left">
-          <p className="stay-card__ref">{stay.booking_ref}</p>
-          <h3 className="stay-card__name">{stay.customer_name || 'Guest'}</h3>
-          {stay.customer_phone && (
-            <p className="stay-card__phone"><Phone size={11} /> {stay.customer_phone}</p>
-          )}
-          {showDates && (
-            <p className="stay-card__search-dates">
-              {formatStayDate(stay.check_in)} → {formatStayDate(stay.check_out)}
-            </p>
-          )}
-        </div>
-        <div className="stay-card__badges">
-          <StatusBadge status={stay.status} />
-          {isUpcoming && <span className="stay-card__future">Future</span>}
-        </div>
-      </div>
-
-      <div className="stay-card__body">
-        <div className="stay-card__info">
-          <div className="stay-card__cell">
-            <p className="stay-card__cell-label">Room</p>
-            <p className="stay-card__cell-val stay-card__cell-val--room">{stay.room_number}</p>
-          </div>
-          <div className="stay-card__cell">
-            <p className="stay-card__cell-label">Duration</p>
-            <p className="stay-card__cell-val">{nights} night{nights !== 1 ? 's' : ''}</p>
-            {!showDates && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-                {formatStayDate(stay.check_in)} → {formatStayDate(stay.check_out)}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="stay-card__pay">
-          <div className="stay-card__pay-head">
-            <span>Payment</span>
-            <StatusBadge status={stay.payment_status} />
-          </div>
-          <div className="stay-card__bar">
-            <div
-              className="stay-card__bar-fill"
-              style={{
-                width: `${paidPct}%`,
-                background: paidPct >= 100 ? '#22c55e' : 'var(--primary)',
-              }}
-            />
-          </div>
-          <div className="stay-card__amounts">
-            <div>
-              <p className="stay-card__amt-l">Total</p>
-              <p className="stay-card__amt-v">{formatRs(stay.total_amount)}</p>
-            </div>
-            <div>
-              <p className="stay-card__amt-l">Paid</p>
-              <p className="stay-card__amt-v" style={{ color: '#166534' }}>{formatRs(stay.advance_paid)}</p>
-            </div>
-            <div>
-              <p className="stay-card__amt-l">Due</p>
-              <p className="stay-card__amt-v" style={{ color: hasCollectDue(due) ? '#b91c1c' : 'var(--text-muted)' }}>
-                {formatCollectDuePKR(due)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {canCancelStay && onCancel && canCancelGhStay(stay) && (
-          <button
-            type="button"
-            className="stay-card__cancel"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel();
-            }}
-          >
-            <XCircle size={14} /> Cancel stay
-          </button>
-        )}
-      </div>
-
-      <div className="stay-card__foot" onClick={(e) => e.stopPropagation()}>
-        {hasCollectDue(due) && onPay && (
-          <button type="button" className="btn-primary" onClick={onPay}>
-            <CreditCard size={14} /> Collect
-          </button>
-        )}
-        <button type="button" className="btn-secondary" onClick={onOpen} title="View">
-          <Eye size={15} />
-        </button>
-        <button type="button" className="btn-secondary" onClick={onPrint} title="Receipt">
-          <Printer size={15} />
-        </button>
-        {canManage && stay.status !== 'CANCELLED' && stay.status !== 'CHECKED_OUT' && (
-          <button type="button" className="btn-secondary" onClick={onEdit} title="Edit">
-            <Pencil size={15} />
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
 const GuestHouseStays = () => {
   const navigate = useNavigate();
-  const { canOperate, canManage, canAccessPayments, canCancelStay } = usePermissions();
+  const { canOperate, canAccessPayments, canCancelStay } = usePermissions();
   const [stays, setStays] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -204,11 +104,11 @@ const GuestHouseStays = () => {
 
   useEffect(() => { load(); }, []);
 
-  const getDue = (s) => (
+  const getDue = useCallback((s) => (
     s.status === 'CANCELLED'
       ? 0
       : Math.max(0, Number(s.total_amount) - Number(s.advance_paid))
-  );
+  ), []);
 
   const matchesFilter = (s, filterId) => {
     const due = getDue(s);
@@ -238,7 +138,7 @@ const GuestHouseStays = () => {
       checkedIn: checkedIn.length,
       totalDue,
     };
-  }, [scopeStays, today]);
+  }, [scopeStays, today, getDue]);
 
   const tabCounts = useMemo(() => {
     const counts = {};
@@ -260,12 +160,17 @@ const GuestHouseStays = () => {
         );
         return matchesSearch && matchesFilter(s, activeFilter);
       })
+      .map((s) => ({
+        ...s,
+        due: getDue(s),
+        nights: stayNights(s.check_in, s.check_out),
+      }))
       .sort((a, b) => {
         const roomCmp = String(a.room_number || '').localeCompare(String(b.room_number || ''), undefined, { numeric: true });
         if (roomCmp !== 0) return roomCmp;
         return String(a.booking_ref || '').localeCompare(String(b.booking_ref || ''));
       });
-  }, [scopeStays, searchQuery, activeFilter, today]);
+  }, [scopeStays, searchQuery, activeFilter, today, getDue]);
 
   const shiftDate = (days) => {
     try {
@@ -289,18 +194,75 @@ const GuestHouseStays = () => {
     navigate('/gh/book');
   };
 
+  const openStay = (stay) => navigate(`/gh/stays/${stay.id}`);
+
+  const rowActions = (stay) => {
+    const due = getDue(stay);
+    const items = [
+      { label: 'View', icon: <Eye size={14} />, onClick: () => openStay(stay) },
+      { label: 'Print', icon: <Printer size={14} />, onClick: () => navigate(
+        stay.status === 'CANCELLED'
+          ? `/gh/print/stay/${stay.id}?doc=cancellation`
+          : `/gh/print/stay/${stay.id}?doc=advance`,
+      ) },
+    ];
+    if (hasCollectDue(due) && canAccessPayments) {
+      items.unshift({
+        label: 'Collect payment',
+        icon: <CreditCard size={14} />,
+        onClick: () => navigate(`/gh/payments/new?stay=${stay.id}`),
+      });
+    }
+    if (canOperate && stay.status !== 'CANCELLED' && stay.status !== 'CHECKED_OUT') {
+      items.push({
+        label: 'Edit',
+        icon: <Pencil size={14} />,
+        onClick: () => navigate(`/gh/stays/${stay.id}/edit`),
+      });
+    }
+    if (canCancelStay && canCancelGhStay(stay)) {
+      items.push({
+        label: 'Cancel stay',
+        icon: <XCircle size={14} />,
+        danger: true,
+        onClick: () => setCancelTarget(stay),
+      });
+    }
+    return items;
+  };
+
   const dayHeading = formatDayHeading(selectedDate, today);
   const isSelectedToday = selectedDate === today;
 
+  const renderCell = (row, key) => {
+    if (key === 'check_in' || key === 'check_out') return formatStayDate(row[key]);
+    if (key === 'status' || key === 'payment_status') return <StatusBadge status={row[key]} />;
+    if (key === 'total_amount' || key === 'advance_paid') return formatRs(row[key]);
+    if (key === 'due') {
+      return (
+        <span style={{ color: hasCollectDue(row.due) ? '#b91c1c' : 'var(--text-muted)', fontWeight: 700 }}>
+          {formatCollectDuePKR(row.due)}
+        </span>
+      );
+    }
+    return row[key] ?? '—';
+  };
+
+  const getSortValue = (row, key) => {
+    if (key === 'due' || key === 'total_amount' || key === 'advance_paid' || key === 'nights') {
+      return Number(row[key]) || 0;
+    }
+    if (key === 'check_in' || key === 'check_out') {
+      return row[key] || '';
+    }
+    return row[key];
+  };
+
   return (
-    <div className="animate-fade-in" style={{ paddingBottom: '40px', maxWidth: '100%', overflowX: 'hidden' }}>
-      <div className="page-header">
-        <div style={{ minWidth: 0 }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
-            Daily view - today&apos;s in-house and check-in stays. Search or open All Records for other dates.
-          </p>
-        </div>
-        <div className="page-header__actions">
+    <ErpPageShell
+      description="Daily reservations workspace. Search all dates or open All Records for full history."
+      actions={(
+        <>
           <button type="button" className="btn-secondary" onClick={() => navigate('/gh/settings?tab=records')}>
             <Archive size={18} /> All Records
           </button>
@@ -312,96 +274,95 @@ const GuestHouseStays = () => {
               <Plus size={18} /> Reservation
             </button>
           )}
-        </div>
-      </div>
-
-      <section className="dash-kpi-grid" style={{ marginBottom: '24px' }}>
-        <StatCard label={isSearching ? 'Matches' : 'On this day'} value={metrics.total} icon={BedDouble} variant="primary" />
-        <StatCard label="Upcoming" value={metrics.upcoming} icon={CalendarCheck} variant="info" to="/gh/calendar" />
-        <StatCard label="Checked in" value={metrics.checkedIn} icon={User} variant="success" />
-        <StatCard
-          label="Outstanding due"
-          value={metrics.totalDue}
-          icon={Wallet}
-          variant={metrics.totalDue > 0 ? 'danger' : 'info'}
-          isCurrency
-          to={canAccessPayments ? '/gh/payments' : undefined}
-        />
-      </section>
-
-      {!isSearching && (
-        <div className="stays-date-bar">
-          <button
-            type="button"
-            className="stays-date-bar__nav"
-            onClick={() => shiftDate(-1)}
-            aria-label="Previous day"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="stays-date-bar__center">
-            <input
-              type="date"
-              className="stays-date-bar__input"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              aria-label="Select day"
-            />
-            <p className="stays-date-bar__label">{dayHeading}</p>
-          </div>
-          <button
-            type="button"
-            className="stays-date-bar__nav"
-            onClick={() => shiftDate(1)}
-            aria-label="Next day"
-          >
-            <ChevronRight size={18} />
-          </button>
-          {!isSelectedToday && (
-            <button type="button" className="btn-secondary stays-date-bar__today" onClick={() => setSelectedDate(today)}>
-              Today
-            </button>
-          )}
-        </div>
+        </>
       )}
-
-      <div className="search-filter-bar" style={{ marginBottom: '20px' }}>
-        <div className="search-filter-bar__search">
-          <SearchInput
-            variant="inset"
-            placeholder="Search all dates - ref, guest, room, phone…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+      kpis={(
+        <>
+          <StatCard label={isSearching ? 'Matches' : 'On this day'} value={metrics.total} icon={BedDouble} variant="primary" />
+          <StatCard label="Upcoming" value={metrics.upcoming} icon={CalendarCheck} variant="info" to="/gh/calendar" />
+          <StatCard label="Checked in" value={metrics.checkedIn} icon={User} variant="success" />
+          <StatCard
+            label="Outstanding due"
+            value={metrics.totalDue}
+            icon={Wallet}
+            variant={metrics.totalDue > 0 ? 'danger' : 'info'}
+            isCurrency
+            to={canAccessPayments ? '/gh/payments' : undefined}
           />
-        </div>
-        <div className="stays-filters">
-          {FILTER_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveFilter(tab.id)}
-              className={`stays-filter-pill ${activeFilter === tab.id ? 'stays-filter-pill--active' : ''}`}
-            >
-              {tab.label}
-              <span className="stays-filter-count">{tabCounts[tab.id] ?? 0}</span>
-            </button>
-          ))}
-        </div>
-        {(searchQuery || activeFilter !== 'all' || selectedDate !== today) && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={resetView}
-            style={{ padding: '10px 16px', fontSize: '12px', fontWeight: '700', flexShrink: 0 }}
-          >
-            Reset
-          </button>
-        )}
-      </div>
-
+        </>
+      )}
+      toolbar={(
+        <>
+          {!isSearching && (
+            <div className="stays-date-bar" style={{ marginBottom: 0, border: 'none', padding: 0 }}>
+              <button type="button" className="stays-date-bar__nav" onClick={() => shiftDate(-1)} aria-label="Previous day">
+                <ChevronLeft size={18} />
+              </button>
+              <div className="stays-date-bar__center">
+                <input
+                  type="date"
+                  className="stays-date-bar__input"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  aria-label="Select day"
+                />
+                <p className="stays-date-bar__label">{dayHeading}</p>
+              </div>
+              <button type="button" className="stays-date-bar__nav" onClick={() => shiftDate(1)} aria-label="Next day">
+                <ChevronRight size={18} />
+              </button>
+              {!isSelectedToday && (
+                <button type="button" className="btn-secondary stays-date-bar__today" onClick={() => setSelectedDate(today)}>
+                  Today
+                </button>
+              )}
+            </div>
+          )}
+          <div className="search-filter-bar" style={{ margin: 0, flex: 1 }}>
+            <div className="search-filter-bar__search">
+              <SearchInput
+                variant="inset"
+                placeholder="Search ref, guest, room, phone…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="erp-filter-pills">
+              {FILTER_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveFilter(tab.id)}
+                  className={`erp-filter-pill${activeFilter === tab.id ? ' erp-filter-pill--active' : ''}`}
+                >
+                  {tab.label}
+                  <span className="erp-filter-pill__count">{tabCounts[tab.id] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+            {(searchQuery || activeFilter !== 'all' || selectedDate !== today) && (
+              <button type="button" className="btn-secondary" onClick={resetView} style={{ flexShrink: 0 }}>
+                Reset
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      summary={!isSearching && filtered.length > 0 && (
+        <>
+          <h4>Day summary</h4>
+          <p style={{ margin: '0 0 6px', fontWeight: 700 }}>{dayHeading}</p>
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+            {filtered.length} reservation{filtered.length !== 1 ? 's' : ''}
+            {' · '}
+            Due {formatRs(metrics.totalDue)}
+          </p>
+        </>
+      )}
+    >
       {isSearching && (
-        <p className="stays-search-banner">
-          Searching all dates - clear search to return to daily view ({dayHeading}).
+        <p className="stays-search-banner" style={{ marginBottom: 8 }}>
+          Searching all dates — clear search to return to daily view ({dayHeading}).
         </p>
       )}
 
@@ -410,15 +371,11 @@ const GuestHouseStays = () => {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={BedDouble}
-          title={
-            isSearching
-              ? 'No stays match your search'
-              : `No stays for ${dayHeading}`
-          }
+          title={isSearching ? 'No stays match your search' : `No stays for ${dayHeading}`}
           description={
             isSearching
               ? 'Try a different name, room, or booking ref.'
-              : 'No guests are booked for this day. Pick another date, search, or open All Records for full history.'
+              : 'No guests are booked for this day. Pick another date, search, or open All Records.'
           }
           action={
             !isSearching ? (
@@ -436,45 +393,20 @@ const GuestHouseStays = () => {
           }
         />
       ) : (
-        <>
-          {!isSearching && (
-            <header className={`stays-day-group__head${isSelectedToday ? ' stays-day-group__head--today' : ''}`} style={{ marginBottom: '16px' }}>
-              <div>
-                <h3 className="stays-day-group__title">{dayHeading}</h3>
-                <p className="stays-day-group__sub">
-                  Daily stays · {filtered.length} reservation{filtered.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <span className="stays-day-group__badge">{filtered.length}</span>
-            </header>
-          )}
-          {isSearching && (
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px', fontWeight: '600' }}>
-              {filtered.length} result{filtered.length !== 1 ? 's' : ''} across all dates
-            </p>
-          )}
-          <div className="stays-grid">
-            {filtered.map((s) => (
-              <StayCard
-                key={s.id}
-                stay={s}
-                today={today}
-                canManage={canOperate}
-                canCancelStay={canCancelStay}
-                showDates={isSearching}
-                onOpen={() => navigate(`/gh/stays/${s.id}`)}
-                onPay={canAccessPayments ? () => navigate(`/gh/payments/new?stay=${s.id}`) : undefined}
-                onPrint={() => navigate(
-                  s.status === 'CANCELLED'
-                    ? `/gh/print/stay/${s.id}?doc=cancellation`
-                    : `/gh/print/stay/${s.id}?doc=advance`,
-                )}
-                onEdit={() => navigate(`/gh/stays/${s.id}/edit`)}
-                onCancel={() => setCancelTarget(s)}
-              />
-            ))}
-          </div>
-        </>
+        <div className="erp-card erp-card--flat">
+          <DataTable
+            variant="erp"
+            sortable
+            showColumnChooser
+            pageSize={25}
+            columns={STAY_COLUMNS}
+            data={filtered}
+            renderCell={renderCell}
+            getSortValue={getSortValue}
+            rowActions={rowActions}
+            onRowClick={openStay}
+          />
+        </div>
       )}
 
       <CancelStayModal
@@ -483,7 +415,7 @@ const GuestHouseStays = () => {
         onClose={() => setCancelTarget(null)}
         onCancelled={load}
       />
-    </div>
+    </ErpPageShell>
   );
 };
 

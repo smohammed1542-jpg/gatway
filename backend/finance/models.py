@@ -20,7 +20,7 @@ class Payment(models.Model):
         ('VOIDED', 'Voided'),
     )
 
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='payments', null=True, blank=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='payments')
     booking = models.ForeignKey(Booking, on_delete=models.PROTECT, related_name='payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='CASH')
@@ -43,14 +43,27 @@ class Payment(models.Model):
         blank=True,
         related_name='recorded_payments',
     )
-    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='payments_updated',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'payments'
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['tenant', 'payment_date']),
+            models.Index(fields=['booking']),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['tenant', 'receipt_no'],
-                condition=~models.Q(receipt_no='') & models.Q(receipt_no__isnull=False) & models.Q(tenant__isnull=False),
+                condition=~models.Q(receipt_no='') & models.Q(receipt_no__isnull=False),
                 name='uniq_payment_tenant_receipt_no',
             ),
         ]
@@ -92,7 +105,7 @@ class Expense(models.Model):
         ('AP', 'Accounts Payable'),
     )
 
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='expenses', null=True, blank=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='expenses')
     title = models.CharField(max_length=255)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='OTHER')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -131,6 +144,14 @@ class Expense(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'expenses'
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['tenant', 'expense_date']),
+            models.Index(fields=['account']),
+        ]
 
     def __str__(self):
         return self.title

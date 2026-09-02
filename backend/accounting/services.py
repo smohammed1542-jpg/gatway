@@ -13,7 +13,10 @@ from .chart import (
     CUSTOMER_ADVANCES,
     DEFAULT_ACCOUNTS,
     DISCOUNT_ALLOWED,
+    EXPENSE_INVENTORY,
     EXPENSE_OPS,
+    EXPENSE_PURCHASES,
+    INVENTORY,
     OPENING_EQUITY,
     REVENUE_CATERING,
     REVENUE_DECORATION,
@@ -33,6 +36,7 @@ from .models import (
     JournalLine,
     Tax,
 )
+from . import sequences
 
 
 def _dec(value):
@@ -45,6 +49,15 @@ def _line_tuple(code, debit, credit, desc, **refs):
 
 
 class AccountingService:
+    @staticmethod
+    def _resolve_post_status(tenant, status='POSTED'):
+        """When tenant.auto_post_journals is False, operational posts become DRAFT."""
+        if status != 'POSTED' or not tenant:
+            return status
+        if getattr(tenant, 'auto_post_journals', True):
+            return 'POSTED'
+        return 'DRAFT'
+
     @staticmethod
     def ensure_chart(tenant):
         if not tenant:
@@ -240,6 +253,7 @@ class AccountingService:
             return None
         AccountingService.ensure_chart(tenant)
         entry_date = entry_date or timezone.localdate()
+        status = AccountingService._resolve_post_status(tenant, status)
         if status == 'POSTED':
             AccountingService.assert_period_open(tenant, entry_date)
 
@@ -267,7 +281,7 @@ class AccountingService:
                     status=status,
                     created_by=user if getattr(user, 'is_authenticated', False) else None,
                 )
-                entry.entry_no = f'JE-{entry.pk:06d}'
+                entry.entry_no = sequences.next_document_no(tenant, 'JE')
                 entry.save(update_fields=['entry_no'])
 
                 JournalLine.objects.bulk_create([
@@ -513,6 +527,17 @@ class AccountingService:
             'amount_paid': _dec(booking.advance_paid),
         }
         if inv:
+            financial_keys = ('subtotal', 'discount', 'tax', 'total')
+            if inv.status not in ('DRAFT', 'CANCELLED'):
+                posted = AccountingService.find_posted(booking.tenant, 'booking', booking.pk)
+                if posted and not AccountingService.is_reversed(posted):
+                    posted_ar = AccountingService._entry_ar_total(posted)
+                    if posted_ar != payload['total']:
+                        # Financial amounts frozen on issued invoice — journal reversal must run first.
+                        inv.amount_paid = payload['amount_paid']
+                        inv.save(update_fields=['amount_paid', 'updated_at'])
+                        AccountingService._refresh_invoice_status(inv)
+                        return inv
             for k, v in payload.items():
                 setattr(inv, k, v)
             inv.save(update_fields=list(payload.keys()) + ['updated_at'])
@@ -584,7 +609,7 @@ class AccountingService:
             created_by=user or booking.created_by,
             invoice_no=f'TMP-{booking.pk}-{timezone.now().timestamp()}',
         )
-        inv.invoice_no = f'INV-{inv.pk:06d}'
+        inv.invoice_no = sequences.next_document_no(booking.tenant, 'INV')
         inv.save(update_fields=['invoice_no'])
         AccountingService._refresh_invoice_status(inv)
         return inv
@@ -679,7 +704,7 @@ class AccountingService:
             created_by=user or stay.created_by,
             invoice_no=f'TMP-STAY-{stay.pk}-{timezone.now().timestamp()}',
         )
-        inv.invoice_no = f'INV-{inv.pk:06d}'
+        inv.invoice_no = sequences.next_document_no(stay.tenant, 'INV')
         inv.save(update_fields=['invoice_no'])
         AccountingService._refresh_invoice_status(inv)
         return inv
@@ -829,16 +854,6 @@ class AccountingService:
     def resolve_expense_account_code(expense):
         if getattr(expense, 'account_id', None) and expense.account:
             return expense.account.code
-        # Parse frontend account title tag
-        desc = getattr(expense, 'description', '') or ''
-        if '[Account Title:' in desc:
-            from .chart import ACCOUNT_TITLE_TO_GL
-            import re
-            m = re.search(r'\[Account Title:\s*(.*?)\]', desc)
-            if m:
-                code = ACCOUNT_TITLE_TO_GL.get(m.group(1).strip())
-                if code:
-                    return code
         return CATEGORY_TO_EXPENSE_ACCOUNT.get(
             getattr(expense, 'category', 'OTHER'), EXPENSE_OPS
         )
@@ -914,7 +929,7 @@ class AccountingService:
             ],
         )
         if not bill.bill_no:
-            bill.bill_no = f'VB-{bill.pk:06d}'
+            bill.bill_no = sequences.next_document_no(bill.tenant, 'VB')
             bill.save(update_fields=['bill_no'])
         return entry
 
@@ -968,7 +983,7 @@ class AccountingService:
                 bill.status = 'PARTIAL'
             bill.save(update_fields=['amount_paid', 'status', 'updated_at'])
         if not payment.payment_no:
-            payment.payment_no = f'VP-{payment.pk:06d}'
+            payment.payment_no = sequences.next_document_no(payment.tenant, 'VP')
             payment.save(update_fields=['payment_no'])
         return entry
 
@@ -1013,6 +1028,65 @@ class AccountingService:
                 ),
             ],
         )
+
+    @staticmethod
+    @transaction.atomic
+    def post_inventory_movement(txn, user=None):
+        """
+        Post GL for an inventory transaction (IN/OUT/OPENING/ADJUST).
+        Idempotent via source_type='inventory' + source_id=txn.pk.
+        """
+        if not txn or not getattr(txn, 'tenant_id', None):
+            return None
+        qty = int(getattr(txn, 'quantity', 0) or 0)
+        if qty == 0:
+            return None
+        item = txn.item
+        unit_cost = _dec(getattr(item, 'price_per_unit', 0) or 0)
+        amount = _dec(abs(qty) * unit_cost)
+        if amount <= 0:
+            return None
+
+        txn_type = getattr(txn, 'txn_type', 'ADJUST')
+        existing = AccountingService.find_posted(txn.tenant, 'inventory', txn.pk, lock=True)
+        if existing and not AccountingService.is_reversed(existing):
+            return existing
+
+        memo = f'Inventory {txn_type}: {getattr(item, "name", item.pk)}'
+        refs = {'booking_id': getattr(txn, 'booking_id', None)}
+
+        if qty > 0 or txn_type in ('IN', 'OPENING'):
+            credit_code = OPENING_EQUITY if txn_type == 'OPENING' else EXPENSE_PURCHASES
+            credit_desc = 'Opening inventory' if txn_type == 'OPENING' else 'Inventory purchase/receipt'
+            lines = [
+                _line_tuple(INVENTORY, amount, 0, memo, **refs),
+                _line_tuple(credit_code, 0, amount, credit_desc, **refs),
+            ]
+        else:
+            lines = [
+                _line_tuple(EXPENSE_INVENTORY, amount, 0, 'Cost of inventory issued', **refs),
+                _line_tuple(INVENTORY, 0, amount, memo, **refs),
+            ]
+
+        entry = AccountingService.post_entry(
+            txn.tenant,
+            entry_date=timezone.localdate(),
+            memo=memo,
+            source_type='inventory',
+            source_id=txn.pk,
+            lines=lines,
+            user=user or getattr(txn, 'created_by', None),
+        )
+        if entry:
+            AuditLog.record(
+                txn.tenant,
+                action='POST',
+                entity_type='inventory_transaction',
+                entity_id=txn.pk,
+                message=entry.entry_no,
+                actor=user,
+            )
+        return entry
 
     @staticmethod
     def post_opening_balances(tenant, lines, *, entry_date=None, user=None, memo='Opening balances'):

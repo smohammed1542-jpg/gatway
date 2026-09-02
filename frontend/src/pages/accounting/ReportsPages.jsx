@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
   getTrialBalance, getProfitAndLoss, getBalanceSheet, getCashFlow,
   getGeneralLedger, getCashBook, getBankBook, getIntegrityCheck,
-  listAccounts,
+  listAccounts, listCostCenters,
 } from '../../api/accounting';
 import DataTable from '../../components/ui/DataTable';
 import AppLoader from '../../components/AppLoader';
@@ -201,7 +201,9 @@ export const CashFlowPage = () => {
 export const GeneralLedgerPage = () => {
   usePageTitle('General Ledger');
   const [accounts, setAccounts] = useState([]);
+  const [costCenters, setCostCenters] = useState([]);
   const [account, setAccount] = useState('');
+  const [costCenter, setCostCenter] = useState('');
   const [data, setData] = useState(null);
   const [start, setStart] = useState(monthStartISO());
   const [end, setEnd] = useState(todayISO());
@@ -209,11 +211,17 @@ export const GeneralLedgerPage = () => {
 
   useEffect(() => {
     listAccounts().then((d) => setAccounts(rowsOf(d)));
+    listCostCenters().then((d) => setCostCenters(rowsOf(d))).catch(() => {});
   }, []);
 
   const load = () => {
     setLoading(true);
-    getGeneralLedger({ account: account || undefined, start, end })
+    getGeneralLedger({
+      account: account || undefined,
+      cost_center_id: costCenter || undefined,
+      start,
+      end,
+    })
       .then(setData)
       .catch(() => toast.error('Failed'))
       .finally(() => setLoading(false));
@@ -222,9 +230,13 @@ export const GeneralLedgerPage = () => {
   return (
     <ReportShell title={`Opening ${formatRs(data?.opening_balance)} · Closing ${formatRs(data?.closing_balance)}`} onPrint={printPage}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select value={account} onChange={(e) => setAccount(e.target.value)}>
+        <select value={account} onChange={(e) => setAccount(e.target.value)} aria-label="Account filter">
           <option value="">All accounts</option>
           {accounts.map((a) => <option key={a.id} value={a.code}>{a.code} {a.name}</option>)}
+        </select>
+        <select value={costCenter} onChange={(e) => setCostCenter(e.target.value)} aria-label="Cost center filter">
+          <option value="">All cost centers</option>
+          {costCenters.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
         </select>
         <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
         <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />

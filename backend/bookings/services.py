@@ -43,4 +43,16 @@ class SalesService:
                     notes='Refund on booking cancellation',
                     user=user,
                 )
+        try:
+            from accounting.models import AuditLog
+            AuditLog.record(
+                booking.tenant,
+                action='VOID',
+                entity_type='booking',
+                entity_id=booking.pk,
+                message=f'Booking {booking.pk} cancelled',
+                actor=user,
+            )
+        except Exception:
+            pass
         return booking

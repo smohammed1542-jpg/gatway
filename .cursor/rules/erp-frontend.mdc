@@ -6,12 +6,15 @@ alwaysApply: false
 
 # ERP Frontend
 
+Follow [docs/ERP_FRONTEND_STANDARDS.md](../../docs/ERP_FRONTEND_STANDARDS.md).
+
 - Preserve behavior; refactor incrementally. Do not remove features unless replaced.
 - Workspace UI is ERP-dense: tables first, sticky toolbars/headers, right-side summaries, dialogs only for focused tasks.
-- Use `DataTable` (`variant="erp"`) for list pages. Support sort, filter, sticky header, and row actions before inventing a new table.
-- Posted documents (`COMPLETED`, `CANCELLED`, `VOIDED`) are read-only. Void/cancel instead of delete for money records.
-- Show audit fields (`created_by`, timestamps, status) on document views.
-- Keep hospitality labels that users know (`Bookings`, `Stays`) unless a real ERP document exists. Prefer `Customers`, `Employees`, `Financials`, `Inventory`.
-- Do not duplicate tax/overtime math in the UI; use tenant rates from the API.
+- Use `ErpPageShell` for page chrome and `DataTable` (`variant="erp"`) for list pages.
+- Support sort, filter, sticky header, column chooser, and row actions before inventing a new table.
+- Posted documents (`COMPLETED`, `CANCELLED`, `VOIDED`, `CHECKED_OUT`) are read-only. Void/cancel instead of delete for money records.
+- Show audit fields (`created_by`, timestamps, status) on document views via `AuditMeta`.
+- ERP terms: Customers, Vendors, Journal Entries, Sales Invoices, Cost Centers. Keep Bookings/Stays where users expect them.
+- Do not duplicate tax/overtime math in the UI; use tenant rates from the API (`utils/erp.js`).
 - Keyboard: Escape closes dialogs; row click opens the record. Icon-only buttons need `aria-label`.
 - Change only the files required for the page being refactored.

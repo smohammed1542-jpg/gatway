@@ -142,3 +142,12 @@ export const getOpeningBalances = () =>
 
 export const postOpeningBalances = (payload) =>
   client.post('/accounting/opening_balances/', payload).then(listOrData);
+
+export const listCostCenters = (params) =>
+  client.get('/accounting/cost_centers/', { params }).then(listOrData);
+
+export const createCostCenter = (payload) =>
+  client.post('/accounting/cost_centers/', payload).then(listOrData);
+
+export const updateCostCenter = (id, payload) =>
+  client.patch(`/accounting/cost_centers/${id}/`, payload).then(listOrData);

@@ -87,9 +87,12 @@ class Booking(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = 'bookings'
         indexes = [
+            models.Index(fields=['tenant', 'booking_status']),
+            models.Index(fields=['tenant', 'event_date']),
             models.Index(fields=['start_date']),
-            models.Index(fields=['booking_status']),
+            models.Index(fields=['customer']),
         ]
         verbose_name = 'MH booking'
         verbose_name_plural = '3 · MH — Bookings'

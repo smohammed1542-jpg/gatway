@@ -19,8 +19,9 @@ export function usePermissions() {
     (isAuthenticated && !loading && user && !isAdmin && !isManager);
 
   const canManage = isAdmin || isManager;
-  const canOperate = canManage || (isGuestHouse && isStaff);
+  const canOperate = canManage || isStaff;
   const canCancelStay = isAdmin || isManager || isStaff;
+  const canAccessPayments = canManage || isStaff;
 
   return {
     user,
@@ -39,6 +40,6 @@ export function usePermissions() {
     canAccessStaff: isAdmin,
     canAccessSettings: canManage,
     canAccessDashboard: canManage,
-    canAccessPayments: canManage || (isGuestHouse && isStaff),
+    canAccessPayments,
   };
 }

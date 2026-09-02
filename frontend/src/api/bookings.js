@@ -30,5 +30,8 @@ export const cancelBooking = async (id, data = {}) => {
   return response.data;
 };
 
+export const getHallReports = (params) =>
+  client.get('/bookings/reports/', { params }).then((r) => r.data);
+
 export const getHallPageVisibility = () =>
   client.get('/bookings/page-visibility/').then((r) => r.data);

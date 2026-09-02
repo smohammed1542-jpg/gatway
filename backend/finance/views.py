@@ -5,7 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from core.mixins import TenantQuerysetMixin
 from core.permissions import (
     IsAdminOrManager,
-    IsAdminOrManagerOrReadOnly,
+    IsAdminOrManagerOrStaffWrite,
     IsAdminOrManagerNoStaff,
     IsTenantOwner,
     IsMarriageHallApp,
@@ -18,12 +18,17 @@ from .services import SoftVoidMixin
 class PaymentViewSet(SoftVoidMixin, TenantQuerysetMixin, viewsets.ModelViewSet):
     queryset = Payment.objects.all().order_by('-payment_date', '-id')
     serializer_class = PaymentSerializer
-    permission_classes = [IsMarriageHallApp, IsAdminOrManager, IsTenantOwner]
+    permission_classes = [IsMarriageHallApp, IsAdminOrManagerOrStaffWrite, IsTenantOwner]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'payment_method', 'booking']
     ordering_fields = ['payment_date', 'amount']
     void_status = 'VOIDED'
     source_type = 'payment'
+
+    def get_permissions(self):
+        if getattr(self, 'action', None) == 'destroy':
+            return [IsMarriageHallApp(), IsAdminOrManager(), IsTenantOwner()]
+        return super().get_permissions()
 
     def get_queryset(self):
         return super().get_queryset().select_related(

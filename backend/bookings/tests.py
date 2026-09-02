@@ -75,3 +75,42 @@ class BookingTenantAndOverlapTests(TestCase):
         }
         response = client.post('/api/bookings/', payload, format='json')
         self.assertEqual(response.status_code, 400)
+
+
+class MarriageHallReportsTests(TestCase):
+    def setUp(self):
+        self.tenant = Tenant.objects.create(name='Hall', subdomain='hallrep')
+        self.admin = User.objects.create_user(
+            username='rep-admin',
+            email='rep@test.com',
+            password='pass12345',
+            role='ADMIN',
+            tenant=self.tenant,
+        )
+        self.customer = Customer.objects.create(
+            tenant=self.tenant, full_name='Client', phone='03001234567'
+        )
+        self.venue = Venue.objects.create(
+            tenant=self.tenant, name='Grand', location='L1', capacity=400, price_per_day=80000
+        )
+        Booking.objects.create(
+            tenant=self.tenant,
+            customer=self.customer,
+            venue=self.venue,
+            event_name='Wedding',
+            event_date=date.today(),
+            slot='evening',
+            gents_count=100,
+            ladies_count=100,
+            rate_per_head=Decimal('1000'),
+            total_price=Decimal('200000'),
+            booking_status='CONFIRMED',
+        )
+
+    def test_hall_reports_endpoint(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin)
+        r = client.get('/api/bookings/reports/')
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(r.data['booking_count'], 1)
+        self.assertGreater(r.data['total_revenue'], 0)

@@ -11,9 +11,11 @@ import {
   Sparkles,
   CalendarDays,
   Bell,
+  Receipt,
   X,
   CalendarCheck,
   Plus,
+  BarChart3,
   BookOpen,
   ChevronDown,
 } from 'lucide-react';
@@ -34,6 +36,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     canAccessExpenses,
     canAccessNotifications,
     canAccessDashboard,
+    canAccessPayments,
+    canAccessReports,
     isAdmin,
   } = usePermissions();
   const { isPageVisible: isGhPageVisible } = useGhPageVisibility();
@@ -44,9 +48,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     { name: 'Bookings', icon: Calendar, path: '/bookings', pageKey: HALL_PAGE_KEYS.BOOKINGS },
     { name: 'Calendar', icon: CalendarDays, path: '/calendar', pageKey: HALL_PAGE_KEYS.CALENDAR },
     { name: 'Customers', icon: Users, path: '/customers', pageKey: HALL_PAGE_KEYS.CUSTOMERS },
-    ...(canAccessExpenses ? [{ name: 'Expenses', icon: Wallet, path: '/expenses', pageKey: HALL_PAGE_KEYS.EXPENSES }] : []),
+    ...(canAccessPayments ? [{ name: 'Payments', icon: Wallet, path: '/payments', pageKey: HALL_PAGE_KEYS.PAYMENTS }] : []),
+    ...(canAccessExpenses ? [{ name: 'Expenses', icon: Receipt, path: '/expenses', pageKey: HALL_PAGE_KEYS.EXPENSES }] : []),
     { name: 'Inventory', icon: Package, path: '/inventory', pageKey: HALL_PAGE_KEYS.INVENTORY },
     { name: 'Decorations', icon: Sparkles, path: '/decoration-packages', pageKey: HALL_PAGE_KEYS.DECORATIONS },
+    ...(canAccessReports ? [{ name: 'Reports', icon: BarChart3, path: '/reports', pageKey: HALL_PAGE_KEYS.REPORTS }] : []),
     ...(canAccessNotifications ? [{ name: 'Notifications', icon: Bell, path: '/notifications', pageKey: HALL_PAGE_KEYS.NOTIFICATIONS }] : []),
   ].filter((item) => !item.pageKey || isHallPageVisible(item.pageKey));
 

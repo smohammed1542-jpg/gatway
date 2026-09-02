@@ -62,7 +62,7 @@ const Notifications = () => {
       return;
     }
     if (n.type === 'inventory') {
-      navigate('/inventory');
+      navigate(isGuestHouse ? '/gh/inventory' : '/inventory');
       return;
     }
     if (n.stayId) {

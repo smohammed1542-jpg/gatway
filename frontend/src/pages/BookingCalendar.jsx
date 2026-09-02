@@ -25,7 +25,7 @@ const slotLabel = (slot) => (slot === 'morning' ? 'Morning (12pm – 4pm)' : 'Ev
 
 const BookingCalendar = () => {
   const navigate = useNavigate();
-  const { canAccessPayments, canManage } = usePermissions();
+  const { canAccessPayments, canManage, canOperate } = usePermissions();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -215,9 +215,11 @@ const BookingCalendar = () => {
         <div>
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>Visualize your venue schedule and upcoming events.</p>
         </div>
+        {canOperate && (
         <button className="btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Plus size={18} /> New Booking
         </button>
+        )}
       </div>
 
       <div className="calendar-layout">
@@ -332,7 +334,9 @@ const BookingCalendar = () => {
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                 <p>No bookings for this day.</p>
-                <button onClick={() => handleOpenModal(selectedDate)} style={{ color: 'var(--primary)', fontWeight: '600', marginTop: '12px', backgroundColor: 'transparent' }}>+ Create One</button>
+                {canOperate && (
+                <button type="button" onClick={() => handleOpenModal(selectedDate)} style={{ color: 'var(--primary)', fontWeight: '600', marginTop: '12px', backgroundColor: 'transparent' }}>+ Create One</button>
+                )}
               </div>
             )}
           </div>

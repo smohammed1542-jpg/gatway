@@ -154,4 +154,4 @@ class IsCustomerWritable(permissions.BasePermission):
             return role in ('ADMIN', 'MANAGER')
         if role in ('ADMIN', 'MANAGER'):
             return True
-        return role == 'STAFF' and _user_app_type(request.user) == GUEST_HOUSE_APP
+        return role == 'STAFF' and _user_app_type(request.user) in (GUEST_HOUSE_APP, MARRIAGE_HALL_APP)

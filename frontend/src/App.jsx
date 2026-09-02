@@ -36,6 +36,7 @@ import CostCentersPage from './pages/accounting/CostCentersPage';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import PrintDocument from './pages/PrintDocument';
+import PrintHallPayment from './pages/PrintHallPayment';
 import Notifications from './pages/Notifications';
 import NotFound from './pages/NotFound';
 import AppLoader from './components/AppLoader';
@@ -81,6 +82,17 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<Navigate to="/login" replace />} />
+
+        <Route
+          path="/print/payment/:paymentId"
+          element={
+            <ProtectedRoute>
+              <MarriageHallRoute>
+                <PrintHallPayment />
+              </MarriageHallRoute>
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/print/:bookingId"

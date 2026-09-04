@@ -68,9 +68,10 @@ if [ "${RUN_SEED_ON_START:-false}" = "true" ]; then
 fi
 
 # Idempotent Pakistani demo clients for Marriage Hall + Guest House (safe to re-run).
+# Seeds into every live tenant that has MH/GH users (not only default subdomains).
 # Set SEED_PAKISTANI_CLIENTS=false on Railway to skip.
 if [ "${SEED_PAKISTANI_CLIENTS:-true}" != "false" ]; then
-    echo "==> Seeding Pakistani demo clients..."
+    echo "==> Seeding Pakistani demo clients into live tenants..."
     python manage.py seed_pakistani_clients \
         || echo "WARNING: seed_pakistani_clients failed."
 fi

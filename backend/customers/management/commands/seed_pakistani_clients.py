@@ -1,7 +1,9 @@
 """Seed realistic Pakistani demo clients for Marriage Hall + Guest House."""
 
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 
+from authentication.models import User
 from core.models import Tenant
 from customers.models import Customer
 
@@ -268,7 +270,6 @@ GH_CLIENTS = [
 
 
 def _upsert_client(tenant, data):
-    phone = data['phone']
     defaults = {
         'full_name': data['full_name'],
         'first_name': data.get('first_name', ''),
@@ -287,72 +288,96 @@ def _upsert_client(tenant, data):
     }
     customer, created = Customer.objects.update_or_create(
         tenant=tenant,
-        phone=phone,
+        phone=data['phone'],
         defaults=defaults,
     )
     return customer, created
 
 
+def _seed_rows(tenant, rows, label, stdout, style):
+    created = updated = 0
+    for row in rows:
+        _, was_created = _upsert_client(tenant, row)
+        if was_created:
+            created += 1
+        else:
+            updated += 1
+    stdout.write(style.SUCCESS(
+        f'{label} ({tenant.name} / {tenant.subdomain}): '
+        f'{len(rows)} clients — created {created}, updated {updated}'
+    ))
+    return created, updated
+
+
+def _resolve_hall_tenants():
+    ids = set(
+        User.objects.filter(app_type='MARRIAGE_HALL', tenant_id__isnull=False)
+        .values_list('tenant_id', flat=True)
+    )
+    qs = Tenant.objects.filter(
+        Q(id__in=ids)
+        | Q(subdomain__iexact='gateway')
+        | Q(name__icontains='marriage')
+        | Q(name__icontains='hall')
+    ).distinct()
+    tenants = list(qs)
+    if not tenants:
+        hall, _ = Tenant.objects.get_or_create(
+            subdomain='gateway',
+            defaults={'name': 'Gateway Marriage Hall', 'plan_type': 'PREMIUM'},
+        )
+        tenants = [hall]
+    return tenants
+
+
+def _resolve_gh_tenants():
+    ids = set(
+        User.objects.filter(app_type='GUEST_HOUSE', tenant_id__isnull=False)
+        .values_list('tenant_id', flat=True)
+    )
+    qs = Tenant.objects.filter(
+        Q(id__in=ids)
+        | Q(subdomain__iexact='gateway-guesthouse')
+        | Q(name__icontains='guest')
+    ).distinct()
+    tenants = list(qs)
+    if not tenants:
+        gh, _ = Tenant.objects.get_or_create(
+            subdomain='gateway-guesthouse',
+            defaults={'name': 'Gateway Guest House', 'plan_type': 'STANDARD'},
+        )
+        tenants = [gh]
+    return tenants
+
+
 class Command(BaseCommand):
-    help = 'Seed Pakistani dummy clients for Gateway Marriage Hall and Guest House'
+    help = 'Seed Pakistani dummy clients into live Marriage Hall and Guest House tenants'
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--hall-only',
-            action='store_true',
-            help='Seed only Marriage Hall clients',
-        )
-        parser.add_argument(
-            '--gh-only',
-            action='store_true',
-            help='Seed only Guest House clients',
-        )
+        parser.add_argument('--hall-only', action='store_true')
+        parser.add_argument('--gh-only', action='store_true')
 
     def handle(self, *args, **options):
-        hall_only = options['hall_only']
-        gh_only = options['gh_only']
-        do_hall = not gh_only
-        do_gh = not hall_only
-
-        created_total = 0
-        updated_total = 0
+        do_hall = not options['gh_only']
+        do_gh = not options['hall_only']
+        created_total = updated_total = 0
 
         if do_hall:
-            hall, _ = Tenant.objects.get_or_create(
-                subdomain='gateway',
-                defaults={'name': 'Gateway Marriage Hall', 'plan_type': 'PREMIUM'},
-            )
-            for row in HALL_CLIENTS:
-                _, created = _upsert_client(hall, row)
-                if created:
-                    created_total += 1
-                else:
-                    updated_total += 1
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'Marriage Hall ({hall.name}): {len(HALL_CLIENTS)} clients upserted'
+            for tenant in _resolve_hall_tenants():
+                c, u = _seed_rows(
+                    tenant, HALL_CLIENTS, 'Marriage Hall', self.stdout, self.style
                 )
-            )
+                created_total += c
+                updated_total += u
 
         if do_gh:
-            gh, _ = Tenant.objects.get_or_create(
-                subdomain='gateway-guesthouse',
-                defaults={'name': 'Gateway Guest House', 'plan_type': 'STANDARD'},
-            )
-            for row in GH_CLIENTS:
-                _, created = _upsert_client(gh, row)
-                if created:
-                    created_total += 1
-                else:
-                    updated_total += 1
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'Guest House ({gh.name}): {len(GH_CLIENTS)} clients upserted'
+            for tenant in _resolve_gh_tenants():
+                c, u = _seed_rows(
+                    tenant, GH_CLIENTS, 'Guest House', self.stdout, self.style
                 )
-            )
+                created_total += c
+                updated_total += u
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f'Done. Created {created_total}, updated {updated_total}.'
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(
+            f'Done. Created {created_total}, updated {updated_total}.'
+        ))

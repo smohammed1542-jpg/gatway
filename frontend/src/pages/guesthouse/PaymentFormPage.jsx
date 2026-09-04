@@ -109,23 +109,49 @@ export default function PaymentFormPage() {
     return { total, paid, remaining };
   }, [selectedStay]);
 
+  const amountValue = Number(form.amount);
+  const hasValidAmount = Number.isFinite(amountValue) && amountValue > 0;
+  const stayFullyPaid = Boolean(staySpecs && staySpecs.remaining <= 0 && !isEdit);
+
+  const sortedStays = useMemo(() => {
+    return [...stays].sort((a, b) => {
+      const dueA = Math.max(0, Number(a.total_amount) - Number(a.advance_paid));
+      const dueB = Math.max(0, Number(b.total_amount) - Number(b.advance_paid));
+      return dueB - dueA; // unpaid first
+    });
+  }, [stays]);
+
+  // Prefill due balance only when something is still collectable (never force "0"/"00")
   useEffect(() => {
-    if (!isEdit && staySpecs && !form.amount && form.stay) {
-      setForm((f) => ({ ...f, amount: String(Math.round(staySpecs.remaining)) }));
-    }
-  }, [staySpecs, isEdit, form.stay, form.amount]);
+    if (isEdit || !staySpecs || !form.stay) return;
+    setForm((f) => {
+      if (f.amount !== '' && f.amount != null) return f;
+      if (staySpecs.remaining <= 0) return f;
+      return { ...f, amount: String(Math.round(staySpecs.remaining)) };
+    });
+  }, [staySpecs, isEdit, form.stay]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
-    if (!form.stay || Number(form.amount) <= 0) {
-      setFormError('Select a stay and enter a valid amount.');
+    if (!form.stay) {
+      setFormError('Please select a stay booking.');
+      return;
+    }
+    if (!hasValidAmount) {
+      if (stayFullyPaid) {
+        setFormError(
+          'This stay is already fully paid (Due: 00). No further payment is needed. Go to Payments to print the receipt, or enter an amount only for an extra / overpayment.'
+        );
+      } else {
+        setFormError('Enter an amount greater than zero.');
+      }
       return;
     }
     setSubmitting(true);
     const payload = {
       stay: Number(form.stay),
-      amount: parseFloat(form.amount),
+      amount: amountValue,
       payment_method: form.payment_method,
       status: form.status,
       notes: form.notes,
@@ -214,6 +240,24 @@ export default function PaymentFormPage() {
           </div>
         )}
 
+        {stayFullyPaid && !formError && (
+          <div
+            style={{
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              color: '#166534',
+              fontSize: '14px',
+              fontWeight: '600',
+              marginBottom: '32px',
+            }}
+          >
+            This stay is already fully paid. Nothing is due — use Payments list to print the receipt.
+            Enter an amount only if you need to record an extra / overpayment.
+          </div>
+        )}
+
         <div className="booking-layout">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
             <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -229,7 +273,7 @@ export default function PaymentFormPage() {
                     style={{ width: '100%', opacity: isEdit ? 0.7 : 1 }}
                   >
                     <option value="">Select stay</option>
-                    {stays.map((s) => {
+                    {sortedStays.map((s) => {
                       const due = Math.max(0, Number(s.total_amount) - Number(s.advance_paid));
                       return (
                         <option key={s.id} value={s.id}>
@@ -246,12 +290,12 @@ export default function PaymentFormPage() {
                     <label>Amount (Rs)</label>
                     <input
                       type="number"
-                      min={0}
+                      min={0.01}
                       step="0.01"
-                      required
+                      required={!stayFullyPaid}
                       value={form.amount}
                       onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                      placeholder="0"
+                      placeholder={stayFullyPaid ? 'Already paid — enter only for overpayment' : '0'}
                     />
                   </div>
                   <div className="input-group">
@@ -367,7 +411,7 @@ export default function PaymentFormPage() {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={submitting}
+                  disabled={submitting || !form.stay || !hasValidAmount}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -377,6 +421,8 @@ export default function PaymentFormPage() {
                     borderRadius: '10px',
                     fontWeight: '700',
                     marginTop: '8px',
+                    opacity: submitting || !form.stay || !hasValidAmount ? 0.55 : 1,
+                    cursor: submitting || !form.stay || !hasValidAmount ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <CheckCircle size={18} />
@@ -413,7 +459,7 @@ export default function PaymentFormPage() {
                 <HelpCircle size={14} /> Note
               </h4>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
-                Completed payments update the stay balance automatically. Print receipt from the payments list after saving.
+                Completed payments update the stay balance automatically. If Due is already 00, the stay is paid — print the receipt from the payments list instead of recording another Rs 0 payment.
               </p>
             </div>
           </div>

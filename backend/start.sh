@@ -67,6 +67,14 @@ if [ "${RUN_SEED_ON_START:-false}" = "true" ]; then
     python manage.py seed_landing || echo "WARNING: seed_landing failed."
 fi
 
+# Idempotent Pakistani demo clients for Marriage Hall + Guest House (safe to re-run).
+# Set SEED_PAKISTANI_CLIENTS=false on Railway to skip.
+if [ "${SEED_PAKISTANI_CLIENTS:-true}" != "false" ]; then
+    echo "==> Seeding Pakistani demo clients..."
+    python manage.py seed_pakistani_clients \
+        || echo "WARNING: seed_pakistani_clients failed."
+fi
+
 echo "==> Ensuring media upload directory exists at ${MEDIA_ROOT:-media}..."
 mkdir -p "${MEDIA_ROOT:-media}"
 

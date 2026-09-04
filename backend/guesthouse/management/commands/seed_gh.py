@@ -82,6 +82,9 @@ class Command(BaseCommand):
             rooms.append(room)
 
         guests_data = [
+            {'full_name': 'Ali Hassan Bhatti', 'phone': '03005550101', 'cnic': '35202-1010101-1'},
+            {'full_name': 'Saima Nadeem', 'phone': '03015550102', 'cnic': '35201-2020202-2'},
+            {'full_name': 'Farhan Iqbal', 'phone': '03215550103', 'cnic': '37405-3030303-3'},
             {'full_name': 'Ahmed Khan', 'phone': '03001112233', 'cnic': '35202-1234567-1'},
             {'full_name': 'Fatima Ali', 'phone': '03004445566', 'cnic': '35202-7654321-9'},
         ]

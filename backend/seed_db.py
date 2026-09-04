@@ -63,21 +63,23 @@ def seed_db():
         )
         venues.append(v)
 
-    # 4. Create Customers
+    # 4. Create Customers (Pakistani demo hosts)
     customers_data = [
-        {"first": "Sarah", "last": "Jenkins", "email": "sarah@gmail.com", "phone": "03001234567"},
-        {"first": "Michael", "last": "Ross", "email": "mike@pearson.com", "phone": "03217654321"}
+        {"first": "Muhammad Usman", "last": "Khan", "email": "usman.khan@email.com", "phone": "03001234501", "full": "Muhammad Usman Khan"},
+        {"first": "Ayesha", "last": "Siddiqui", "email": "ayesha.siddiqui@email.com", "phone": "03011234502", "full": "Ayesha Siddiqui"},
+        {"first": "Bilal Ahmed", "last": "Qureshi", "email": "bilal.qureshi@email.com", "phone": "03211234503", "full": "Bilal Ahmed Qureshi"},
     ]
     
     customers = []
     for c_data in customers_data:
         c, _ = Customer.objects.get_or_create(
             tenant=tenant,
-            email=c_data["email"],
+            phone=c_data["phone"],
             defaults={
+                "full_name": c_data["full"],
                 "first_name": c_data["first"],
                 "last_name": c_data["last"],
-                "phone": c_data["phone"]
+                "email": c_data["email"],
             }
         )
         customers.append(c)

@@ -199,17 +199,31 @@ export const useNotifications = () => {
 
   const markAllRead = () => setUnreadCount(0);
 
-  const dismissNotification = useCallback((notificationId) => {
+  const dismissNotifications = useCallback((notificationIds) => {
+    const ids = new Set(notificationIds);
+    if (ids.size === 0) return;
     const seenIds = getSeenIds();
-    seenIds.add(notificationId);
+    ids.forEach((notificationId) => seenIds.add(notificationId));
     try {
       localStorage.setItem(seenStorageKey, JSON.stringify(Array.from(seenIds).slice(-200)));
     } catch {
       // Keep the notification hidden for this session even if storage is unavailable.
     }
-    setNotifications((current) => current.filter((notification) => notification.id !== notificationId));
-    setUnreadCount((current) => Math.max(0, current - 1));
+    setNotifications((current) => current.filter((notification) => !ids.has(notification.id)));
+    setUnreadCount((current) => Math.max(0, current - ids.size));
   }, [getSeenIds, seenStorageKey]);
 
-  return { notifications, unreadCount, markAllRead, dismissNotification, refresh: fetchNotifications };
+  const dismissNotification = useCallback(
+    (notificationId) => dismissNotifications([notificationId]),
+    [dismissNotifications],
+  );
+
+  return {
+    notifications,
+    unreadCount,
+    markAllRead,
+    dismissNotification,
+    dismissNotifications,
+    refresh: fetchNotifications,
+  };
 };

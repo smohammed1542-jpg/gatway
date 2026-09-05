@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Bell, Search, User, Menu, Wallet, Settings, LogOut, BookOpen, Scale } from 'lucide-react';
@@ -48,7 +48,12 @@ const DashboardLayoutContent = () => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
   const notificationMenuRef = useRef(null);
-  const { notifications, unreadCount, markAllRead, dismissNotification } = useNotifications();
+  const { notifications, unreadCount, markAllRead, dismissNotifications } = useNotifications();
+
+  const closeNotifications = useCallback(() => {
+    dismissNotifications(notifications.map((notification) => notification.id));
+    setShowNotifications(false);
+  }, [dismissNotifications, notifications]);
 
   useEffect(() => {
     const q = searchQuery.trim();
@@ -107,7 +112,7 @@ const DashboardLayoutContent = () => {
   };
 
   const toggleProfileMenu = () => {
-    setShowNotifications(false);
+    if (showNotifications) closeNotifications();
     setProfileMenuOpen((open) => !open);
   };
 
@@ -136,13 +141,13 @@ const DashboardLayoutContent = () => {
 
     const handleClickOutside = (event) => {
       if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target)) {
-        setShowNotifications(false);
+        closeNotifications();
       }
     };
 
     document.addEventListener('pointerdown', handleClickOutside);
     return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [showNotifications]);
+  }, [showNotifications, closeNotifications]);
 
   useEffect(() => {
     if (!isMobile) setMobileMenuOpen(false);
@@ -155,8 +160,12 @@ const DashboardLayoutContent = () => {
 
   const handleBellClick = () => {
     setProfileMenuOpen(false);
-    setShowNotifications(!showNotifications);
-    if (!showNotifications) markAllRead();
+    if (showNotifications) {
+      closeNotifications();
+    } else {
+      setShowNotifications(true);
+      markAllRead();
+    }
   };
 
   const closeSearch = () => {
@@ -178,8 +187,7 @@ const DashboardLayoutContent = () => {
   );
 
   const handleNotificationClick = (n) => {
-    dismissNotification(n.id);
-    setShowNotifications(false);
+    closeNotifications();
     if (n.route) {
       navigate(n.route, n.routeState ? { state: n.routeState } : undefined);
       return;
@@ -471,7 +479,7 @@ const DashboardLayoutContent = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setShowNotifications(false);
+                        closeNotifications();
                         navigate(isGuestHouse ? '/gh/notifications' : '/notifications');
                       }}
                       style={{

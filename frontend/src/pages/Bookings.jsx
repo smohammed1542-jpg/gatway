@@ -122,6 +122,7 @@ const Bookings = () => {
     gender: '',
     address: ''
   });
+  const [newCustomerErrors, setNewCustomerErrors] = useState({});
 
   const [bookingError, setBookingError] = useState('');
   const [sopOpen, setSopOpen] = useState(false);
@@ -212,6 +213,7 @@ const Bookings = () => {
       address: ''
     });
     setNewCustomerMode(false);
+    setNewCustomerErrors({});
     setBookingError('');
     setSopOpen(false);
     setEditingId(null);
@@ -426,17 +428,26 @@ const Bookings = () => {
     }
   };
 
+  const validateNewCustomerFields = () => {
+    const errors = {};
+    if (!newCustomer.full_name?.trim()) errors.full_name = 'Full name is required.';
+    const phoneError = validatePakPhone(newCustomer.phone);
+    if (phoneError) errors.phone = phoneError;
+    if (!newCustomer.gender) errors.gender = 'Select Male or Female.';
+    setNewCustomerErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const updateNewCustomerField = (field, value) => {
+    setNewCustomer((current) => ({ ...current, [field]: value }));
+    setNewCustomerErrors((current) => ({ ...current, [field]: '' }));
+  };
+
   const handleSaveNewCustomerInline = async () => {
     setBookingError('');
-    if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim() || !newCustomer.gender) {
-      setBookingError('Please enter Full Name, Phone Number, and Gender.');
+    if (!validateNewCustomerFields()) {
+      setBookingError('Please complete the highlighted client fields.');
       toast.error('Required fields missing');
-      return;
-    }
-    const phoneError = validatePakPhone(newCustomer.phone);
-    if (phoneError) {
-      setBookingError(phoneError);
-      toast.error(phoneError);
       return;
     }
     
@@ -467,6 +478,7 @@ const Bookings = () => {
         gender: '',
         address: ''
       });
+      setNewCustomerErrors({});
       
       toast.success(`Client saved and selected: ${customerDisplayName(savedCust)}`);
     } catch (err) {
@@ -504,14 +516,9 @@ const Bookings = () => {
 
       // 1. If "Create New Customer" is active, call customer API first
       if (newCustomerMode) {
-        if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim() || !newCustomer.gender) {
-          setBookingError('Please enter Full Name, Phone Number, and Gender.');
-          return;
-        }
-        const phoneError = validatePakPhone(newCustomer.phone);
-        if (phoneError) {
-          setBookingError(phoneError);
-          toast.error(phoneError);
+        if (!validateNewCustomerFields()) {
+          setBookingError('Please complete the highlighted client fields.');
+          toast.error('Required client fields missing');
           return;
         }
         const customerPayload = buildCustomerPayload(newCustomer);
@@ -816,17 +823,38 @@ const Bookings = () => {
 
                 {newCustomerMode && !isEdit && (
                   <div className="reservation-console__new-client-panel">
-                    <input type="text" required placeholder="Full name" value={newCustomer.full_name} onChange={(e) => setNewCustomer({ ...newCustomer, full_name: e.target.value })} />
-                    <input type="tel" required maxLength={13} placeholder="0300 1234567" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
-                    <input type="text" placeholder="CNIC" value={newCustomer.cnic} onChange={(e) => setNewCustomer({ ...newCustomer, cnic: e.target.value })} />
-                    <select required aria-label="Gender" value={newCustomer.gender} onChange={(e) => setNewCustomer({ ...newCustomer, gender: e.target.value })}>
-                      <option value="">Select gender</option>
-                      {GENDER_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                    <input type="email" placeholder="Email (optional)" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} />
-                    <input className="reservation-console__client-address" type="text" placeholder="Residential address" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} />
+                    <label className={`reservation-console__client-field${newCustomerErrors.full_name ? ' has-error' : ''}`}>
+                      <span>Full name *</span>
+                      <input type="text" required aria-invalid={Boolean(newCustomerErrors.full_name)} placeholder="Full name" value={newCustomer.full_name} onChange={(e) => updateNewCustomerField('full_name', e.target.value)} />
+                      {newCustomerErrors.full_name && <small>{newCustomerErrors.full_name}</small>}
+                    </label>
+                    <label className={`reservation-console__client-field${newCustomerErrors.phone ? ' has-error' : ''}`}>
+                      <span>Phone number *</span>
+                      <input type="tel" required maxLength={13} aria-invalid={Boolean(newCustomerErrors.phone)} placeholder="0300 1234567" value={newCustomer.phone} onChange={(e) => updateNewCustomerField('phone', e.target.value)} />
+                      {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
+                    </label>
+                    <label className="reservation-console__client-field">
+                      <span>CNIC</span>
+                      <input type="text" placeholder="CNIC (optional)" value={newCustomer.cnic} onChange={(e) => updateNewCustomerField('cnic', e.target.value)} />
+                    </label>
+                    <label className={`reservation-console__client-field${newCustomerErrors.gender ? ' has-error' : ''}`}>
+                      <span>Gender *</span>
+                      <select required aria-label="Gender" aria-invalid={Boolean(newCustomerErrors.gender)} value={newCustomer.gender} onChange={(e) => updateNewCustomerField('gender', e.target.value)}>
+                        <option value="">Select gender</option>
+                        {GENDER_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      {newCustomerErrors.gender && <small>{newCustomerErrors.gender}</small>}
+                    </label>
+                    <label className="reservation-console__client-field">
+                      <span>Email</span>
+                      <input type="email" placeholder="Email (optional)" value={newCustomer.email} onChange={(e) => updateNewCustomerField('email', e.target.value)} />
+                    </label>
+                    <label className="reservation-console__client-field reservation-console__client-address">
+                      <span>Address</span>
+                      <input type="text" placeholder="Residential address (optional)" value={newCustomer.address} onChange={(e) => updateNewCustomerField('address', e.target.value)} />
+                    </label>
                     <button type="button" onClick={handleSaveNewCustomerInline}>Save &amp; Select</button>
                   </div>
                 )}

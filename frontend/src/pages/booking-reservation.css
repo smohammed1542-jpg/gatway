@@ -238,6 +238,37 @@
   grid-column: span 3;
 }
 
+.reservation-console__client-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reservation-console__client-field > span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.reservation-console__client-field > input,
+.reservation-console__client-field > select {
+  width: 100%;
+}
+
+.reservation-console__client-field.has-error > input,
+.reservation-console__client-field.has-error > select {
+  border-color: var(--error, #dc2626) !important;
+  box-shadow: 0 0 0 1px var(--error, #dc2626);
+}
+
+.reservation-console__client-field > small {
+  color: var(--error, #dc2626);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .reservation-console__scanner {
   grid-column: 1 / -1;
   min-width: 0;

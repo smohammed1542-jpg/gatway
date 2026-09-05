@@ -803,23 +803,6 @@ const Bookings = () => {
 
                 {newCustomerMode && !isEdit && (
                   <div className="reservation-console__new-client-panel">
-                    <div className="reservation-console__scanner">
-                      <CnicScannerPanel
-                        onScan={handleIdScan}
-                        disabled={scanProcessing || savingScannedClient}
-                      />
-                      {scannedClient && (
-                        <ScannedGuestPanel
-                          draft={scannedClient}
-                          loading={scanProcessing}
-                          saving={savingScannedClient}
-                          onChange={handleScannedClientChange}
-                          onPhoneChange={handleScannedClientPhoneChange}
-                          onSave={() => saveClientFromScan(scannedClient)}
-                          onCancel={() => setScannedClient(null)}
-                        />
-                      )}
-                    </div>
                     <input type="text" required placeholder="Full name" value={newCustomer.full_name} onChange={(e) => setNewCustomer({ ...newCustomer, full_name: e.target.value })} />
                     <input type="tel" required placeholder="Phone number" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
                     <input type="text" placeholder="CNIC" value={newCustomer.cnic} onChange={(e) => setNewCustomer({ ...newCustomer, cnic: e.target.value })} />

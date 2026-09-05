@@ -32,7 +32,7 @@ import {
 import client from '../api/client';
 import { formatCollectDue, formatCollectDuePKR, bookingCollectDue, hasCollectDue } from '../utils/currency';
 import toast from 'react-hot-toast';
-import { customerDisplayName, buildCustomerPayload } from '../utils/customer';
+import { customerDisplayName, buildCustomerPayload, GENDER_OPTIONS } from '../utils/customer';
 import { usePermissions } from '../hooks/usePermissions';
 import { usePageTitle } from '../context/PageTitleContext';
 import CancelBookingModal from '../components/bookings/CancelBookingModal';
@@ -118,6 +118,7 @@ const Bookings = () => {
     cnic: '',
     email: '',
     phone: '',
+    gender: '',
     address: ''
   });
 
@@ -206,6 +207,7 @@ const Bookings = () => {
       cnic: '',
       email: '',
       phone: '',
+      gender: '',
       address: ''
     });
     setNewCustomerMode(false);
@@ -236,6 +238,7 @@ const Bookings = () => {
       cnic: '',
       email: '',
       phone: '',
+      gender: '',
       address: '',
     });
     toast.success(`Client selected: ${customerDisplayName(customer)}`, { id: 'booking-id-scan' });
@@ -424,8 +427,8 @@ const Bookings = () => {
 
   const handleSaveNewCustomerInline = async () => {
     setBookingError('');
-    if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim()) {
-      setBookingError('Please enter Full Name and Phone Number.');
+    if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim() || !newCustomer.gender) {
+      setBookingError('Please enter Full Name, Phone Number, and Gender.');
       toast.error('Required fields missing');
       return;
     }
@@ -454,6 +457,7 @@ const Bookings = () => {
         cnic: '',
         email: '',
         phone: '',
+        gender: '',
         address: ''
       });
       
@@ -493,8 +497,8 @@ const Bookings = () => {
 
       // 1. If "Create New Customer" is active, call customer API first
       if (newCustomerMode) {
-        if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim()) {
-          setBookingError('Please enter Full Name and Phone Number.');
+        if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim() || !newCustomer.gender) {
+          setBookingError('Please enter Full Name, Phone Number, and Gender.');
           return;
         }
         const customerPayload = buildCustomerPayload(newCustomer);
@@ -819,6 +823,12 @@ const Bookings = () => {
                     <input type="text" required placeholder="Full name" value={newCustomer.full_name} onChange={(e) => setNewCustomer({ ...newCustomer, full_name: e.target.value })} />
                     <input type="tel" required placeholder="Phone number" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
                     <input type="text" placeholder="CNIC" value={newCustomer.cnic} onChange={(e) => setNewCustomer({ ...newCustomer, cnic: e.target.value })} />
+                    <select required aria-label="Gender" value={newCustomer.gender} onChange={(e) => setNewCustomer({ ...newCustomer, gender: e.target.value })}>
+                      <option value="">Select gender</option>
+                      {GENDER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                     <input type="email" placeholder="Email (optional)" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} />
                     <input className="reservation-console__client-address" type="text" placeholder="Residential address" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} />
                     <button type="button" onClick={handleSaveNewCustomerInline}>Save &amp; Select</button>

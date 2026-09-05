@@ -629,9 +629,39 @@
 
 .calendar-layout {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 350px);
   gap: 24px;
   min-height: 400px;
+  width: 100%;
+  min-width: 0;
+}
+
+.calendar-layout > * {
+  min-width: 0;
+}
+
+.booking-calendar-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.booking-calendar-card__header {
+  gap: 12px;
+  padding: clamp(12px, 2.5vw, 24px);
+}
+
+.booking-calendar-card__weekdays,
+.booking-calendar-card__grid {
+  width: 100%;
+  min-width: 0;
+}
+
+.booking-calendar-card__weekdays > div {
+  min-width: 0;
+  padding: clamp(6px, 1.25vw, 12px) 2px;
+  font-size: clamp(9px, 1.2vw, 12px);
 }
 
 .calendar-layout--full {
@@ -1712,11 +1742,13 @@
 
 /* ========== Calendar cells ========== */
 .calendar-day-cell {
-  padding: 12px;
+  min-width: 0;
+  overflow: hidden;
+  padding: clamp(6px, 1.25vw, 12px);
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   cursor: pointer;
-  min-height: 100px;
+  min-height: clamp(68px, calc((100dvh - 240px) / 6), 100px);
   transition: all 0.2s ease;
 }
 

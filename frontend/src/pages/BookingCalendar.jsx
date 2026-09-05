@@ -223,8 +223,8 @@ const BookingCalendar = () => {
       </div>
 
       <div className="calendar-layout">
-        <div className="card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="card booking-calendar-card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
+          <div className="booking-calendar-card__header" style={{ borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{format(currentDate, 'MMMM yyyy')}</h3>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="btn-secondary" style={{ padding: '8px' }}><ChevronLeft size={20} /></button>
@@ -232,13 +232,13 @@ const BookingCalendar = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', backgroundColor: 'var(--background)', borderBottom: '1px solid var(--border)' }}>
+          <div className="booking-calendar-card__weekdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', backgroundColor: 'var(--background)', borderBottom: '1px solid var(--border)' }}>
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <div key={day} style={{ padding: '12px', textAlign: 'center', fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{day}</div>
+              <div key={day} style={{ textAlign: 'center', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{day}</div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1, overflow: 'auto' }}>
+          <div className="booking-calendar-card__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', flex: 1 }}>
             {calendarDays.map((day, idx) => {
               const dayBookings = getBookingsForDay(day);
               const isSelected = isSameDay(day, selectedDate);

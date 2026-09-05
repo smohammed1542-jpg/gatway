@@ -48,7 +48,7 @@ const DashboardLayoutContent = () => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
   const notificationMenuRef = useRef(null);
-  const { notifications, unreadCount, markAllRead } = useNotifications();
+  const { notifications, unreadCount, markAllRead, dismissNotification } = useNotifications();
 
   useEffect(() => {
     const q = searchQuery.trim();
@@ -178,6 +178,7 @@ const DashboardLayoutContent = () => {
   );
 
   const handleNotificationClick = (n) => {
+    dismissNotification(n.id);
     setShowNotifications(false);
     if (n.route) {
       navigate(n.route, n.routeState ? { state: n.routeState } : undefined);

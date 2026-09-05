@@ -13,6 +13,12 @@ const timeAgo = (dateStr) => {
   const now = new Date();
   const date = new Date(dateStr);
   const diff = Math.floor((now - date) / 1000);
+  if (diff < 0) {
+    const secondsUntil = Math.abs(diff);
+    if (secondsUntil < 3600) return `In ${Math.max(1, Math.ceil(secondsUntil / 60))}m`;
+    if (secondsUntil < 86400) return `In ${Math.ceil(secondsUntil / 3600)}h`;
+    return `In ${Math.ceil(secondsUntil / 86400)}d`;
+  }
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -20,7 +26,7 @@ const timeAgo = (dateStr) => {
 };
 
 export const useNotifications = () => {
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const { isGuestHouse } = useAppType();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -31,6 +37,16 @@ export const useNotifications = () => {
     notify_weekly_reports: true,
     notify_staff_activity: true,
   });
+  const seenStorageKey = `gateway-seen-notifications:${user?.id || 'user'}:${isGuestHouse ? 'gh' : 'hall'}`;
+
+  const getSeenIds = useCallback(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(seenStorageKey) || '[]');
+      return new Set(Array.isArray(stored) ? stored : []);
+    } catch {
+      return new Set();
+    }
+  }, [seenStorageKey]);
 
   useEffect(() => {
     getUserSettings()
@@ -65,8 +81,9 @@ export const useNotifications = () => {
             icon: '💰',
           })),
         ];
-        setNotifications(all.slice(0, 12));
-        setUnreadCount(Math.min(all.length, 8));
+        const visible = all.filter((notification) => !getSeenIds().has(notification.id));
+        setNotifications(visible.slice(0, 12));
+        setUnreadCount(Math.min(visible.length, 8));
         setLastFetchedAt(new Date());
       } catch {
         setNotifications([]);
@@ -157,20 +174,21 @@ export const useNotifications = () => {
       const all = [...alertNotifs, ...bookingNotifs, ...paymentNotifs].sort(
         (a, b) => new Date(b.time || 0) - new Date(a.time || 0)
       );
+      const visible = all.filter((notification) => !getSeenIds().has(notification.id));
 
       if (lastFetchedAt) {
-        const newCount = all.filter((n) => n.time && new Date(n.time) > lastFetchedAt).length;
+        const newCount = visible.filter((n) => n.time && new Date(n.time) > lastFetchedAt).length;
         if (newCount > 0) setUnreadCount((prev) => prev + newCount);
       } else {
-        setUnreadCount(Math.min(all.length, 8));
+        setUnreadCount(Math.min(visible.length, 8));
       }
 
-      setNotifications(all.slice(0, 12));
+      setNotifications(visible.slice(0, 12));
       setLastFetchedAt(new Date());
     } catch {
       /* silent poll failure */
     }
-  }, [lastFetchedAt, prefs, isGuestHouse, isAuthenticated]);
+  }, [lastFetchedAt, prefs, isGuestHouse, isAuthenticated, getSeenIds]);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return undefined;
@@ -181,5 +199,17 @@ export const useNotifications = () => {
 
   const markAllRead = () => setUnreadCount(0);
 
-  return { notifications, unreadCount, markAllRead, refresh: fetchNotifications };
+  const dismissNotification = useCallback((notificationId) => {
+    const seenIds = getSeenIds();
+    seenIds.add(notificationId);
+    try {
+      localStorage.setItem(seenStorageKey, JSON.stringify(Array.from(seenIds).slice(-200)));
+    } catch {
+      // Keep the notification hidden for this session even if storage is unavailable.
+    }
+    setNotifications((current) => current.filter((notification) => notification.id !== notificationId));
+    setUnreadCount((current) => Math.max(0, current - 1));
+  }, [getSeenIds, seenStorageKey]);
+
+  return { notifications, unreadCount, markAllRead, dismissNotification, refresh: fetchNotifications };
 };

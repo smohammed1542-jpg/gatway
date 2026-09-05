@@ -47,6 +47,7 @@ const DashboardLayoutContent = () => {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
+  const notificationMenuRef = useRef(null);
   const { notifications, unreadCount, markAllRead } = useNotifications();
 
   useEffect(() => {
@@ -77,6 +78,7 @@ const DashboardLayoutContent = () => {
   useEffect(() => {
     setMobileMenuOpen(false);
     setProfileMenuOpen(false);
+    setShowNotifications(false);
   }, [location.pathname]);
 
   const showPaymentsMenu = canAccessPayments
@@ -128,6 +130,19 @@ const DashboardLayoutContent = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileMenuOpen]);
+
+  useEffect(() => {
+    if (!showNotifications) return undefined;
+
+    const handleClickOutside = (event) => {
+      if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
+  }, [showNotifications]);
 
   useEffect(() => {
     if (!isMobile) setMobileMenuOpen(false);
@@ -381,12 +396,14 @@ const DashboardLayoutContent = () => {
               )}
             </div>
             <ThemeToggle />
-            <div className="dashboard-header__bell-wrap">
+            <div ref={notificationMenuRef} className="dashboard-header__bell-wrap">
               <button
                 type="button"
                 className="dashboard-header__icon-btn"
                 onClick={handleBellClick}
                 aria-label="Notifications"
+                aria-expanded={showNotifications}
+                aria-haspopup="dialog"
               >
                 <Bell size={20} color="currentColor" />
                 {unreadCount > 0 && (

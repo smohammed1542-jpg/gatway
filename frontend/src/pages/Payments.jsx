@@ -47,6 +47,7 @@ const Payments = () => {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState(navigateState?.bookingEventName || '');
   const [filterMethod, setFilterMethod] = useState('ALL');
@@ -123,6 +124,7 @@ const Payments = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!formData.booking) {
       toast.error('Please select an active booking');
       return;
@@ -132,6 +134,7 @@ const Payments = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const payload = {
         ...formData,
@@ -161,6 +164,8 @@ const Payments = () => {
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.detail || 'Failed to record payment');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,22 +258,46 @@ const Payments = () => {
   // Calculate total outstanding billing for context
   const totalBookingsValue = bookings.reduce((sum, b) => sum + Number(b.total_price || 0), 0);
 
-  const filteredPayments = payments.filter(p => {
+  // Show one summary row per booking while retaining the individual transactions.
+  const paymentGroups = Array.from(payments.reduce((groups, payment) => {
+    const key = payment.booking ? `booking-${payment.booking}` : `payment-${payment.id}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.transactions.push(payment);
+      existing.paymentMethods.add(payment.payment_method);
+      existing.paymentStatuses.add(payment.status);
+      return groups;
+    }
+    groups.set(key, {
+      ...payment,
+      transactions: [payment],
+      paymentMethods: new Set([payment.payment_method]),
+      paymentStatuses: new Set([payment.status]),
+    });
+    return groups;
+  }, new Map()).values()).map((group) => ({
+    ...group,
+    payment_count: group.transactions.length,
+    amount: Number(group.booking_paid || 0),
+    payment_methods: Array.from(group.paymentMethods),
+    payment_statuses: Array.from(group.paymentStatuses),
+  }));
+
+  const filteredPayments = paymentGroups.filter(p => {
     const q = searchQuery.toLowerCase().trim();
-    const formattedId = `pay-${String(p.id).padStart(5, '0')}`;
+    const transactionSearch = p.transactions.map((transaction) => (
+      `pay-${String(transaction.id).padStart(5, '0')} ${transaction.transaction_id || ''} ${transaction.notes || ''}`
+    )).join(' ').toLowerCase();
     const matchesSearch = (p.booking_event_name || '').toLowerCase().includes(q) ||
                           (p.customer_name || '').toLowerCase().includes(q) ||
                           (p.recorded_by_name || '').toLowerCase().includes(q) ||
                           (p.booking_reference || '').toLowerCase().includes(q) ||
                           (p.venue_name || '').toLowerCase().includes(q) ||
-                          (p.payment_method || '').toLowerCase().includes(q) ||
-                          (p.transaction_id || '').toLowerCase().includes(q) ||
-                          (p.notes || '').toLowerCase().includes(q) ||
-                          String(p.id).toLowerCase().includes(q) ||
-                          formattedId.includes(q);
+                          p.payment_methods.join(' ').toLowerCase().includes(q) ||
+                          transactionSearch.includes(q);
 
-    const matchesMethod = filterMethod === 'ALL' || p.payment_method === filterMethod;
-    const matchesStatus = filterStatus === 'ALL' || p.status === filterStatus;
+    const matchesMethod = filterMethod === 'ALL' || p.payment_methods.includes(filterMethod);
+    const matchesStatus = filterStatus === 'ALL' || p.payment_statuses.includes(filterStatus);
 
     return matchesSearch && matchesMethod && matchesStatus;
   });
@@ -428,9 +457,11 @@ const Payments = () => {
               if (key === 'id') {
                 return (
                   <div>
-                    <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 12 }}>PAY-{String(payment.id).padStart(5, '0')}</span>
+                    <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: 12 }}>
+                      {payment.booking_reference || `PAY-${String(payment.id).padStart(5, '0')}`}
+                    </span>
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      {new Date(payment.payment_date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                      {payment.payment_count} payment{payment.payment_count === 1 ? '' : 's'} · Latest {new Date(payment.payment_date).toLocaleDateString()}
                     </p>
                   </div>
                 );
@@ -469,8 +500,8 @@ const Payments = () => {
           <div className="card" style={{ padding: '24px', position: 'sticky', top: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '800' }}>PAY-{String(selectedPayment.id).padStart(5, '0')}</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Payment & order details</p>
+                <h3 style={{ fontSize: '18px', fontWeight: '800' }}>{selectedPayment.booking_reference || `PAY-${String(selectedPayment.id).padStart(5, '0')}`}</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{selectedPayment.payment_count} payment transaction{selectedPayment.payment_count === 1 ? '' : 's'}</p>
               </div>
               <button type="button" onClick={() => setSelectedPayment(null)} aria-label="Close payment" style={{ background: 'transparent', color: 'var(--text-muted)', padding: '4px' }}>
                 <X size={20} />
@@ -522,10 +553,10 @@ const Payments = () => {
             </div>
 
             <div style={{ marginBottom: '20px', padding: '16px', borderRadius: '12px', background: 'rgba(91, 213, 30, 0.06)', border: '1px solid rgba(91, 213, 30, 0.2)' }}>
-              <p style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>This payment</p>
+              <p style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Total received for this booking</p>
               <p style={{ fontSize: '26px', fontWeight: '900', color: '#166534' }}>{formatRs(selectedPayment.amount)}</p>
               <p style={{ fontSize: '13px', marginTop: '8px' }}>
-                Method: <strong>{selectedPayment.payment_method}</strong> · Status: <strong>{selectedPayment.status}</strong>
+                Method: <strong>{selectedPayment.payment_methods.join(', ')}</strong>
               </p>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>
                 Received by: <strong>{selectedPayment.recorded_by_name || 'Not recorded'}</strong>
@@ -553,7 +584,7 @@ const Payments = () => {
               </button>
               )}
               <button type="button" className="btn-primary" onClick={() => handlePrintSlip(selectedPayment)} style={{ padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <Printer size={16} /> Print receipt
+                <Printer size={16} /> {selectedPayment.payment_count > 1 ? 'Print latest receipt' : 'Print receipt'}
               </button>
               {selectedPayment.booking && (
                 <button
@@ -728,6 +759,7 @@ const Payments = () => {
               <button 
                 type="submit" 
                 className="btn-primary" 
+                disabled={isSubmitting}
                 style={{ 
                   width: '100%', 
                   padding: '12px',
@@ -737,7 +769,7 @@ const Payments = () => {
                   marginTop: '8px'
                 }}
               >
-                Confirm Payment Deposit
+                {isSubmitting ? 'Saving Payment…' : 'Confirm Payment Deposit'}
               </button>
 
             </form>

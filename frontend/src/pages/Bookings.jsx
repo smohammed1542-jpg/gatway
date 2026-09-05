@@ -43,6 +43,7 @@ import DataTable from '../components/ui/DataTable';
 import { getTenant } from '../api/core';
 import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 import { resolveMediaUrl } from '../utils/media';
+import { validatePakPhone } from '../utils/phone';
 import './booking-reservation.css';
 
 const BOOKING_STATUS_STYLE = {
@@ -432,6 +433,12 @@ const Bookings = () => {
       toast.error('Required fields missing');
       return;
     }
+    const phoneError = validatePakPhone(newCustomer.phone);
+    if (phoneError) {
+      setBookingError(phoneError);
+      toast.error(phoneError);
+      return;
+    }
     
     try {
       const customerPayload = buildCustomerPayload(newCustomer);
@@ -468,7 +475,7 @@ const Bookings = () => {
         || (typeof Object.values(errData || {})?.[0] === 'object' ? Object.values(errData)?.[0]?.[0] : Object.values(errData)?.[0])
         || 'Failed to save new client details.';
       setBookingError(msg);
-      toast.error('Client saving failed');
+      toast.error(msg);
     }
   };
 
@@ -499,6 +506,12 @@ const Bookings = () => {
       if (newCustomerMode) {
         if (!newCustomer.full_name?.trim() || !newCustomer.phone?.trim() || !newCustomer.gender) {
           setBookingError('Please enter Full Name, Phone Number, and Gender.');
+          return;
+        }
+        const phoneError = validatePakPhone(newCustomer.phone);
+        if (phoneError) {
+          setBookingError(phoneError);
+          toast.error(phoneError);
           return;
         }
         const customerPayload = buildCustomerPayload(newCustomer);
@@ -579,7 +592,7 @@ const Bookings = () => {
         || (typeof Object.values(errData || {})?.[0] === 'object' ? Object.values(errData)?.[0]?.[0] : Object.values(errData)?.[0])
         || 'Failed to save booking details.';
       setBookingError(msg);
-      toast.error('Reservation failed - check details');
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -804,7 +817,7 @@ const Bookings = () => {
                 {newCustomerMode && !isEdit && (
                   <div className="reservation-console__new-client-panel">
                     <input type="text" required placeholder="Full name" value={newCustomer.full_name} onChange={(e) => setNewCustomer({ ...newCustomer, full_name: e.target.value })} />
-                    <input type="tel" required placeholder="Phone number" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
+                    <input type="tel" required maxLength={13} placeholder="0300 1234567" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
                     <input type="text" placeholder="CNIC" value={newCustomer.cnic} onChange={(e) => setNewCustomer({ ...newCustomer, cnic: e.target.value })} />
                     <select required aria-label="Gender" value={newCustomer.gender} onChange={(e) => setNewCustomer({ ...newCustomer, gender: e.target.value })}>
                       <option value="">Select gender</option>

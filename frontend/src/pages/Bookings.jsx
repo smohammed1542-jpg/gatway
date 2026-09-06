@@ -1096,8 +1096,8 @@ const Bookings = () => {
                 <small>Pending at execution</small>
               </div>
               {bookingError && <div className="reservation-console__error">{bookingError}</div>}
-              {!isPosted && <button className="reservation-console__confirm" type="submit" disabled={isSubmitting}><CheckCircle size={14} /> {isSubmitting ? 'Saving Reservation…' : 'Confirm & Save Reservation'}</button>}
-              {!isPosted && viewMode === 'create' && <button className="reservation-console__hold" type="button" disabled={isSubmitting} onClick={handlePendingSubmit}><Clock size={13} /> {isSubmitting ? 'Saving…' : 'Save as Tentative Hold'}</button>}
+              {!isPosted && <button className="reservation-console__confirm" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Confirm Booking'}</button>}
+              {!isPosted && viewMode === 'create' && <button className="reservation-console__hold" type="button" disabled={isSubmitting} onClick={handlePendingSubmit}>{isSubmitting ? 'Saving…' : 'Save Draft'}</button>}
               <div className="reservation-console__utility-actions">
                 <button className="reservation-console__receipt" type="button" onClick={() => editingId ? navigate(`/print/${editingId}`) : toast.error('Save reservation first to generate a receipt')}><Download size={12} /> Receipt &amp; PDF</button>
                 <button type="button" onClick={handleDiscardForm}>Discard Booking</button>

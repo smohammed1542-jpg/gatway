@@ -31,7 +31,7 @@ import {
 import client from '../api/client';
 import { formatCollectDue, formatCollectDuePKR, bookingCollectDue, hasCollectDue } from '../utils/currency';
 import toast from 'react-hot-toast';
-import { customerDisplayName, buildCustomerPayload, GENDER_OPTIONS } from '../utils/customer';
+import { customerDisplayName, buildCustomerPayload } from '../utils/customer';
 import { usePermissions } from '../hooks/usePermissions';
 import { usePageTitle } from '../context/PageTitleContext';
 import CancelBookingModal from '../components/bookings/CancelBookingModal';
@@ -119,7 +119,6 @@ const Bookings = () => {
     cnic: '',
     email: '',
     phone: '',
-    gender: '',
     address: ''
   });
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
@@ -209,7 +208,6 @@ const Bookings = () => {
       cnic: '',
       email: '',
       phone: '',
-      gender: '',
       address: ''
     });
     setNewCustomerMode(false);
@@ -241,7 +239,6 @@ const Bookings = () => {
       cnic: '',
       email: '',
       phone: '',
-      gender: '',
       address: '',
     });
     toast.success(`Client selected: ${customerDisplayName(customer)}`, { id: 'booking-id-scan' });
@@ -464,7 +461,6 @@ const Bookings = () => {
     if (!newCustomer.full_name?.trim()) errors.full_name = 'Full name is required.';
     const phoneError = validatePakPhone(newCustomer.phone);
     if (phoneError) errors.phone = phoneError;
-    if (!newCustomer.gender) errors.gender = 'Select Male or Female.';
     setNewCustomerErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -506,7 +502,6 @@ const Bookings = () => {
         cnic: '',
         email: '',
         phone: '',
-        gender: '',
         address: ''
       });
       setNewCustomerErrors({});
@@ -900,16 +895,6 @@ const Bookings = () => {
                     <label className="reservation-console__client-field">
                       <span>CNIC</span>
                       <input type="text" placeholder="CNIC (optional)" value={newCustomer.cnic} onChange={(e) => updateNewCustomerField('cnic', e.target.value)} />
-                    </label>
-                    <label className={`reservation-console__client-field${newCustomerErrors.gender ? ' has-error' : ''}`}>
-                      <span>Gender *</span>
-                      <select required aria-label="Gender" aria-invalid={Boolean(newCustomerErrors.gender)} value={newCustomer.gender} onChange={(e) => updateNewCustomerField('gender', e.target.value)}>
-                        <option value="" disabled hidden></option>
-                        {GENDER_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      {newCustomerErrors.gender && <small>{newCustomerErrors.gender}</small>}
                     </label>
                     <label className="reservation-console__client-field">
                       <span>Email</span>

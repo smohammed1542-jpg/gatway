@@ -1057,10 +1057,10 @@ const Bookings = () => {
               </header>
               <div className="reservation-console__summary-lines">
                 <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
-                <div><span>Rate / Head (Standard Menu)</span><label>PKR <input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
-                <div><span>Base Food &amp; Venue Charge</span><b>PKR {subtotal.toLocaleString()}</b></div>
+                <div><span>Rate / Head</span><label>PKR <input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
+                <div><span>Food &amp; Venue</span><b>PKR {subtotal.toLocaleString()}</b></div>
                 <div><span>Combined Services</span><b>PKR {extraServices.toLocaleString()}</b></div>
-                <div><span>Tax Assessment ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>PKR {taxAmount.toLocaleString()}</b></div>
+                <div><span>Tax ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>PKR {taxAmount.toLocaleString()}</b></div>
               </div>
               {isEdit && !isPosted && (
                 <label className="reservation-console__status">

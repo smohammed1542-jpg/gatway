@@ -850,7 +850,29 @@ const Bookings = () => {
                   </label>
                   <label>
                     <span>Event Title / Occasion</span>
-                    <input type="text" required disabled={isEdit} placeholder="Barat Reception Ceremony" value={formData.event_name} onChange={(e) => setFormData({ ...formData, event_name: e.target.value })} />
+                    <input
+                      type="text"
+                      list="reservation-event-options"
+                      required
+                      disabled={isEdit}
+                      placeholder="Select or type an event"
+                      value={formData.event_name}
+                      onChange={(e) => setFormData({ ...formData, event_name: e.target.value })}
+                    />
+                    <datalist id="reservation-event-options">
+                      {Array.from(new Set(bookings.map((booking) => booking.event_name).filter(Boolean))).map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                      <option value="Barat Ceremony" />
+                      <option value="Walima Reception" />
+                      <option value="Mehndi Night" />
+                      <option value="Mayon Ceremony" />
+                      <option value="Shendi Ceremony" />
+                      <option value="Engagement Ceremony" />
+                      <option value="Birthday Celebration" />
+                      <option value="Corporate Seminar" />
+                      <option value="Get Together Party" />
+                    </datalist>
                   </label>
                 </div>
 
@@ -911,17 +933,44 @@ const Bookings = () => {
               <section className="reservation-console__card reservation-console__venue">
                 <div className="reservation-console__venue-selector">
                   <div className="reservation-console__section-label"><Building2 size={12} /> Select Banquet Hall <span>Capacity {selectedHall?.capacity || 0}</span></div>
-                  <div className="reservation-console__hall-grid">
-                    {hallsForSelect.map((hall) => {
-                      const selected = String(formData.venue) === String(hall.id);
-                      return (
-                        <button key={hall.id} type="button" disabled={isEdit} className={selected ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, venue: hall.id, rate_per_head: hall.price_per_head || 1200 })}>
-                          <strong>{hall.name}</strong>
-                          <span>{hall.capacity} pax</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {hallsForSelect.length <= 4 ? (
+                    <div className="reservation-console__hall-grid">
+                      {hallsForSelect.map((hall) => {
+                        const selected = String(formData.venue) === String(hall.id);
+                        return (
+                          <button key={hall.id} type="button" disabled={isEdit} className={selected ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, venue: hall.id, rate_per_head: hall.price_per_head || 1200 })}>
+                            <strong>{hall.name}</strong>
+                            <span>{hall.capacity} pax</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <select
+                      className="reservation-console__hall-select"
+                      aria-label="Select banquet hall"
+                      disabled={isEdit}
+                      value={formData.venue}
+                      onChange={(event) => {
+                        const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
+                        setFormData({
+                          ...formData,
+                          venue: event.target.value,
+                          rate_per_head: hall?.price_per_head || 1200,
+                        });
+                      }}
+                    >
+                      <option value="">Select from {hallsForSelect.length} available halls</option>
+                      {hallsForSelect.map((hall) => (
+                        <option key={hall.id} value={hall.id}>
+                          {hall.name} — {hall.capacity} pax
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {hallsForSelect.length === 0 && (
+                    <span className="reservation-console__hall-empty">No active halls available</span>
+                  )}
                 </div>
 
                 <div className="reservation-console__guests">

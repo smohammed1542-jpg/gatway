@@ -438,9 +438,6 @@ const DashboardLayoutContent = () => {
                 }}>
                   <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: '700' }}>Notifications</h4>
-                    <span className="surface-muted-chip" style={{ fontSize: '10px', color: 'var(--text-muted)', backgroundColor: 'var(--surface-elevated)', padding: '2px 8px', borderRadius: '20px', fontWeight: '600' }}>
-                      Live
-                    </span>
                   </div>
                   <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
                     {notifications.length === 0 ? (

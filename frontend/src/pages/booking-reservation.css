@@ -1927,6 +1927,30 @@
   color: rgb(255 255 255 / 78%);
 }
 
+.reservation-console__hall-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--surface-elevated);
+  color: var(--text-main);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reservation-console__hall-empty {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--surface-elevated);
+  font-size: 11px;
+}
+
 .reservation-console__hall-grid button span,
 .reservation-console__slot button small,
 .reservation-console__mono {

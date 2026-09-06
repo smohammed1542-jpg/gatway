@@ -904,7 +904,7 @@ const Bookings = () => {
                     <label className={`reservation-console__client-field${newCustomerErrors.gender ? ' has-error' : ''}`}>
                       <span>Gender *</span>
                       <select required aria-label="Gender" aria-invalid={Boolean(newCustomerErrors.gender)} value={newCustomer.gender} onChange={(e) => updateNewCustomerField('gender', e.target.value)}>
-                        <option value="">Select gender</option>
+                        <option value="" disabled hidden></option>
                         {GENDER_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}

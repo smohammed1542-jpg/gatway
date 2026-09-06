@@ -326,6 +326,7 @@ const Bookings = () => {
           id: r.id,
           inventory_item: String(r.inventory_item),
           quantity_used: r.quantity_used,
+          original_quantity: r.quantity_used,
         }))
       );
     } catch {
@@ -336,8 +337,20 @@ const Bookings = () => {
   const syncBookingInventory = async (bookingId) => {
     const res = await client.get(`/inventory/booking-items/?booking=${bookingId}`);
     const existing = res.data.results || res.data || [];
-    await Promise.all(existing.map((e) => client.delete(`/inventory/booking-items/${e.id}/`)));
-    for (const line of inventoryLines) {
+    const retainedIds = new Set(
+      inventoryLines.filter((line) => line.id).map((line) => Number(line.id))
+    );
+    for (const line of inventoryLines.filter((candidate) => candidate.id)) {
+      const qty = parseInt(line.quantity_used, 10);
+      if (!qty || qty <= 0) continue;
+      await client.patch(`/inventory/booking-items/${line.id}/`, { quantity_used: qty });
+    }
+    await Promise.all(
+      existing
+        .filter((allocation) => !retainedIds.has(Number(allocation.id)))
+        .map((allocation) => client.delete(`/inventory/booking-items/${allocation.id}/`))
+    );
+    for (const line of inventoryLines.filter((candidate) => !candidate.id)) {
       const itemId = parseInt(line.inventory_item, 10);
       const qty = parseInt(line.quantity_used, 10);
       if (!itemId || !qty || qty <= 0) continue;
@@ -352,6 +365,24 @@ const Bookings = () => {
   const hallsForSelect = halls.filter(
     (h) => h.status !== 'INACTIVE' || String(h.id) === String(formData.venue)
   );
+  const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
+
+  const addInventoryLine = () => {
+    const selectedIds = new Set(inventoryLines.map((line) => String(line.inventory_item)));
+    const nextItem = availableInventoryCatalog.find((item) => !selectedIds.has(String(item.id)));
+    if (!nextItem) {
+      toast.error(
+        availableInventoryCatalog.length
+          ? 'All available inventory items are already added.'
+          : 'No active inventory items are available.'
+      );
+      return;
+    }
+    setInventoryLines((current) => [
+      ...current,
+      { inventory_item: String(nextItem.id), quantity_used: 1 },
+    ]);
+  };
 
   const handleCreateNewClick = () => {
     if (!canManage) {
@@ -507,6 +538,36 @@ const Bookings = () => {
       );
       toast.error('Capacity exceeded');
       return;
+    }
+
+    const selectedInventoryIds = new Set();
+    for (const line of inventoryLines) {
+      const item = availableInventoryCatalog.find(
+        (candidate) => String(candidate.id) === String(line.inventory_item)
+      );
+      const quantity = Number(line.quantity_used);
+      if (!item) {
+        setBookingError('Please select a valid inventory item.');
+        toast.error('Invalid inventory item');
+        return;
+      }
+      if (selectedInventoryIds.has(String(item.id))) {
+        setBookingError(`${item.name} is added more than once.`);
+        toast.error('Duplicate inventory item');
+        return;
+      }
+      selectedInventoryIds.add(String(item.id));
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        setBookingError(`Enter a valid quantity for ${item.name}.`);
+        toast.error('Invalid inventory quantity');
+        return;
+      }
+      const available = Number(item.quantity || 0) + Number(line.original_quantity || 0);
+      if (quantity > available) {
+        setBookingError(`Only ${available} ${item.unit || 'units'} of ${item.name} are available.`);
+        toast.error('Inventory quantity exceeds stock');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -899,14 +960,6 @@ const Bookings = () => {
                   <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'morning' })}><span>Morning</span><small>09am - 03pm</small></button>
                   <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'evening' })}><span>Evening</span><small>06pm - 12am</small></button>
                 </div>
-
-                <div className="reservation-console__attendance">
-                  <span>Total Attendance</span>
-                  <strong>{totalAttendance}</strong>
-                  <em>Pax</em>
-                  <div><i style={{ width: `${selectedHall ? Math.min(100, (totalAttendance / selectedHall.capacity) * 100) : 0}%` }} /></div>
-                  <small>{selectedHall ? `${Math.round((totalAttendance / selectedHall.capacity) * 100) || 0}% Safe Room Limit` : 'Select hall'}</small>
-                </div>
               </section>
 
               <section className="reservation-console__card reservation-console__addons">
@@ -931,23 +984,48 @@ const Bookings = () => {
               </section>
 
               <section className="reservation-console__card reservation-console__inventory">
-                <div className="reservation-console__section-label"><Package size={12} /> Event Inventory</div>
+                <div className="reservation-console__inventory-heading">
+                  <div className="reservation-console__section-label"><Package size={12} /> Event Inventory</div>
+                  <small>Allocate stock items required for this event</small>
+                </div>
                 <div className="reservation-console__inventory-lines">
+                  {availableInventoryCatalog.length === 0 && (
+                    <span className="reservation-console__inventory-empty">
+                      No active inventory items. Add stock from the Inventory page first.
+                    </span>
+                  )}
                   {inventoryLines.map((line, index) => {
-                    const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
+                    const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
+                    const available = Number(item?.quantity || 0) + Number(line.original_quantity || 0);
+                    const selectedByOtherLines = new Set(
+                      inventoryLines
+                        .filter((_, itemIndex) => itemIndex !== index)
+                        .map((candidate) => String(candidate.inventory_item))
+                    );
                     return (
                       <div className="reservation-console__inventory-line" key={line.id || index}>
-                        <select value={line.inventory_item} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], inventory_item: e.target.value }; setInventoryLines(next); }}>
+                        <select disabled={Boolean(line.id)} value={line.inventory_item} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], inventory_item: e.target.value }; setInventoryLines(next); }}>
                           <option value="">Select item</option>
-                          {inventoryCatalog.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+                          {availableInventoryCatalog.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id} disabled={selectedByOtherLines.has(String(candidate.id))}>
+                              {candidate.name} ({candidate.quantity} {candidate.unit})
+                            </option>
+                          ))}
                         </select>
-                        <input type="number" min="1" value={line.quantity_used} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], quantity_used: e.target.value }; setInventoryLines(next); }} />
-                        <span>{item?.unit || 'units'}</span>
-                        <button type="button" onClick={() => setInventoryLines(inventoryLines.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+                        <input type="number" min="1" max={available || undefined} aria-label={`Quantity for ${item?.name || 'inventory item'}`} value={line.quantity_used} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], quantity_used: e.target.value }; setInventoryLines(next); }} />
+                        <span>{item ? `${item.unit} · ${available} available` : 'units'}</span>
+                        <button type="button" aria-label={`Remove ${item?.name || 'inventory item'}`} onClick={() => setInventoryLines(inventoryLines.filter((_, itemIndex) => itemIndex !== index))}>×</button>
                       </div>
                     );
                   })}
-                  <button type="button" className="reservation-console__add-inventory" onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1 }])}>+ Add Custom Item</button>
+                  <button
+                    type="button"
+                    className="reservation-console__add-inventory"
+                    disabled={availableInventoryCatalog.length === 0 || inventoryLines.length >= availableInventoryCatalog.length}
+                    onClick={addInventoryLine}
+                  >
+                    + Add Inventory Item
+                  </button>
                 </div>
               </section>
 

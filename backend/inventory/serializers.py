@@ -27,9 +27,16 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         item = attrs.get('inventory_item') or (self.instance and self.instance.inventory_item)
         qty = attrs.get('quantity_used', self.instance.quantity_used if self.instance else 0)
-        if item and qty > item.quantity:
+        available = item.quantity if item else 0
+        if (
+            item
+            and self.instance
+            and self.instance.inventory_item_id == item.id
+        ):
+            available += self.instance.quantity_used
+        if item and qty > available:
             raise serializers.ValidationError(
-                {'quantity_used': f'Only {item.quantity} {item.unit} available in stock.'}
+                {'quantity_used': f'Only {available} {item.unit} available in stock.'}
             )
         return attrs
 

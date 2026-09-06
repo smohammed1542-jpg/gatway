@@ -26,7 +26,6 @@ import {
   Download,
   ChevronDown,
   Phone,
-  IdCard,
   UserPlus
 } from 'lucide-react';
 import client from '../api/client';
@@ -628,7 +627,7 @@ const Bookings = () => {
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
   const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
   const selectedCustomerPhone = selectedCustomer?.phone || 'Phone not available';
-  const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic || 'CNIC not available';
+  const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic || '';
   const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
   const galleryHalls = hallsForSelect
     .filter((hall) => hall.status === 'ACTIVE' && hall.image)
@@ -812,7 +811,7 @@ const Bookings = () => {
                   </label>
                   <label>
                     <span>CNIC Identity</span>
-                    <div className="reservation-console__readout reservation-console__mono"><IdCard size={11} /> {selectedCustomerCnic}</div>
+                    <div className="reservation-console__readout reservation-console__mono">{selectedCustomerCnic}</div>
                   </label>
                   {!isEdit && (
                     <button type="button" className="reservation-console__new-client" onClick={() => { setNewCustomerMode((current) => !current); setScannedClient(null); }}>

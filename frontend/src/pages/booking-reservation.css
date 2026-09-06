@@ -195,7 +195,7 @@
 
 .reservation-console__client-grid {
   display: grid;
-  grid-template-columns: 1.7fr 1fr .65fr auto;
+  grid-template-columns: 1.2fr 1fr 1.3fr auto;
   gap: 6px;
   align-items: end;
   margin-top: 7px;
@@ -1178,7 +1178,7 @@
 }
 
 .reservation-console__client-grid {
-  grid-template-columns: 5fr 3fr 2fr 2fr;
+  grid-template-columns: 3fr 2fr 2.6fr 1.8fr;
   gap: 8px;
   margin-top: 4px;
   padding-top: 4px;

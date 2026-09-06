@@ -43,6 +43,7 @@ import { getTenant } from '../api/core';
 import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 import { resolveMediaUrl } from '../utils/media';
 import { validatePakPhone } from '../utils/phone';
+import { formatCnic } from '../utils/cnicScanner';
 import './booking-reservation.css';
 
 const BOOKING_STATUS_STYLE = {
@@ -688,7 +689,10 @@ const Bookings = () => {
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
   const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
   const selectedCustomerPhone = selectedCustomer?.phone || 'Phone not available';
-  const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic || '';
+  const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic;
+  const selectedCustomerCnicDisplay = selectedCustomerCnic
+    ? formatCnic(selectedCustomerCnic)
+    : 'CNIC';
   const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
   const galleryHalls = hallsForSelect
     .filter((hall) => hall.status === 'ACTIVE' && hall.image)
@@ -872,7 +876,7 @@ const Bookings = () => {
                   </label>
                   <label>
                     <span>CNIC Identity</span>
-                    <div className="reservation-console__readout reservation-console__mono">{selectedCustomerCnic}</div>
+                    <div className="reservation-console__readout reservation-console__mono">{selectedCustomerCnicDisplay}</div>
                   </label>
                   {!isEdit && (
                     <button type="button" className="reservation-console__new-client" onClick={() => { setNewCustomerMode((current) => !current); setScannedClient(null); }}>

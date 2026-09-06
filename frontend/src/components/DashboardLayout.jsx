@@ -472,26 +472,6 @@ const DashboardLayoutContent = () => {
                       ))
                     )}
                   </div>
-                  <div className="surface-footer-bar" style={{ padding: '10px', textAlign: 'center', backgroundColor: 'var(--background)', borderTop: '1px solid var(--border)' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeNotifications();
-                        navigate(isGuestHouse ? '/gh/notifications' : '/notifications');
-                      }}
-                      style={{
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        color: 'var(--primary)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '4px 8px',
-                      }}
-                    >
-                      View all notifications
-                    </button>
-                  </div>
                 </div>
               )}
             </div>

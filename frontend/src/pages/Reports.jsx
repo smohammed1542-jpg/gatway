@@ -16,6 +16,7 @@ import {
   Building
 } from 'lucide-react';
 import AppLogo from '../components/AppLogo';
+import usePersistentState from '../hooks/usePersistentState';
 import { BRAND_FULL_NAME } from '../constants/brand';
 import { 
   BarChart, 
@@ -51,7 +52,7 @@ const ACCOUNT_TITLES = [
 ];
 
 const Reports = () => {
-  const [activeTab, setActiveTab] = useState('financial'); // 'financial', 'utilization', 'expenses'
+  const [activeTab, setActiveTab] = usePersistentState('hall-reports-tab', 'financial');
   const [isLoading, setIsLoading] = useState(true);
   
   // RAW Data states from DB

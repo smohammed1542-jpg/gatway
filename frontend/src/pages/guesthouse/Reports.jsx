@@ -35,6 +35,7 @@ import ChartCard from '../../components/ui/ChartCard';
 import EmptyState from '../../components/ui/EmptyState';
 import AppLogo from '../../components/AppLogo';
 import { BRAND_GUEST_HOUSE } from '../../constants/brand';
+import usePersistentState from '../../hooks/usePersistentState';
 import '../../styles/dashboard.css';
 
 const CHART_COLORS = ['#5BD51E', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#64748b'];
@@ -81,7 +82,7 @@ function formatDateISO(d) {
 export default function GuestHouseReports() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('financial');
+  const [activeTab, setActiveTab] = usePersistentState('guesthouse-reports-tab', 'financial');
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 3);

@@ -12,6 +12,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { usePageTitle } from '../../context/PageTitleContext';
 import { rowsOf } from '../../utils/accountingUi';
 import { usePermissions } from '../../hooks/usePermissions';
+import usePersistentState from '../../hooks/usePersistentState';
 
 const KINDS = [
   { value: 'COST', label: 'Cost Center' },
@@ -28,7 +29,7 @@ export const CostCentersPage = () => {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [filter, setFilter] = useState('ALL');
+  const [filter, setFilter] = usePersistentState('accounting-cost-centers-filter-tab', 'ALL');
   const [saving, setSaving] = useState(false);
 
   const load = () => {

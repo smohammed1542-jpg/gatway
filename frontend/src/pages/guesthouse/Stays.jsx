@@ -16,6 +16,7 @@ import { listStays } from '../../api/guesthouse';
 import toast from 'react-hot-toast';
 import AppLoader from '../../components/AppLoader';
 import { usePermissions } from '../../hooks/usePermissions';
+import usePersistentState from '../../hooks/usePersistentState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import StatCard from '../../components/ui/StatCard';
 import EmptyState from '../../components/ui/EmptyState';
@@ -83,7 +84,7 @@ const GuestHouseStays = () => {
   const { canOperate, canAccessPayments, canCancelStay } = usePermissions();
   const [stays, setStays] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = usePersistentState('guesthouse-stays-filter-tab', 'all');
   const [selectedDate, setSelectedDate] = useState(() => todayISO());
   const [loading, setLoading] = useState(true);
   const [cancelTarget, setCancelTarget] = useState(null);

@@ -10,6 +10,7 @@ import {
   getGuestHouseRecords, deleteStay, deleteGhPayment, deleteGhExpense,
 } from '../../api/guesthouse';
 import { usePermissions } from '../../hooks/usePermissions';
+import usePersistentState from '../../hooks/usePersistentState';
 import SearchInput from '../../components/SearchInput';
 import StatCard from '../../components/ui/StatCard';
 import StatusBadge from '../../components/ui/StatusBadge';
@@ -164,8 +165,8 @@ export default function AllRecords({ embedded = false }) {
   const navigate = useNavigate();
   const { canManage } = usePermissions();
   const [selectedDate, setSelectedDate] = useState(todayISO());
-  const [filterAllTime, setFilterAllTime] = useState(false);
-  const [typeFilter, setTypeFilter] = useState('all');
+  const [filterAllTime, setFilterAllTime] = usePersistentState('guesthouse-records-period-all-time', false);
+  const [typeFilter, setTypeFilter] = usePersistentState('guesthouse-records-type-tab', 'all');
   const [searchQuery, setSearchQuery] = useState('');
   const [records, setRecords] = useState([]);
   const [counts, setCounts] = useState({ stay: 0, payment: 0, expense: 0, total: 0 });

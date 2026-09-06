@@ -21,6 +21,7 @@ import toast from 'react-hot-toast';
 import { formatCollectDuePKR, hasCollectDue } from '../utils/currency';
 import AppLogo from '../components/AppLogo';
 import { BRAND_FULL_NAME } from '../constants/brand';
+import usePersistentState from '../hooks/usePersistentState';
 
 // HTML5 Canvas Digital Signature Pad Component
 const SignaturePad = ({ label, subtitle, onSave }) => {
@@ -170,7 +171,7 @@ const PrintDocument = () => {
   const [customer, setCustomer] = useState(null);
   const [venue, setVenue] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeDocType, setActiveDocType] = useState('final_bill');
+  const [activeDocType, setActiveDocType] = usePersistentState('print-document-tab', 'final_bill');
 
   // Digital Signatures Base64 States
   const [officerSig, setOfficerSig] = useState(null);
@@ -181,7 +182,7 @@ const PrintDocument = () => {
   const [isSaving, setIsSaving] = useState(false);
   
   // Language State Variable
-  const [printLanguage, setPrintLanguage] = useState('english');
+  const [printLanguage, setPrintLanguage] = usePersistentState('print-document-language-tab', 'english');
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');

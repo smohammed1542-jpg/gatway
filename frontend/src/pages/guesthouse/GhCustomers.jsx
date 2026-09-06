@@ -16,6 +16,7 @@ import { customerDisplayName, customerInitials, buildCustomerPayload, validateGh
 import { formatPakPhone, PAK_PHONE_INPUT_MAX_LENGTH, PAK_PHONE_PLACEHOLDER } from '../../utils/phone';
 import { formatRs, formatCollectDuePKR, hasCollectDue } from '../../utils/currency';
 import { usePermissions } from '../../hooks/usePermissions';
+import usePersistentState from '../../hooks/usePersistentState';
 import { useGhPageVisibility } from '../../context/GhPageVisibilityContext';
 import { GH_MODULE_KEYS } from '../../constants/ghPages';
 import SearchInput from '../../components/SearchInput';
@@ -192,12 +193,12 @@ export default function GhCustomers() {
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewTab, setViewTab] = useState('all');
-  const [listStatusFilter, setListStatusFilter] = useState('all');
+  const [viewTab, setViewTab] = usePersistentState('guesthouse-customers-view-tab', 'all');
+  const [listStatusFilter, setListStatusFilter] = usePersistentState('guesthouse-customers-status-tab', 'all');
   const [dailyDate, setDailyDate] = useState(todayISO());
   const [dailyData, setDailyData] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
-  const [dailySectionFilter, setDailySectionFilter] = useState('all');
+  const [dailySectionFilter, setDailySectionFilter] = usePersistentState('guesthouse-customers-daily-tab', 'all');
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 

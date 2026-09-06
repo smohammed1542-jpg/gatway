@@ -368,7 +368,7 @@
 
 .reservation-console__steppers > div > div {
   display: grid;
-  grid-template-columns: 18px 1fr 18px;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
   align-items: center;
   height: 27px;
   border-radius: 5px;
@@ -377,13 +377,23 @@
 }
 
 .reservation-console__steppers button {
-  height: 100%;
+  display: flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 24px !important;
+  min-height: 0 !important;
   padding: 0;
   border: 0;
-  background: transparent;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--rc-green);
   font-size: 12px;
   font-weight: 900;
+  line-height: 1;
 }
 
 .reservation-console__steppers button:disabled {
@@ -1281,8 +1291,6 @@
 }
 
 .reservation-console__steppers button {
-  border-radius: 4px;
-  background: #fff;
   font-size: 12px;
 }
 

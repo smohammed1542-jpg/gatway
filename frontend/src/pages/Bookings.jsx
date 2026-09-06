@@ -951,7 +951,15 @@ const Bookings = () => {
                         <span>{label}</span>
                         <div>
                           <button type="button" disabled={isPosted} onClick={() => setFormData({ ...formData, [field]: Math.max(0, Number(formData[field] || 0) - 10) })}>−</button>
-                          <strong>{Number(formData[field] || 0)}</strong>
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={isPosted}
+                            aria-label={`${label} guest count`}
+                            placeholder="0"
+                            value={displayNumField(formData[field])}
+                            onChange={(e) => setFormData({ ...formData, [field]: toIntField(e.target.value) })}
+                          />
                           <button type="button" disabled={isPosted || (selectedHall && totalAttendance >= selectedHall.capacity)} onClick={() => setFormData({ ...formData, [field]: Number(formData[field] || 0) + 10 })}>+</button>
                         </div>
                       </div>

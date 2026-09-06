@@ -1422,27 +1422,42 @@
 }
 
 .reservation-console__inventory-line {
-  min-height: 28px;
-  padding: 2px 6px;
-  border-radius: 6px;
+  min-height: 44px;
+  padding: 4px 6px;
+  gap: 6px;
+  border-radius: 8px;
 }
 
 .reservation-console__inventory-line select {
-  width: min(230px, 32vw);
+  width: min(250px, 34vw);
 }
 
 .reservation-console__inventory-line input {
-  width: 52px;
+  width: 64px;
 }
 
 .reservation-console__inventory-line select,
 .reservation-console__inventory-line input {
-  height: 24px;
-  font-size: 12px;
+  height: 36px;
+  padding: 7px 10px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .reservation-console__inventory-line span {
+  min-width: 95px;
   font-size: 11px;
+  line-height: 1.3;
+}
+
+.reservation-console__inventory-line button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 18px;
 }
 
 .reservation-console__add-inventory:disabled {

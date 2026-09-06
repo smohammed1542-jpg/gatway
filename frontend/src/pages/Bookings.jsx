@@ -25,7 +25,6 @@ import {
   ShieldCheck,
   Download,
   ChevronDown,
-  Phone,
   UserPlus
 } from 'lucide-react';
 import client from '../api/client';
@@ -683,7 +682,7 @@ const Bookings = () => {
 
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
   const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
-  const selectedCustomerPhone = selectedCustomer?.phone || 'Phone not available';
+  const selectedCustomerPhone = selectedCustomer?.phone || 'Not available';
   const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic;
   const selectedCustomerCnicDisplay = selectedCustomerCnic
     ? formatCnic(selectedCustomerCnic)
@@ -867,7 +866,7 @@ const Bookings = () => {
                   </label>
                   <label>
                     <span>Phone Contact</span>
-                    <div className="reservation-console__readout"><Phone size={11} /> {selectedCustomerPhone}</div>
+                    <div className="reservation-console__readout">{selectedCustomerPhone}</div>
                   </label>
                   <label>
                     <span>CNIC Identity</span>

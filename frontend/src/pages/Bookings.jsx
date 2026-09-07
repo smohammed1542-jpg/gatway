@@ -123,7 +123,6 @@ const Bookings = () => {
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
 
   const [bookingError, setBookingError] = useState('');
-  const [sopOpen, setSopOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanProcessing, setScanProcessing] = useState(false);
   const [scannedClient, setScannedClient] = useState(null);
@@ -212,7 +211,6 @@ const Bookings = () => {
     setNewCustomerMode(false);
     setNewCustomerErrors({});
     setBookingError('');
-    setSopOpen(false);
     setEditingId(null);
     setSelectedDecorationId('');
     setInventoryLines([]);
@@ -1166,16 +1164,6 @@ const Bookings = () => {
                 <button className="reservation-console__receipt" type="button" onClick={() => editingId ? navigate(`/print/${editingId}`) : toast.error('Save reservation first to generate a receipt')}><Download size={12} /> Receipt &amp; PDF</button>
                 <button type="button" onClick={handleDiscardForm}>Discard Booking</button>
               </div>
-              <button className="reservation-console__sop" type="button" aria-expanded={sopOpen} onClick={() => setSopOpen((open) => !open)}><HelpCircle size={12} /> Manager SOPs &amp; Policy Notes <ChevronDown className={sopOpen ? 'is-open' : ''} size={12} /></button>
-              {sopOpen && (
-                <div className="reservation-console__sop-content">
-                  <p>• Verified CNIC copy must be stored within 48 hours of the initial hold.</p>
-                  <p>• Overtime is billed at PKR {Number(overtimeRate).toLocaleString()} per hour.</p>
-                  <p>• Confirm cancellation and advance policy with the client before saving.</p>
-                </div>
-              )}
-              <div className="reservation-console__staff"><span>●</span><div><b>Catering Staff Assigned</b><small>Team allocation after confirmation</small></div><button type="button" onClick={() => navigate('/settings?tab=staff')}>Manage</button></div>
-              <button className="reservation-console__back" type="button" onClick={handleDiscardForm}>Back to reservations</button>
             </aside>
           </form>
         )}

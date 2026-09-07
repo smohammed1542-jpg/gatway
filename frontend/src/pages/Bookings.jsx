@@ -1107,8 +1107,9 @@ const Bookings = () => {
                 </div>
               </section>
 
-              <div className="reservation-console__gallery" aria-label="Available hall photos">
-                {galleryHalls.length > 0 ? galleryHalls.map((hall) => (
+              {galleryHalls.length > 0 && (
+                <div className="reservation-console__gallery" aria-label="Available hall photos">
+                  {galleryHalls.map((hall) => (
                   <figure key={hall.id} className={String(hall.id) === String(formData.venue) ? 'is-selected' : ''}>
                     <img src={resolveMediaUrl(hall.image)} alt={`${hall.name} hall`} />
                     <figcaption>
@@ -1116,12 +1117,9 @@ const Bookings = () => {
                       <span>{hall.location || `${hall.capacity} pax capacity`}</span>
                     </figcaption>
                   </figure>
-                )) : (
-                  <div className="reservation-console__gallery-empty">
-                    No active hall images available. Upload hall photos from Settings → Halls.
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <aside className="reservation-console__summary">

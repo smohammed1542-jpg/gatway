@@ -692,21 +692,6 @@
   outline-offset: 1px;
 }
 
-.reservation-console__gallery-empty {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 96px;
-  padding: 16px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--text-muted);
-  background: var(--surface);
-  font-size: 12px;
-  text-align: center;
-}
-
 .reservation-console__summary {
   position: sticky;
   top: 57px;

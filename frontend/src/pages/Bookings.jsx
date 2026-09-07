@@ -688,6 +688,29 @@ const Bookings = () => {
     ? formatCnic(selectedCustomerCnic)
     : 'CNIC';
   const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
+  const stepOneMissing = [
+    !formData.booking_date && 'booking date',
+    !formData.event_date && 'event date',
+    !formData.event_name?.trim() && 'event title',
+    !(newCustomerMode
+      ? newCustomer.full_name?.trim() && newCustomer.phone?.trim()
+      : formData.customer) && 'client',
+  ].filter(Boolean);
+  const stepTwoMissing = [
+    !formData.venue && 'hall',
+    !formData.slot && 'time slot',
+    totalAttendance <= 0 && 'guest count',
+    selectedHall && totalAttendance > selectedHall.capacity && 'reduce guests to hall capacity',
+  ].filter(Boolean);
+  const reservationStep = stepOneMissing.length ? 1 : stepTwoMissing.length ? 2 : 3;
+  const reservationCompletedSteps = reservationStep - 1;
+  const reservationStepMissing = reservationStep === 1 ? stepOneMissing : stepTwoMissing;
+  const reservationStepText = reservationStep === 3
+    ? 'Step 3/3 · Review & Save'
+    : `Step ${reservationStep}/3 · ${reservationStepMissing[0]}${reservationStepMissing.length > 1 ? ` +${reservationStepMissing.length - 1}` : ''} left`;
+  const reservationStepDetails = reservationStep === 3
+    ? 'Event, client, hall, slot and attendance are complete. Review billing and save.'
+    : `${reservationCompletedSteps} of 3 steps complete. Remaining: ${reservationStepMissing.join(', ')}.`;
   const galleryHalls = hallsForSelect
     .filter((hall) => hall.status === 'ACTIVE' && hall.image)
     .sort((a, b) => {
@@ -826,7 +849,17 @@ const Bookings = () => {
             <div className="reservation-console__main">
               <section className="reservation-console__card reservation-console__identity">
                 <div className="reservation-console__heading">
-                  <h2><CalendarIcon size={13} /> Event &amp; Client Details <span>Step 1 of 3</span></h2>
+                  <h2>
+                    <CalendarIcon size={13} />
+                    Event &amp; Client Details
+                    <span
+                      className={`reservation-console__step-badge reservation-console__step-badge--${reservationStep}`}
+                      title={reservationStepDetails}
+                      aria-live="polite"
+                    >
+                      {reservationStepText}
+                    </span>
+                  </h2>
                   <div className={isClientKycVerified ? 'is-verified' : 'is-pending'}>
                     <ShieldCheck size={11} /> Client KYC {isClientKycVerified ? 'Verified' : 'Pending'}
                   </div>

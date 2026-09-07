@@ -1136,6 +1136,25 @@
   line-height: 16px;
 }
 
+.reservation-console__heading h2 .reservation-console__step-badge {
+  max-width: min(230px, 34vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.reservation-console__heading h2 .reservation-console__step-badge--1,
+.reservation-console__heading h2 .reservation-console__step-badge--2 {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, var(--surface));
+}
+
+.reservation-console__heading h2 .reservation-console__step-badge--3 {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
 .reservation-console__heading > div {
   gap: 4px;
   font-size: 11px;

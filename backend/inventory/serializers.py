@@ -13,6 +13,19 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     def get_allocated_quantity(self, obj):
         return obj.booking_allocations.aggregate(total=Sum('quantity_used'))['total'] or 0
 
+    def validate_name(self, value):
+        name = str(value or '').strip()
+        if not name:
+            raise serializers.ValidationError('Item name is required.')
+        request = self.context.get('request')
+        tenant_id = getattr(getattr(request, 'user', None), 'tenant_id', None)
+        matches = InventoryItem.objects.filter(tenant_id=tenant_id, name__iexact=name)
+        if self.instance:
+            matches = matches.exclude(pk=self.instance.pk)
+        if matches.exists():
+            raise serializers.ValidationError('An inventory item with this name already exists.')
+        return name
+
 
 class BookingInventoryItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='inventory_item.name', read_only=True)

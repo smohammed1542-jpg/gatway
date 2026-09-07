@@ -22,6 +22,8 @@ class BookingSerializer(serializers.ModelSerializer):
         venue = data.get('venue')
         event_date = data.get('event_date')
         slot = data.get('slot', 'morning')
+        custom_start_time = data.get('custom_start_time')
+        custom_end_time = data.get('custom_end_time')
         gents_count = data.get('gents_count', 0)
         ladies_count = data.get('ladies_count', 0)
         guest_count = gents_count + ladies_count
@@ -31,9 +33,22 @@ class BookingSerializer(serializers.ModelSerializer):
             if slot == 'morning':
                 start_dt = datetime.datetime.combine(event_date, datetime.time(12, 0))
                 end_dt = datetime.datetime.combine(event_date, datetime.time(16, 0))
-            else:
+                data['custom_start_time'] = None
+                data['custom_end_time'] = None
+            elif slot == 'evening':
                 start_dt = datetime.datetime.combine(event_date, datetime.time(19, 0))
                 end_dt = datetime.datetime.combine(event_date, datetime.time(23, 0))
+                data['custom_start_time'] = None
+                data['custom_end_time'] = None
+            else:
+                if not custom_start_time or not custom_end_time:
+                    raise serializers.ValidationError({
+                        'custom_start_time': 'Start and end times are required for a custom slot.'
+                    })
+                start_dt = datetime.datetime.combine(event_date, custom_start_time)
+                end_dt = datetime.datetime.combine(event_date, custom_end_time)
+                if end_dt <= start_dt:
+                    end_dt += timedelta(days=1)
             
             if settings.USE_TZ:
                 current_tz = timezone.get_current_timezone()

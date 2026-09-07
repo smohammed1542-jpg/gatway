@@ -1243,6 +1243,21 @@
   font-weight: 650;
 }
 
+.reservation-console__venue-selector > .reservation-console__section-label {
+  min-height: 24px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+
+.reservation-console__venue-selector > .reservation-console__section-label svg,
+.reservation-console__addons .reservation-console__heading h2 svg {
+  width: 18px;
+  height: 18px;
+}
+
 .reservation-console__section-label svg {
   width: 14px;
   height: 14px;
@@ -1357,10 +1372,11 @@
 }
 
 .reservation-console__addons .reservation-console__heading h2 {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 650;
-  text-transform: uppercase;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  text-transform: none;
 }
 
 .reservation-console__addons .reservation-console__heading > div {
@@ -1433,7 +1449,7 @@
 }
 
 .reservation-console__inventory-line select {
-  width: min(250px, 34vw);
+  width: min(160px, 24vw);
 }
 
 .reservation-console__inventory-line input {
@@ -1442,9 +1458,9 @@
 
 .reservation-console__inventory-line select,
 .reservation-console__inventory-line input {
-  height: 36px;
-  padding: 7px 10px;
-  font-size: 13px;
+  height: 32px;
+  padding: 5px 8px;
+  font-size: 12px;
   line-height: 18px;
 }
 
@@ -1509,6 +1525,9 @@
 .reservation-console__summary h2 {
   font-size: 16px;
   line-height: 24px;
+  letter-spacing: -.01em;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .reservation-console__summary header p {
@@ -1947,7 +1966,7 @@
 }
 
 .reservation-console__hall-select {
-  width: 100%;
+  width: min(210px, 100%);
   height: 36px;
   padding: 0 34px 0 12px;
   border: 1px solid var(--border);
@@ -1956,6 +1975,25 @@
   color: var(--text-main);
   font-weight: 600;
   cursor: pointer;
+}
+
+.reservation-console__manual-time {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.reservation-console__manual-time label > span {
+  margin-bottom: 2px;
+  font-size: 9px;
+}
+
+.reservation-console__manual-time input {
+  width: 100%;
+  height: 32px;
+  padding: 4px;
+  font-size: 11px;
 }
 
 .reservation-console__hall-empty {
@@ -2027,6 +2065,177 @@
 
 [data-theme='dark'] .reservation-console__gallery figure::after {
   background: linear-gradient(transparent, rgb(0 0 0 / 88%));
+}
+
+.reservation-console__inventory {
+  flex-wrap: wrap;
+}
+
+.reservation-console__inventory-value {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  min-width: 86px;
+  height: 32px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.reservation-console__inventory-value small,
+.reservation-console__inventory-quantity > span,
+.reservation-console__inventory-quantity > small {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 8px;
+  line-height: 1.1;
+}
+
+.reservation-console__inventory-value strong {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reservation-console__inventory-quantity {
+  display: grid;
+  grid-template-columns: 68px auto;
+  grid-template-rows: 12px 20px;
+  align-items: center;
+  min-width: 118px;
+}
+
+.reservation-console__inventory-quantity > span,
+.reservation-console__inventory-quantity > small {
+  min-width: 0;
+}
+
+.reservation-console__inventory-quantity > input {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  width: 64px;
+  height: 32px;
+}
+
+.reservation-console__inventory-quantity > span {
+  grid-column: 2;
+  grid-row: 1;
+  padding-left: 4px;
+}
+
+.reservation-console__inventory-quantity > small {
+  grid-column: 2;
+  grid-row: 2;
+  padding-left: 4px;
+  white-space: nowrap;
+}
+
+.reservation-console__add-inventory--manual {
+  border-style: solid;
+  border-color: var(--primary);
+  color: var(--primary) !important;
+  background: var(--primary-light);
+}
+
+.reservation-console__manual-inventory {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+}
+
+.reservation-console__manual-inventory-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.reservation-console__manual-inventory-head strong,
+.reservation-console__manual-inventory-head small {
+  display: block;
+}
+
+.reservation-console__manual-inventory-head strong {
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.reservation-console__manual-inventory-head small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.reservation-console__manual-inventory-head > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 18px;
+}
+
+.reservation-console__manual-inventory-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.reservation-console__manual-inventory-grid label {
+  min-width: 0;
+}
+
+.reservation-console__manual-inventory-grid input {
+  width: 100%;
+  height: 36px;
+}
+
+.reservation-console__manual-inventory-grid > button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reservation-console__manual-inventory-grid > button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+@container (max-width: 900px) {
+  .reservation-console__manual-inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reservation-console__manual-inventory-grid > button {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (max-width: 520px) {
+  .reservation-console__manual-inventory-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .hall-reservation-form {

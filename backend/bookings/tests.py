@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from authentication.models import User
@@ -75,6 +76,32 @@ class BookingTenantAndOverlapTests(TestCase):
         }
         response = client.post('/api/bookings/', payload, format='json')
         self.assertEqual(response.status_code, 400)
+
+    def test_custom_time_slot_is_saved(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+        response = client.post('/api/bookings/', {
+            'customer': self.customer_a.id,
+            'venue': self.venue_a.id,
+            'event_name': 'Custom timing event',
+            'event_date': (self.event_date + timedelta(days=1)).isoformat(),
+            'slot': 'custom',
+            'custom_start_time': '10:30',
+            'custom_end_time': '15:45',
+            'gents_count': 50,
+            'ladies_count': 50,
+            'rate_per_head': '1000',
+            'booking_status': 'CONFIRMED',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        booking = Booking.objects.get(id=response.data['id'])
+        local_start = timezone.localtime(booking.start_date)
+        local_end = timezone.localtime(booking.end_date)
+        self.assertEqual(local_start.hour, 10)
+        self.assertEqual(local_start.minute, 30)
+        self.assertEqual(local_end.hour, 15)
+        self.assertEqual(local_end.minute, 45)
 
 
 class MarriageHallReportsTests(TestCase):

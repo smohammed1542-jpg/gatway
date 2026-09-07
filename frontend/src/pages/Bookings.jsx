@@ -79,6 +79,13 @@ const Bookings = () => {
   const [selectedDecorationId, setSelectedDecorationId] = useState('');
   const [inventoryCatalog, setInventoryCatalog] = useState([]);
   const [inventoryLines, setInventoryLines] = useState([]);
+  const [showManualInventory, setShowManualInventory] = useState(false);
+  const [savingManualInventory, setSavingManualInventory] = useState(false);
+  const [manualInventory, setManualInventory] = useState({
+    name: '',
+    price_per_unit: '',
+    booking_quantity: '1',
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'create', 'edit'
   const [editingId, setEditingId] = useState(null);
@@ -98,6 +105,8 @@ const Bookings = () => {
     booking_date: new Date().toISOString().split('T')[0],
     event_date: '',
     slot: '',
+    custom_start_time: '',
+    custom_end_time: '',
     gents_count: '',
     ladies_count: '',
     rate_per_head: 1200,
@@ -189,6 +198,8 @@ const Bookings = () => {
       booking_date: new Date().toISOString().split('T')[0],
       event_date: '',
       slot: '',
+      custom_start_time: '',
+      custom_end_time: '',
       gents_count: '',
       ladies_count: '',
       rate_per_head: 1200,
@@ -214,6 +225,13 @@ const Bookings = () => {
     setEditingId(null);
     setSelectedDecorationId('');
     setInventoryLines([]);
+    setShowManualInventory(false);
+    setSavingManualInventory(false);
+    setManualInventory({
+      name: '',
+      price_per_unit: '',
+      booking_quantity: '1',
+    });
     setScannedClient(null);
     setScanProcessing(false);
     setSavingScannedClient(false);
@@ -363,9 +381,15 @@ const Bookings = () => {
   const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
 
   const addInventoryLine = () => {
+    if (inventoryLines.some((line) => !line.inventory_item)) {
+      toast('Select an item in the open inventory row first.');
+      return;
+    }
     const selectedIds = new Set(inventoryLines.map((line) => String(line.inventory_item)));
-    const nextItem = availableInventoryCatalog.find((item) => !selectedIds.has(String(item.id)));
-    if (!nextItem) {
+    const hasUnselectedItem = availableInventoryCatalog.some(
+      (item) => !selectedIds.has(String(item.id))
+    );
+    if (!hasUnselectedItem) {
       toast.error(
         availableInventoryCatalog.length
           ? 'All available inventory items are already added.'
@@ -375,8 +399,95 @@ const Bookings = () => {
     }
     setInventoryLines((current) => [
       ...current,
-      { inventory_item: String(nextItem.id), quantity_used: 1 },
+      { inventory_item: '', quantity_used: 1 },
     ]);
+  };
+
+  const handleCreateManualInventory = async (event) => {
+    event.preventDefault();
+    if (!canManage || savingManualInventory) return;
+
+    const name = manualInventory.name.trim();
+    const bookingQuantity = Number(manualInventory.booking_quantity);
+    const stockQuantity = bookingQuantity;
+    const unit = 'units';
+    const pricePerUnit = Number(manualInventory.price_per_unit || 0);
+
+    if (!name) {
+      toast.error('Item name is required.');
+      return;
+    }
+    if (!Number.isInteger(bookingQuantity) || bookingQuantity <= 0) {
+      toast.error('Quantity must be a whole number greater than zero.');
+      return;
+    }
+    if (!Number.isFinite(pricePerUnit) || pricePerUnit < 0) {
+      toast.error('Unit price cannot be negative.');
+      return;
+    }
+
+    const duplicate = inventoryCatalog.find(
+      (item) => item.name?.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate) {
+      const alreadyAdded = inventoryLines.some(
+        (line) => String(line.inventory_item) === String(duplicate.id)
+      );
+      if (!alreadyAdded && Number(duplicate.quantity || 0) > 0) {
+        setInventoryLines((current) => [
+          ...current,
+          {
+            inventory_item: String(duplicate.id),
+            quantity_used: Math.min(bookingQuantity, Number(duplicate.quantity)),
+          },
+        ]);
+        setShowManualInventory(false);
+        toast(`"${duplicate.name}" already exists and was selected. Update its stock from Inventory.`);
+      } else {
+        toast.error(`"${duplicate.name}" already exists in Inventory.`);
+      }
+      return;
+    }
+
+    setSavingManualInventory(true);
+    try {
+      const response = await client.post('/inventory/items/', {
+        name,
+        category: 'OTHER',
+        quantity: stockQuantity,
+        unit,
+        price_per_unit: pricePerUnit,
+        status: stockQuantity <= 5 ? 'LOW_STOCK' : 'IN_STOCK',
+        last_restocked: new Date().toISOString().split('T')[0],
+        description: 'Created from booking reservation',
+      });
+      const createdItem = response.data;
+      setInventoryCatalog((current) => [...current, createdItem]);
+      setInventoryLines((current) => [
+        ...current,
+        {
+          inventory_item: String(createdItem.id),
+          quantity_used: bookingQuantity,
+        },
+      ]);
+      setManualInventory({
+        name: '',
+        price_per_unit: '',
+        booking_quantity: '1',
+      });
+      setShowManualInventory(false);
+      toast.success(`${createdItem.name} added to Inventory and this booking.`);
+    } catch (error) {
+      const data = error.response?.data;
+      const message = data?.name?.[0]
+        || data?.quantity?.[0]
+        || data?.price_per_unit?.[0]
+        || data?.detail
+        || 'Failed to create inventory item.';
+      toast.error(message);
+    } finally {
+      setSavingManualInventory(false);
+    }
   };
 
   const handleCreateNewClick = () => {
@@ -401,6 +512,8 @@ const Bookings = () => {
       booking_date: booking.booking_date || new Date().toISOString().split('T')[0],
       event_date: booking.event_date || (booking.start_date ? booking.start_date.split('T')[0] : ''),
       slot: booking.slot || '',
+      custom_start_time: booking.custom_start_time || '',
+      custom_end_time: booking.custom_end_time || '',
       gents_count: numFromApi(booking.gents_count),
       ladies_count: numFromApi(booking.ladies_count),
       rate_per_head: booking.rate_per_head || 1200,
@@ -592,8 +705,14 @@ const Bookings = () => {
       }
 
       if (!formData.slot) {
-        setBookingError('Please select a timing slot (Morning or Evening).');
+        setBookingError('Please select a timing slot.');
         toast.error('Timing required');
+        return;
+      }
+
+      if (formData.slot === 'custom' && (!formData.custom_start_time || !formData.custom_end_time)) {
+        setBookingError('Please enter both start and end time for the custom slot.');
+        toast.error('Custom start and end time required');
         return;
       }
 
@@ -685,6 +804,9 @@ const Bookings = () => {
   const selectedCustomerCnicDisplay = selectedCustomerCnic
     ? formatCnic(selectedCustomerCnic)
     : 'CNIC';
+  const manualInventoryExistingItem = inventoryCatalog.find(
+    (item) => item.name?.trim().toLowerCase() === manualInventory.name.trim().toLowerCase()
+  );
   const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
   const stepOneMissing = [
     !formData.booking_date && 'booking date',
@@ -697,6 +819,7 @@ const Bookings = () => {
   const stepTwoMissing = [
     !formData.venue && 'hall',
     !formData.slot && 'time slot',
+    formData.slot === 'custom' && (!formData.custom_start_time || !formData.custom_end_time) && 'custom start/end time',
     totalAttendance <= 0 && 'guest count',
     selectedHall && totalAttendance > selectedHall.capacity && 'reduce guests to hall capacity',
   ].filter(Boolean);
@@ -1035,27 +1158,19 @@ const Bookings = () => {
                   <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
                   <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'morning' })}><span>Morning</span><small>09am - 03pm</small></button>
                   <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'evening' })}><span>Evening</span><small>06pm - 12am</small></button>
-                </div>
-              </section>
-
-              <section className="reservation-console__card reservation-console__addons">
-                <div className="reservation-console__heading">
-                  <h2><UtensilsCrossed size={13} /> Additional Services &amp; Operational Add-ons</h2>
-                  <div>Active Modules: <b>{[formData.overtime_hours, formData.kitchen_charge, formData.generator_charge].filter(Boolean).length}</b> <span>PKR {extraServices.toLocaleString()} Total</span></div>
-                </div>
-                <div className="reservation-console__addon-grid">
-                  <label>
-                    <span>Overtime <em>{Number(formData.overtime_hours || 0) * overtimeRate >= 1000 ? `${(Number(formData.overtime_hours || 0) * overtimeRate) / 1000}k/hr` : ''}</em></span>
-                    <div><input type="number" step=".5" min="0" value={displayNumField(formData.overtime_hours)} onChange={(e) => setFormData({ ...formData, overtime_hours: toFloatField(e.target.value) })} /><b>hrs</b></div>
-                  </label>
-                  <label>
-                    <span>Kitchen Facility</span>
-                    <div><b>PKR</b><input type="number" min="0" value={displayNumField(formData.kitchen_charge)} onChange={(e) => setFormData({ ...formData, kitchen_charge: toFloatField(e.target.value) })} /></div>
-                  </label>
-                  <label>
-                    <span>Gen Fuel Backup</span>
-                    <div><b>PKR</b><input type="number" min="0" value={displayNumField(formData.generator_charge)} onChange={(e) => setFormData({ ...formData, generator_charge: toFloatField(e.target.value) })} /><Zap size={11} /></div>
-                  </label>
+                  <button type="button" disabled={isEdit} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'custom' })}><span>Manual</span><small>Custom time</small></button>
+                  {formData.slot === 'custom' && (
+                    <div className="reservation-console__manual-time">
+                      <label>
+                        <span>From</span>
+                        <input type="time" required disabled={isEdit} value={formData.custom_start_time} onChange={(event) => setFormData({ ...formData, custom_start_time: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>To</span>
+                        <input type="time" required disabled={isEdit} value={formData.custom_end_time} onChange={(event) => setFormData({ ...formData, custom_end_time: event.target.value })} />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1080,7 +1195,7 @@ const Bookings = () => {
                     );
                     return (
                       <div className="reservation-console__inventory-line" key={line.id || index}>
-                        <select disabled={Boolean(line.id)} value={line.inventory_item} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], inventory_item: e.target.value }; setInventoryLines(next); }}>
+                        <select disabled={Boolean(line.id)} value={line.inventory_item} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], inventory_item: e.target.value, quantity_used: 1 }; setInventoryLines(next); }}>
                           <option value="">Select item</option>
                           {availableInventoryCatalog.map((candidate) => (
                             <option key={candidate.id} value={candidate.id} disabled={selectedByOtherLines.has(String(candidate.id))}>
@@ -1088,8 +1203,23 @@ const Bookings = () => {
                             </option>
                           ))}
                         </select>
-                        <input type="number" min="1" max={available || undefined} aria-label={`Quantity for ${item?.name || 'inventory item'}`} value={line.quantity_used} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], quantity_used: e.target.value }; setInventoryLines(next); }} />
-                        <span>{item ? `${item.unit} · ${available} available` : 'units'}</span>
+                        {item && (
+                          <>
+                            <div className="reservation-console__inventory-value">
+                              <small>Item</small>
+                              <strong>{item.name}</strong>
+                            </div>
+                            <div className="reservation-console__inventory-value">
+                              <small>Unit Price</small>
+                              <strong>PKR {Number(item.price_per_unit || 0).toLocaleString()}</strong>
+                            </div>
+                            <label className="reservation-console__inventory-quantity">
+                              <span>Booking Qty</span>
+                              <input type="number" min="1" max={available || undefined} aria-label={`Quantity for ${item.name}`} value={line.quantity_used} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], quantity_used: e.target.value }; setInventoryLines(next); }} />
+                              <small>{available} available</small>
+                            </label>
+                          </>
+                        )}
                         <button type="button" aria-label={`Remove ${item?.name || 'inventory item'}`} onClick={() => setInventoryLines(inventoryLines.filter((_, itemIndex) => itemIndex !== index))}>×</button>
                       </div>
                     );
@@ -1100,9 +1230,75 @@ const Bookings = () => {
                     disabled={availableInventoryCatalog.length === 0 || inventoryLines.length >= availableInventoryCatalog.length}
                     onClick={addInventoryLine}
                   >
-                    + Add Inventory Item
+                    + Select Existing
                   </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      className="reservation-console__add-inventory reservation-console__add-inventory--manual"
+                      onClick={() => setShowManualInventory((visible) => !visible)}
+                    >
+                      {showManualInventory ? 'Close Manual Entry' : '+ Create New Item'}
+                    </button>
+                  )}
                 </div>
+                {showManualInventory && canManage && (
+                  <div className="reservation-console__manual-inventory">
+                    <div className="reservation-console__manual-inventory-head">
+                      <div>
+                        <strong>Create Inventory Item</strong>
+                        <small>It will be saved to Inventory and selected for this booking.</small>
+                      </div>
+                      <button type="button" aria-label="Close manual inventory form" onClick={() => setShowManualInventory(false)}>×</button>
+                    </div>
+                    <div className="reservation-console__manual-inventory-grid">
+                      <label>
+                        <span>Item Name *</span>
+                        <input
+                          type="text"
+                          list="manual-inventory-item-options"
+                          placeholder="Select existing or type new"
+                          value={manualInventory.name}
+                          onChange={(event) => {
+                            const name = event.target.value;
+                            const existing = inventoryCatalog.find(
+                              (item) => item.name?.trim().toLowerCase() === name.trim().toLowerCase()
+                            );
+                            setManualInventory({
+                              ...manualInventory,
+                              name,
+                              price_per_unit: existing
+                                ? String(existing.price_per_unit || 0)
+                                : manualInventory.price_per_unit,
+                            });
+                          }}
+                        />
+                        <datalist id="manual-inventory-item-options">
+                          {inventoryCatalog.map((item) => (
+                            <option key={item.id} value={item.name}>
+                              {item.quantity} {item.unit} available
+                            </option>
+                          ))}
+                        </datalist>
+                      </label>
+                      <label>
+                        <span>Price</span>
+                        <input type="number" min="0" step="0.01" readOnly={Boolean(manualInventoryExistingItem)} placeholder="0.00" value={manualInventory.price_per_unit} onChange={(event) => setManualInventory({ ...manualInventory, price_per_unit: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>Quantity</span>
+                        <input type="number" min="1" step="1" value={manualInventory.booking_quantity} onChange={(event) => setManualInventory({ ...manualInventory, booking_quantity: event.target.value })} />
+                      </label>
+                      <button type="button" disabled={savingManualInventory} onClick={handleCreateManualInventory}>
+                        {savingManualInventory
+                          ? 'Adding…'
+                          : manualInventoryExistingItem
+                            ? 'Add Existing to Booking'
+                            : 'Add to Inventory & Booking'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {galleryHalls.length > 0 && (

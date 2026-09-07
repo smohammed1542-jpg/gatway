@@ -24,6 +24,7 @@ class Booking(models.Model):
     SLOT_CHOICES = (
         ('morning', 'Morning'),
         ('evening', 'Evening'),
+        ('custom', 'Custom time'),
     )
     
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='bookings', null=True, blank=True)
@@ -35,6 +36,8 @@ class Booking(models.Model):
     booking_date = models.DateField(default=datetime.date.today)
     event_date = models.DateField(null=True, blank=True)
     slot = models.CharField(max_length=20, choices=SLOT_CHOICES, default='morning')
+    custom_start_time = models.TimeField(null=True, blank=True)
+    custom_end_time = models.TimeField(null=True, blank=True)
     
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
@@ -122,10 +125,18 @@ class Booking(models.Model):
                 # Morning: 12:00 PM to 4:00 PM
                 start_dt = datetime.datetime.combine(self.event_date, datetime.time(12, 0))
                 end_dt = datetime.datetime.combine(self.event_date, datetime.time(16, 0))
-            else:
+            elif self.slot == 'evening':
                 # Evening: 7:00 PM to 11:00 PM
                 start_dt = datetime.datetime.combine(self.event_date, datetime.time(19, 0))
                 end_dt = datetime.datetime.combine(self.event_date, datetime.time(23, 0))
+            elif self.custom_start_time and self.custom_end_time:
+                start_dt = datetime.datetime.combine(self.event_date, self.custom_start_time)
+                end_dt = datetime.datetime.combine(self.event_date, self.custom_end_time)
+                if end_dt <= start_dt:
+                    end_dt += datetime.timedelta(days=1)
+            else:
+                start_dt = self.start_date or timezone.now()
+                end_dt = self.end_date or (start_dt + datetime.timedelta(hours=1))
             
             # Make timezone aware if settings.USE_TZ is True
             if settings.USE_TZ:

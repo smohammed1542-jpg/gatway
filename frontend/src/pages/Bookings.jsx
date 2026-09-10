@@ -68,6 +68,12 @@ const toFloatField = (raw) => {
 
 const numFromApi = (v) => (v === 0 || v === '0' || v == null ? '' : v);
 
+const createBookingRefId = () => {
+  const year = new Date().getFullYear();
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  return `BK-${year}-${randomNum}`;
+};
+
 const Bookings = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -85,6 +91,7 @@ const Bookings = () => {
     name: '',
     price_per_unit: '',
     booking_quantity: '1',
+    isNew: false,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'create', 'edit'
@@ -99,6 +106,7 @@ const Bookings = () => {
   
   // Primary Form Data
   const [formData, setFormData] = useState({
+    booking_id: createBookingRefId(),
     event_name: '',
     customer: '',
     venue: '',
@@ -183,8 +191,26 @@ const Bookings = () => {
                         Number(formData.kitchen_charge || 0) + 
                         Number(formData.decoration_charge || 0) + 
                         Number(formData.generator_charge || 0);
+  const inventorySummaryLines = inventoryLines
+    .map((line) => {
+      if (!line.inventory_item) return null;
+      const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
+      if (!item) return null;
+      const quantity = Number(line.quantity_used || 0);
+      const unitPrice = Number(item.price_per_unit || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) return null;
+      return {
+        key: line.id || line.inventory_item,
+        name: item.name,
+        quantity,
+        unitPrice,
+        total: quantity * unitPrice,
+      };
+    })
+    .filter(Boolean);
+  const inventoryTotal = inventorySummaryLines.reduce((sum, line) => sum + line.total, 0);
                         
-  const totalBeforeTax = subtotal + extraServices;
+  const totalBeforeTax = subtotal + extraServices + inventoryTotal;
   const taxAmount = totalBeforeTax * taxRate;
   const grandTotal = totalBeforeTax + taxAmount;
   const remainingBalance = grandTotal - Number(formData.advance_paid || 0);
@@ -192,6 +218,7 @@ const Bookings = () => {
 
   const resetForm = () => {
     setFormData({
+      booking_id: createBookingRefId(),
       event_name: '',
       customer: '',
       venue: '',
@@ -380,29 +407,6 @@ const Bookings = () => {
   );
   const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
 
-  const addInventoryLine = () => {
-    if (inventoryLines.some((line) => !line.inventory_item)) {
-      toast('Select an item in the open inventory row first.');
-      return;
-    }
-    const selectedIds = new Set(inventoryLines.map((line) => String(line.inventory_item)));
-    const hasUnselectedItem = availableInventoryCatalog.some(
-      (item) => !selectedIds.has(String(item.id))
-    );
-    if (!hasUnselectedItem) {
-      toast.error(
-        availableInventoryCatalog.length
-          ? 'All available inventory items are already added.'
-          : 'No active inventory items are available.'
-      );
-      return;
-    }
-    setInventoryLines((current) => [
-      ...current,
-      { inventory_item: '', quantity_used: 1 },
-    ]);
-  };
-
   const handleCreateManualInventory = async (event) => {
     event.preventDefault();
     if (!canManage || savingManualInventory) return;
@@ -474,6 +478,7 @@ const Bookings = () => {
         name: '',
         price_per_unit: '',
         booking_quantity: '1',
+        isNew: false,
       });
       setShowManualInventory(false);
       toast.success(`${createdItem.name} added to Inventory and this booking.`);
@@ -506,6 +511,7 @@ const Bookings = () => {
     }
     setEditingId(booking.id);
     setFormData({
+      booking_id: booking.booking_id || `BK-${booking.id}`,
       event_name: booking.event_name,
       customer: booking.customer,
       venue: booking.venue,
@@ -804,9 +810,14 @@ const Bookings = () => {
   const selectedCustomerCnicDisplay = selectedCustomerCnic
     ? formatCnic(selectedCustomerCnic)
     : 'CNIC';
-  const manualInventoryExistingItem = inventoryCatalog.find(
-    (item) => item.name?.trim().toLowerCase() === manualInventory.name.trim().toLowerCase()
-  );
+  const manualInventoryExistingItem = !manualInventory.isNew
+    ? inventoryCatalog.find(
+      (item) => item.name?.trim().toLowerCase() === manualInventory.name.trim().toLowerCase()
+    )
+    : null;
+  const manualInventorySelectValue = manualInventoryExistingItem
+    ? String(manualInventoryExistingItem.id)
+    : (manualInventory.isNew ? '__new__' : '');
   const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
   const stepOneMissing = [
     !formData.booking_date && 'booking date',
@@ -990,7 +1001,7 @@ const Bookings = () => {
                   <label>
                     <span>Booking Identifier</span>
                     <div className="reservation-console__auto-field">
-                      <strong>{formData.booking_id || 'BK-2026-AUTO'}</strong>
+                      <strong>{formData.booking_id || '—'}</strong>
                       <em>Auto</em>
                     </div>
                   </label>
@@ -1085,59 +1096,70 @@ const Bookings = () => {
               </section>
 
               <section className="reservation-console__card reservation-console__venue">
-                <div className="reservation-console__venue-selector">
-                  <div className="reservation-console__section-label"><Building2 size={12} /> Select Banquet Hall <span>Capacity {selectedHall?.capacity || 0}</span></div>
-                  {hallsForSelect.length <= 4 ? (
-                    <div className="reservation-console__hall-grid">
-                      {hallsForSelect.map((hall) => {
-                        const selected = String(formData.venue) === String(hall.id);
-                        return (
-                          <button key={hall.id} type="button" disabled={isEdit} className={selected ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, venue: hall.id, rate_per_head: hall.price_per_head || 1200 })}>
-                            <strong>{hall.name}</strong>
-                            <span>{hall.capacity} pax</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <select
-                      className="reservation-console__hall-select"
-                      aria-label="Select banquet hall"
-                      disabled={isEdit}
-                      value={formData.venue}
-                      onChange={(event) => {
-                        const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
-                        setFormData({
-                          ...formData,
-                          venue: event.target.value,
-                          rate_per_head: hall?.price_per_head || 1200,
-                        });
-                      }}
-                    >
-                      <option value="">Select from {hallsForSelect.length} available halls</option>
-                      {hallsForSelect.map((hall) => (
-                        <option key={hall.id} value={hall.id}>
-                          {hall.name} — {hall.capacity} pax
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {hallsForSelect.length === 0 && (
-                    <span className="reservation-console__hall-empty">No active halls available</span>
-                  )}
+                <div className="reservation-console__heading">
+                  <h2>
+                    <Building2 size={13} />
+                    Venue Setup
+                  </h2>
                 </div>
 
-                <div className="reservation-console__guests">
-                  <div className="reservation-console__section-label"><Users size={12} /> Guest Headcount</div>
-                  <div className="reservation-console__steppers">
-                    {[
-                      ['Gents', 'gents_count'],
-                      ['Ladies', 'ladies_count'],
-                    ].map(([label, field]) => (
-                      <div key={field}>
-                        <span>{label}</span>
-                        <div>
-                          <button type="button" disabled={isPosted} onClick={() => setFormData({ ...formData, [field]: Math.max(0, Number(formData[field] || 0) - 10) })}>−</button>
+                <div className="reservation-console__venue-body">
+                  <div className="reservation-console__venue-selector">
+                    <div className="reservation-console__section-label">
+                      Select Hall
+                      <span className="reservation-console__step-badge">
+                        Capacity {selectedHall?.capacity || 0}
+                      </span>
+                    </div>
+                    {hallsForSelect.length === 1 ? (
+                      <div className="reservation-console__hall-grid">
+                        {hallsForSelect.map((hall) => {
+                          const selected = String(formData.venue) === String(hall.id);
+                          return (
+                            <button key={hall.id} type="button" disabled={isEdit} className={selected ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, venue: hall.id, rate_per_head: hall.price_per_head || 1200 })}>
+                              <strong>{hall.name}</strong>
+                              <span>{hall.capacity} pax</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <select
+                        className="reservation-console__hall-select"
+                        aria-label="Select banquet hall"
+                        disabled={isEdit}
+                        value={formData.venue}
+                        onChange={(event) => {
+                          const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
+                          setFormData({
+                            ...formData,
+                            venue: event.target.value,
+                            rate_per_head: hall?.price_per_head || 1200,
+                          });
+                        }}
+                      >
+                        <option value="">Select from {hallsForSelect.length} available halls</option>
+                        {hallsForSelect.map((hall) => (
+                          <option key={hall.id} value={hall.id}>
+                            {hall.name} — {hall.capacity} pax
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {hallsForSelect.length === 0 && (
+                      <span className="reservation-console__hall-empty">No active halls available</span>
+                    )}
+                  </div>
+
+                  <div className="reservation-console__guests">
+                    <div className="reservation-console__section-label"><Users size={12} /> Guest Headcount</div>
+                    <div className="reservation-console__steppers">
+                      {[
+                        ['Gents', 'gents_count'],
+                        ['Ladies', 'ladies_count'],
+                      ].map(([label, field]) => (
+                        <label key={field}>
+                          <span>{label}</span>
                           <input
                             type="number"
                             min="0"
@@ -1147,36 +1169,51 @@ const Bookings = () => {
                             value={displayNumField(formData[field])}
                             onChange={(e) => setFormData({ ...formData, [field]: toIntField(e.target.value) })}
                           />
-                          <button type="button" disabled={isPosted || (selectedHall && totalAttendance >= selectedHall.capacity)} onClick={() => setFormData({ ...formData, [field]: Number(formData[field] || 0) + 10 })}>+</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="reservation-console__slot">
-                  <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
-                  <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'morning' })}><span>Morning</span><small>09am - 03pm</small></button>
-                  <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'evening' })}><span>Evening</span><small>06pm - 12am</small></button>
-                  <button type="button" disabled={isEdit} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'custom' })}><span>Manual</span><small>Custom time</small></button>
-                  {formData.slot === 'custom' && (
-                    <div className="reservation-console__manual-time">
-                      <label>
-                        <span>From</span>
-                        <input type="time" required disabled={isEdit} value={formData.custom_start_time} onChange={(event) => setFormData({ ...formData, custom_start_time: event.target.value })} />
-                      </label>
-                      <label>
-                        <span>To</span>
-                        <input type="time" required disabled={isEdit} value={formData.custom_end_time} onChange={(event) => setFormData({ ...formData, custom_end_time: event.target.value })} />
-                      </label>
+                        </label>
+                      ))}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="reservation-console__slot">
+                    <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
+                    <div className="reservation-console__slot-options">
+                      <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'morning' })}>
+                        <span>Morning</span>
+                        <small>9am – 3pm</small>
+                      </button>
+                      <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'evening' })}>
+                        <span>Evening</span>
+                        <small>6pm – 12am</small>
+                      </button>
+                      <button type="button" disabled={isEdit} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'custom' })}>
+                        <span>Manual</span>
+                        <small>Custom</small>
+                      </button>
+                    </div>
+                    {formData.slot === 'custom' && (
+                      <div className="reservation-console__manual-time">
+                        <label>
+                          <span>From</span>
+                          <input type="time" required disabled={isEdit} value={formData.custom_start_time} onChange={(event) => setFormData({ ...formData, custom_start_time: event.target.value })} />
+                        </label>
+                        <label>
+                          <span>To</span>
+                          <input type="time" required disabled={isEdit} value={formData.custom_end_time} onChange={(event) => setFormData({ ...formData, custom_end_time: event.target.value })} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
               <section className="reservation-console__card reservation-console__inventory">
-                <div className="reservation-console__inventory-heading">
-                  <div className="reservation-console__section-label"><Package size={12} /> Event Inventory</div>
+                <div className="reservation-console__heading">
+                  <h2>
+                    <Package size={13} />
+                    Catering, Decor &amp; Operational Add-ons
+                  </h2>
+                </div>
+                <div className="reservation-console__inventory-meta">
                   <small>Allocate stock items required for this event</small>
                 </div>
                 <div className="reservation-console__inventory-lines">
@@ -1224,24 +1261,16 @@ const Bookings = () => {
                       </div>
                     );
                   })}
+                </div>
+                {canManage && (
                   <button
                     type="button"
-                    className="reservation-console__add-inventory"
-                    disabled={availableInventoryCatalog.length === 0 || inventoryLines.length >= availableInventoryCatalog.length}
-                    onClick={addInventoryLine}
+                    className="reservation-console__add-inventory reservation-console__add-inventory--manual"
+                    onClick={() => setShowManualInventory((visible) => !visible)}
                   >
-                    + Select Existing
+                    {showManualInventory ? 'Close Manual Entry' : '+ Create New Item'}
                   </button>
-                  {canManage && (
-                    <button
-                      type="button"
-                      className="reservation-console__add-inventory reservation-console__add-inventory--manual"
-                      onClick={() => setShowManualInventory((visible) => !visible)}
-                    >
-                      {showManualInventory ? 'Close Manual Entry' : '+ Create New Item'}
-                    </button>
-                  )}
-                </div>
+                )}
                 {showManualInventory && canManage && (
                   <div className="reservation-console__manual-inventory">
                     <div className="reservation-console__manual-inventory-head">
@@ -1253,34 +1282,59 @@ const Bookings = () => {
                     </div>
                     <div className="reservation-console__manual-inventory-grid">
                       <label>
-                        <span>Item Name *</span>
-                        <input
-                          type="text"
-                          list="manual-inventory-item-options"
-                          placeholder="Select existing or type new"
-                          value={manualInventory.name}
+                        <span>Item *</span>
+                        <select
+                          aria-label="Select inventory item"
+                          value={manualInventorySelectValue}
                           onChange={(event) => {
-                            const name = event.target.value;
-                            const existing = inventoryCatalog.find(
-                              (item) => item.name?.trim().toLowerCase() === name.trim().toLowerCase()
-                            );
+                            const value = event.target.value;
+                            if (value === '__new__') {
+                              setManualInventory({
+                                ...manualInventory,
+                                name: '',
+                                price_per_unit: '',
+                                isNew: true,
+                              });
+                              return;
+                            }
+                            if (!value) {
+                              setManualInventory({
+                                ...manualInventory,
+                                name: '',
+                                price_per_unit: '',
+                                isNew: false,
+                              });
+                              return;
+                            }
+                            const existing = availableInventoryCatalog.find((item) => String(item.id) === value);
                             setManualInventory({
                               ...manualInventory,
-                              name,
-                              price_per_unit: existing
-                                ? String(existing.price_per_unit || 0)
-                                : manualInventory.price_per_unit,
+                              name: existing?.name || '',
+                              price_per_unit: existing ? String(existing.price_per_unit || 0) : '',
+                              isNew: false,
                             });
                           }}
-                        />
-                        <datalist id="manual-inventory-item-options">
-                          {inventoryCatalog.map((item) => (
-                            <option key={item.id} value={item.name}>
-                              {item.quantity} {item.unit} available
+                        >
+                          <option value="">Select item</option>
+                          {availableInventoryCatalog.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} — {item.quantity} {item.unit}
                             </option>
                           ))}
-                        </datalist>
+                          <option value="__new__">+ Create new item</option>
+                        </select>
                       </label>
+                      {manualInventory.isNew && (
+                        <label>
+                          <span>New item name *</span>
+                          <input
+                            type="text"
+                            placeholder="Enter item name"
+                            value={manualInventory.name}
+                            onChange={(event) => setManualInventory({ ...manualInventory, name: event.target.value })}
+                          />
+                        </label>
+                      )}
                       <label>
                         <span>Price</span>
                         <input type="number" min="0" step="0.01" readOnly={Boolean(manualInventoryExistingItem)} placeholder="0.00" value={manualInventory.price_per_unit} onChange={(event) => setManualInventory({ ...manualInventory, price_per_unit: event.target.value })} />
@@ -1318,15 +1372,24 @@ const Bookings = () => {
 
             <aside className="reservation-console__summary">
               <header>
-                <div><h2>Booking Summary</h2><p>REF: {formData.booking_id || 'NEW-RESERVATION'}</p></div>
+                <div><h2>Booking Summary</h2><p>REF: {formData.booking_id || createBookingRefId()}</p></div>
                 <span>● Live</span>
               </header>
               <div className="reservation-console__summary-lines">
                 <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
-                <div><span>Rate / Head</span><label>PKR <input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
-                <div><span>Food &amp; Venue</span><b>PKR {subtotal.toLocaleString()}</b></div>
-                <div><span>Combined Services</span><b>PKR {extraServices.toLocaleString()}</b></div>
-                <div><span>Tax ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>PKR {taxAmount.toLocaleString()}</b></div>
+                <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
+                <div><span>Food &amp; Venue</span><b>{subtotal.toLocaleString()}</b></div>
+                <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
+                {inventorySummaryLines.map((line) => (
+                  <div key={line.key} className="reservation-console__summary-inventory">
+                    <span>
+                      {line.name}
+                      <em>× {line.quantity}</em>
+                    </span>
+                    <b>{line.total.toLocaleString()}</b>
+                  </div>
+                ))}
+                <div><span>Tax ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>{taxAmount.toLocaleString()}</b></div>
               </div>
               {isEdit && !isPosted && (
                 <label className="reservation-console__status">

@@ -52,6 +52,18 @@ const BOOKING_STATUS_STYLE = {
   CANCELLED: { bg: '#fee2e2', color: '#991b1b', label: 'Cancelled' },
 };
 
+const DEFAULT_EVENT_OPTIONS = [
+  'Barat Ceremony',
+  'Walima Reception',
+  'Mehndi Night',
+  'Mayon Ceremony',
+  'Shendi Ceremony',
+  'Engagement Ceremony',
+  'Birthday Celebration',
+  'Corporate Seminar',
+  'Get Together Party',
+];
+
 const displayNumField = (v) => (v === '' || v === null || v === undefined ? '' : v);
 
 const toIntField = (raw) => {
@@ -145,6 +157,8 @@ const Bookings = () => {
   const [scannedClient, setScannedClient] = useState(null);
   const [savingScannedClient, setSavingScannedClient] = useState(false);
   const savingClientRef = useRef(false);
+  const eventPickerRef = useRef(null);
+  const [eventOptionsOpen, setEventOptionsOpen] = useState(false);
   const [taxRate, setTaxRate] = useState(0.05);
   const [overtimeRate, setOvertimeRate] = useState(5000);
 
@@ -180,6 +194,17 @@ const Bookings = () => {
         setOvertimeRate(overtimeRateFromTenant(tenant));
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const closeEventOptions = (event) => {
+      if (!eventPickerRef.current?.contains(event.target)) {
+        setEventOptionsOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeEventOptions);
+    return () => document.removeEventListener('pointerdown', closeEventOptions);
   }, []);
 
   // Recalculate calculations in real-time
@@ -843,6 +868,13 @@ const Bookings = () => {
   const reservationStepDetails = reservationStep === 3
     ? 'Event, client, hall, slot and attendance are complete. Review billing and save.'
     : `${reservationCompletedSteps} of 3 steps complete. Remaining: ${reservationStepMissing.join(', ')}.`;
+  const eventOptions = Array.from(new Set([
+    ...DEFAULT_EVENT_OPTIONS,
+    ...bookings.map((booking) => booking.event_name).filter(Boolean),
+  ]));
+  const filteredEventOptions = eventOptions.filter((name) => (
+    name.toLowerCase().includes(formData.event_name.trim().toLowerCase())
+  ));
   const galleryHalls = hallsForSelect
     .filter((hall) => hall.status === 'ACTIVE' && hall.image)
     .sort((a, b) => {
@@ -1013,31 +1045,50 @@ const Bookings = () => {
                     <span>Event Date *</span>
                     <input type="date" required disabled={isEdit} min={formData.booking_date || new Date().toISOString().split('T')[0]} value={formData.event_date} onChange={(e) => setFormData({ ...formData, event_date: e.target.value })} />
                   </label>
-                  <label>
+                  <label className="reservation-console__event-picker" ref={eventPickerRef}>
                     <span>Event Title / Occasion</span>
-                    <input
-                      type="text"
-                      list="reservation-event-options"
-                      required
-                      disabled={isEdit}
-                      placeholder="Select or type an event"
-                      value={formData.event_name}
-                      onChange={(e) => setFormData({ ...formData, event_name: e.target.value })}
-                    />
-                    <datalist id="reservation-event-options">
-                      {Array.from(new Set(bookings.map((booking) => booking.event_name).filter(Boolean))).map((name) => (
-                        <option key={name} value={name} />
-                      ))}
-                      <option value="Barat Ceremony" />
-                      <option value="Walima Reception" />
-                      <option value="Mehndi Night" />
-                      <option value="Mayon Ceremony" />
-                      <option value="Shendi Ceremony" />
-                      <option value="Engagement Ceremony" />
-                      <option value="Birthday Celebration" />
-                      <option value="Corporate Seminar" />
-                      <option value="Get Together Party" />
-                    </datalist>
+                    <div className="reservation-console__event-input">
+                      <input
+                        type="text"
+                        required
+                        disabled={isEdit}
+                        autoComplete="off"
+                        role="combobox"
+                        aria-expanded={eventOptionsOpen}
+                        aria-controls="reservation-event-options"
+                        aria-autocomplete="list"
+                        placeholder="Select or type an event"
+                        value={formData.event_name}
+                        onFocus={() => setEventOptionsOpen(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') setEventOptionsOpen(false);
+                          if (event.key === 'ArrowDown') setEventOptionsOpen(true);
+                        }}
+                        onChange={(event) => {
+                          setFormData({ ...formData, event_name: event.target.value });
+                          setEventOptionsOpen(true);
+                        }}
+                      />
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </div>
+                    {eventOptionsOpen && !isEdit && filteredEventOptions.length > 0 && (
+                      <div className="reservation-console__event-options" id="reservation-event-options" role="listbox">
+                        {filteredEventOptions.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            role="option"
+                            aria-selected={formData.event_name === name}
+                            onClick={() => {
+                              setFormData({ ...formData, event_name: name });
+                              setEventOptionsOpen(false);
+                            }}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </label>
                 </div>
 

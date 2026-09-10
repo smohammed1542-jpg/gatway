@@ -158,6 +158,63 @@
   box-shadow: 0 0 0 2px rgb(0 122 98 / 10%);
 }
 
+.reservation-console__event-picker {
+  position: relative;
+  z-index: 5;
+}
+
+.reservation-console__event-input {
+  position: relative;
+}
+
+.reservation-console__event-input input {
+  padding-right: 30px;
+}
+
+.reservation-console__event-input > svg {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.reservation-console__event-options {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 14%));
+}
+
+.reservation-console__event-options button {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reservation-console__event-options button:hover,
+.reservation-console__event-options button[aria-selected='true'] {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
 .reservation-console input:disabled,
 .reservation-console select:disabled {
   opacity: .75;

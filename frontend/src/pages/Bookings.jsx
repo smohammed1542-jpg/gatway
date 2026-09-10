@@ -758,6 +758,8 @@ const Bookings = () => {
         cnic: bookingCnic,
         customer: parseInt(finalCustomerId),
         venue: parseInt(formData.venue),
+        custom_start_time: formData.slot === 'custom' ? formData.custom_start_time : null,
+        custom_end_time: formData.slot === 'custom' ? formData.custom_end_time : null,
         gents_count: parseInt(formData.gents_count || 0),
         ladies_count: parseInt(formData.ladies_count || 0),
         rate_per_head: parseFloat(formData.rate_per_head || 0),
@@ -1162,19 +1164,29 @@ const Bookings = () => {
                         Capacity {selectedHall?.capacity || 0}
                       </span>
                     </div>
-                    {hallsForSelect.length === 1 ? (
+                    {hallsForSelect.length > 0 && hallsForSelect.length <= 2 ? (
                       <div className="reservation-console__hall-grid">
                         {hallsForSelect.map((hall) => {
                           const selected = String(formData.venue) === String(hall.id);
                           return (
-                            <button key={hall.id} type="button" disabled={isEdit} className={selected ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, venue: hall.id, rate_per_head: hall.price_per_head || 1200 })}>
+                            <button
+                              key={hall.id}
+                              type="button"
+                              disabled={isEdit}
+                              className={selected ? 'is-selected' : ''}
+                              onClick={() => setFormData({
+                                ...formData,
+                                venue: selected ? '' : hall.id,
+                                rate_per_head: selected ? 1200 : (hall.price_per_head || 1200),
+                              })}
+                            >
                               <strong>{hall.name}</strong>
                               <span>{hall.capacity} pax</span>
                             </button>
                           );
                         })}
                       </div>
-                    ) : (
+                    ) : hallsForSelect.length > 2 ? (
                       <select
                         className="reservation-console__hall-select"
                         aria-label="Select banquet hall"
@@ -1196,8 +1208,7 @@ const Bookings = () => {
                           </option>
                         ))}
                       </select>
-                    )}
-                    {hallsForSelect.length === 0 && (
+                    ) : (
                       <span className="reservation-console__hall-empty">No active halls available</span>
                     )}
                   </div>
@@ -1205,38 +1216,44 @@ const Bookings = () => {
                   <div className="reservation-console__guests">
                     <div className="reservation-console__section-label"><Users size={12} /> Guest Headcount</div>
                     <div className="reservation-console__steppers">
-                      {[
-                        ['Gents', 'gents_count'],
-                        ['Ladies', 'ladies_count'],
-                      ].map(([label, field]) => (
-                        <label key={field}>
-                          <span>{label}</span>
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={isPosted}
-                            aria-label={`${label} guest count`}
-                            placeholder="0"
-                            value={displayNumField(formData[field])}
-                            onChange={(e) => setFormData({ ...formData, [field]: toIntField(e.target.value) })}
-                          />
-                        </label>
-                      ))}
+                      <label>
+                        <span>Guests</span>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={isPosted}
+                          aria-label="Guest count"
+                          placeholder="0"
+                          value={
+                            formData.gents_count === '' && formData.ladies_count === ''
+                              ? ''
+                              : totalAttendance
+                          }
+                          onChange={(event) => {
+                            const guestCount = toIntField(event.target.value);
+                            setFormData({
+                              ...formData,
+                              gents_count: guestCount,
+                              ladies_count: guestCount === '' ? '' : 0,
+                            });
+                          }}
+                        />
+                      </label>
                     </div>
                   </div>
 
                   <div className="reservation-console__slot">
                     <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
                     <div className="reservation-console__slot-options">
-                      <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'morning' })}>
+                      <button type="button" disabled={isEdit} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'morning' ? '' : 'morning', custom_start_time: '', custom_end_time: '' })}>
                         <span>Morning</span>
                         <small>9am – 3pm</small>
                       </button>
-                      <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'evening' })}>
+                      <button type="button" disabled={isEdit} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'evening' ? '' : 'evening', custom_start_time: '', custom_end_time: '' })}>
                         <span>Evening</span>
                         <small>6pm – 12am</small>
                       </button>
-                      <button type="button" disabled={isEdit} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: 'custom' })}>
+                      <button type="button" disabled={isEdit} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'custom' ? '' : 'custom', custom_start_time: '', custom_end_time: '' })}>
                         <span>Manual</span>
                         <small>Custom</small>
                       </button>

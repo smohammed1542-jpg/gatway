@@ -1,8 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getAlerts, getUserSettings } from '../api/core';
 import { getGuestHouseAlerts } from '../api/guesthouse';
-import client from '../api/client';
-import { normalizeList } from '../utils/listData';
 import { useAppType } from './useAppType';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,7 +28,8 @@ export const useNotifications = () => {
   const { isGuestHouse } = useAppType();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [lastFetchedAt, setLastFetchedAt] = useState(null);
+  const lastFetchedAtRef = useRef(null);
+  const requestInFlightRef = useRef(false);
   const [prefs, setPrefs] = useState({
     notify_new_bookings: true,
     notify_payments: true,
@@ -55,9 +54,11 @@ export const useNotifications = () => {
   }, []);
 
   const fetchNotifications = useCallback(async () => {
-    if (!isAuthenticated) return;
-    if (isGuestHouse) {
-      try {
+    if (!isAuthenticated || requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+
+    try {
+      if (isGuestHouse) {
         const alerts = await getGuestHouseAlerts();
         const all = [
           ...(alerts.upcoming_checkins || []).map((e) => ({
@@ -84,18 +85,11 @@ export const useNotifications = () => {
         const visible = all.filter((notification) => !getSeenIds().has(notification.id));
         setNotifications(visible.slice(0, 12));
         setUnreadCount(Math.min(visible.length, 8));
-        setLastFetchedAt(new Date());
-      } catch {
-        setNotifications([]);
+        lastFetchedAtRef.current = new Date();
+        return;
       }
-      return;
-    }
-    try {
-      const [alerts, bookRes, payRes] = await Promise.all([
-        getAlerts(),
-        client.get('/bookings/?ordering=-created_at'),
-        client.get('/finance/payments/?ordering=-payment_date'),
-      ]);
+
+      const alerts = await getAlerts();
 
       const iconMap = { event: '📅', payment_due: '💰', inventory: '📦' };
       const alertNotifs = [];
@@ -142,53 +136,29 @@ export const useNotifications = () => {
         }))
       );
 
-      const bookings = normalizeList(bookRes.data).slice(0, 3);
-      const payments = normalizeList(payRes.data).slice(0, 3);
-
-      const bookingNotifs = prefs.notify_new_bookings !== false
-        ? bookings.map((b) => ({
-            id: `booking-${b.id}`,
-            type: 'booking',
-            bookingId: b.id,
-            title: 'New Booking',
-            desc: `${b.event_name} - ${b.customer_name || 'Customer'}`,
-            time: b.created_at,
-            timeAgo: timeAgo(b.created_at),
-            icon: '📅',
-          }))
-        : [];
-
-      const paymentNotifs = prefs.notify_payments !== false
-        ? payments.map((p) => ({
-            id: `payment-${p.id}`,
-            type: 'payment',
-            bookingId: p.booking,
-            title: 'Payment Received',
-            desc: `Rs ${parseFloat(p.amount).toLocaleString()} via ${p.payment_method}`,
-            time: p.payment_date,
-            timeAgo: timeAgo(p.payment_date),
-            icon: '💳',
-          }))
-        : [];
-
-      const all = [...alertNotifs, ...bookingNotifs, ...paymentNotifs].sort(
+      const all = alertNotifs.sort(
         (a, b) => new Date(b.time || 0) - new Date(a.time || 0)
       );
       const visible = all.filter((notification) => !getSeenIds().has(notification.id));
 
-      if (lastFetchedAt) {
-        const newCount = visible.filter((n) => n.time && new Date(n.time) > lastFetchedAt).length;
+      if (lastFetchedAtRef.current) {
+        const newCount = visible.filter((n) => (
+          n.time && new Date(n.time) > lastFetchedAtRef.current
+        )).length;
         if (newCount > 0) setUnreadCount((prev) => prev + newCount);
       } else {
         setUnreadCount(Math.min(visible.length, 8));
       }
 
       setNotifications(visible.slice(0, 12));
-      setLastFetchedAt(new Date());
+      lastFetchedAtRef.current = new Date();
     } catch {
       /* silent poll failure */
+      if (isGuestHouse) setNotifications([]);
+    } finally {
+      requestInFlightRef.current = false;
     }
-  }, [lastFetchedAt, prefs, isGuestHouse, isAuthenticated, getSeenIds]);
+  }, [prefs, isGuestHouse, isAuthenticated, getSeenIds]);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return undefined;

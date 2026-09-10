@@ -65,11 +65,12 @@ const HallManagement = ({ embedded = false }) => {
     if (!canManage) return;
     if (window.confirm('Are you sure you want to delete this hall?')) {
       try {
-        await deleteVenue(id);
-        toast.success('Hall deleted');
+        const result = await deleteVenue(id);
+        toast.success(result?.archived ? 'Hall removed and booking history preserved' : 'Hall deleted');
         fetchHalls();
-      } catch {
-        toast.error('Failed to delete hall');
+      } catch (error) {
+        const message = error.response?.data?.detail || 'Failed to delete hall';
+        toast.error(message);
       }
     }
   };

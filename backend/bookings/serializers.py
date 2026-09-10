@@ -18,6 +18,15 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['tenant', 'created_by', 'remaining_balance', 'payment_status', 'guest_count', 'updated_at']
 
+    def to_internal_value(self, data):
+        # HTML clients commonly submit hidden optional time inputs as empty strings.
+        # Normalize them before DRF's TimeField parsing runs.
+        normalized = data.copy()
+        for field in ('custom_start_time', 'custom_end_time'):
+            if normalized.get(field) == '':
+                normalized[field] = None
+        return super().to_internal_value(normalized)
+
     def validate(self, data):
         venue = data.get('venue')
         event_date = data.get('event_date')

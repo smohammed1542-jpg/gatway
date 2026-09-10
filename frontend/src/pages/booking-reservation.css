@@ -417,8 +417,13 @@
 
 .reservation-console__steppers {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
+}
+
+.reservation-console__guests {
+  width: 140px;
+  max-width: 100%;
 }
 
 .reservation-console__steppers > label {
@@ -1293,9 +1298,21 @@
 }
 
 .reservation-console__venue-body {
-  grid-template-columns: minmax(140px, 180px) minmax(150px, 1fr) minmax(220px, 1.2fr);
+  grid-template-columns: minmax(240px, 1.2fr) minmax(220px, 1fr) 140px;
   gap: 14px;
   align-items: start;
+}
+
+.reservation-console__venue-selector {
+  order: 1;
+}
+
+.reservation-console__slot {
+  order: 2;
+}
+
+.reservation-console__guests {
+  order: 3;
 }
 
 .reservation-console__venue-body > * > .reservation-console__section-label {
@@ -1889,7 +1906,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .reservation-console__guests {
+    order: 2;
+  }
+
   .reservation-console__slot {
+    order: 3;
     grid-column: 1 / -1;
   }
 
@@ -1913,6 +1935,10 @@
 
   .reservation-console__client-address {
     grid-column: auto;
+  }
+
+  .reservation-console__guests {
+    width: 100%;
   }
 
   .reservation-console__gallery {

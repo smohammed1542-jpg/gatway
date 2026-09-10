@@ -103,6 +103,28 @@ class BookingTenantAndOverlapTests(TestCase):
         self.assertEqual(local_end.hour, 15)
         self.assertEqual(local_end.minute, 45)
 
+    def test_empty_custom_times_are_ignored_for_standard_slot(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+        response = client.post('/api/bookings/', {
+            'customer': self.customer_a.id,
+            'venue': self.venue_a.id,
+            'event_name': 'Morning event',
+            'event_date': (self.event_date + timedelta(days=2)).isoformat(),
+            'slot': 'morning',
+            'custom_start_time': '',
+            'custom_end_time': '',
+            'gents_count': 50,
+            'ladies_count': 50,
+            'rate_per_head': '1000',
+            'booking_status': 'CONFIRMED',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        booking = Booking.objects.get(id=response.data['id'])
+        self.assertIsNone(booking.custom_start_time)
+        self.assertIsNone(booking.custom_end_time)
+
 
 class MarriageHallReportsTests(TestCase):
     def setUp(self):

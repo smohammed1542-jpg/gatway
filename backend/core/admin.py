@@ -25,6 +25,19 @@ class TenantAdmin(AdminOnlyAdminMixin, admin.ModelAdmin):
                 '<strong>Marriage Hall</strong> page show/hide and maintenance times for this tenant.'
             ),
         }),
+        ('Booking summary lines', {
+            'fields': (
+                'show_summary_guests',
+                'show_summary_rate_per_head',
+                'show_summary_food_venue',
+                'show_summary_combined_services',
+                'show_summary_tax',
+            ),
+            'description': (
+                'Show or hide booking summary rows on the reservation screen. '
+                'Totals still calculate in the background even if a line is hidden.'
+            ),
+        }),
         ('Timestamps', {
             'classes': ('collapse',),
             'fields': ('created_at', 'updated_at'),

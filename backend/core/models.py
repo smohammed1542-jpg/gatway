@@ -36,6 +36,26 @@ class Tenant(models.Model):
         default=True,
         help_text='When False, operational events create DRAFT journals for manual posting.',
     )
+    show_summary_guests = models.BooleanField(
+        default=True,
+        help_text='Show "Guaranteed Guests" on the booking summary panel.',
+    )
+    show_summary_rate_per_head = models.BooleanField(
+        default=True,
+        help_text='Show "Rate / Head" on the booking summary panel.',
+    )
+    show_summary_food_venue = models.BooleanField(
+        default=True,
+        help_text='Show "Food & Venue" on the booking summary panel.',
+    )
+    show_summary_combined_services = models.BooleanField(
+        default=True,
+        help_text='Show "Combined Services" on the booking summary panel.',
+    )
+    show_summary_tax = models.BooleanField(
+        default=True,
+        help_text='Show "Tax (GST)" on the booking summary panel.',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

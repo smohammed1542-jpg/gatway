@@ -202,6 +202,7 @@ const PrintDocument = () => {
   const [decorationCharge, setDecorationCharge] = useState(0);
   const [generatorCharge, setGeneratorCharge] = useState(0);
   const [advancePaid, setAdvancePaid] = useState(0);
+  const [inventoryBillLines, setInventoryBillLines] = useState([]);
 
   useEffect(() => {
     const fetchPrintData = async () => {
@@ -227,9 +228,10 @@ const PrintDocument = () => {
         setAdvancePaid(Number(bookingData.advance_paid || 0));
         setCustomerCnic(bookingData.cnic || '');
 
-        const [customerRes, venueRes] = await Promise.all([
+        const [customerRes, venueRes, inventoryRes] = await Promise.all([
           client.get(`/customers/${bookingData.customer}/`),
-          client.get(`/venues/${bookingData.venue}/`)
+          client.get(`/venues/${bookingData.venue}/`),
+          client.get(`/inventory/booking-items/?booking=${bookingId}`).catch(() => ({ data: [] })),
         ]);
         
         setCustomer(customerRes.data);
@@ -242,6 +244,16 @@ const PrintDocument = () => {
         if (!bookingData.venue_name) {
           setVenueName(venueRes.data.name || '');
         }
+
+        const inventoryRows = inventoryRes.data?.results || inventoryRes.data || [];
+        setInventoryBillLines(
+          (Array.isArray(inventoryRows) ? inventoryRows : []).map((row) => ({
+            id: row.id,
+            name: row.item_name || 'Add-on item',
+            price: Number(row.item_price || 0),
+            includeInBill: Boolean(row.include_in_bill),
+          }))
+        );
       } catch (err) {
         console.error(err);
         toast.error('Failed to load printing data');
@@ -307,14 +319,20 @@ const PrintDocument = () => {
   // Pre-calculated values based on editable state variables
   const totalAttendance = Number(gentsCount || 0) + Number(ladiesCount || 0);
   const subtotal = totalAttendance * Number(ratePerHead || 0);
-  const extraServices = (Number(overtimeHours || 0) * 5000) + 
-                        Number(kitchenCharge || 0) + 
-                        Number(decorationCharge || 0) + 
-                        Number(generatorCharge || 0);
-  const totalBeforeTax = subtotal + extraServices;
+  const overtimeAmount = Number(overtimeHours || 0) * 5000;
+  const kitchenAmount = Number(kitchenCharge || 0);
+  const decorationAmount = Number(decorationCharge || 0);
+  const generatorAmount = Number(generatorCharge || 0);
+  const extraServices = overtimeAmount + kitchenAmount + decorationAmount + generatorAmount;
+  const inventoryTotal = inventoryBillLines.reduce(
+    (sum, line) => (line.includeInBill ? sum + Number(line.price || 0) : sum),
+    0
+  );
+  const totalBeforeTax = subtotal + extraServices + inventoryTotal;
   const taxAmount = totalBeforeTax * 0.05;
   const grandTotal = totalBeforeTax + taxAmount;
   const remainingBalance = grandTotal - Number(advancePaid || 0);
+  const showBillRow = (amount) => isEditable || Number(amount || 0) > 0;
 
   const handlePrint = () => {
     window.print();
@@ -813,42 +831,67 @@ const PrintDocument = () => {
                         </td>
                         <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>{subtotal.toLocaleString()}</td>
                       </tr>
-                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '18px 24px' }}>
-                          <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'اوور ٹائم کی سہولت' : 'Overtime Booking Facility'}</span>
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>
-                            {renderInput(overtimeHours, setOvertimeHours, 'number', { width: '50px' })} {isUrdu ? 'اضافی گھنٹے' : 'hours over schedule'} @ PKR 5,000 / {isUrdu ? 'گھنٹہ' : 'hour'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>{(Number(overtimeHours) * 5000).toLocaleString()}</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '18px 24px' }}>
-                          <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'باورچی خانہ اور دیگ سیٹ اپ' : 'Catering Kitchen & Deg Setup'}</span>
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'باورچی خانے کے برتن اور عملے کی مدد' : 'Preparations setup including kitchen utensils and staff assistance'}</span>
-                        </td>
-                        <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                          {renderInput(kitchenCharge, setKitchenCharge, 'number', { width: '100px', textAlign: 'right' })}
-                        </td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '18px 24px' }}>
-                          <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'ڈیکوریشن اور تھیم' : 'Elite Decoration & Theme Setup'}</span>
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'اسٹیج، پریمیئم ٹیبل کپڑے، ایل ای ڈی بیک ڈراپ، اور پھولوں کی سجاوٹ' : 'Stage layout, premium table fabrics, LED backdrop, and floral arrangements'}</span>
-                        </td>
-                        <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                          {renderInput(decorationCharge, setDecorationCharge, 'number', { width: '100px', textAlign: 'right' })}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '18px 24px' }}>
-                          <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'جنریٹر کی سہولت' : 'Alternative Power Backups'}</span>
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'ہیوی ڈیوٹی ڈیزل جنریٹر' : 'Heavy-duty diesel generator diagnostic activation fee'}</span>
-                        </td>
-                        <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                          {renderInput(generatorCharge, setGeneratorCharge, 'number', { width: '100px', textAlign: 'right' })}
-                        </td>
-                      </tr>
+                      {showBillRow(overtimeAmount) && (
+                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '18px 24px' }}>
+                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'اوور ٹائم کی سہولت' : 'Overtime Booking Facility'}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>
+                              {renderInput(overtimeHours, setOvertimeHours, 'number', { width: '50px' })} {isUrdu ? 'اضافی گھنٹے' : 'hours over schedule'} @ PKR 5,000 / {isUrdu ? 'گھنٹہ' : 'hour'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>{overtimeAmount.toLocaleString()}</td>
+                        </tr>
+                      )}
+                      {showBillRow(kitchenAmount) && (
+                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '18px 24px' }}>
+                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'باورچی خانہ اور دیگ سیٹ اپ' : 'Catering Kitchen & Deg Setup'}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'باورچی خانے کے برتن اور عملے کی مدد' : 'Preparations setup including kitchen utensils and staff assistance'}</span>
+                          </td>
+                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
+                            {renderInput(kitchenCharge, setKitchenCharge, 'number', { width: '100px', textAlign: 'right' })}
+                          </td>
+                        </tr>
+                      )}
+                      {showBillRow(decorationAmount) && (
+                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '18px 24px' }}>
+                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'ڈیکوریشن اور تھیم' : 'Elite Decoration & Theme Setup'}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'اسٹیج، پریمیئم ٹیبل کپڑے، ایل ای ڈی بیک ڈراپ، اور پھولوں کی سجاوٹ' : 'Stage layout, premium table fabrics, LED backdrop, and floral arrangements'}</span>
+                          </td>
+                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
+                            {renderInput(decorationCharge, setDecorationCharge, 'number', { width: '100px', textAlign: 'right' })}
+                          </td>
+                        </tr>
+                      )}
+                      {showBillRow(generatorAmount) && (
+                        <tr style={{ borderBottom: inventoryBillLines.length ? '1px solid #f1f5f9' : undefined }}>
+                          <td style={{ padding: '18px 24px' }}>
+                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'جنریٹر کی سہولت' : 'Alternative Power Backups'}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'ہیوی ڈیوٹی ڈیزل جنریٹر' : 'Heavy-duty diesel generator diagnostic activation fee'}</span>
+                          </td>
+                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
+                            {renderInput(generatorCharge, setGeneratorCharge, 'number', { width: '100px', textAlign: 'right' })}
+                          </td>
+                        </tr>
+                      )}
+                      {inventoryBillLines.map((line, index) => (
+                        <tr
+                          key={line.id}
+                          style={{ borderBottom: index < inventoryBillLines.length - 1 ? '1px solid #f1f5f9' : undefined }}
+                        >
+                          <td style={{ padding: '18px 24px' }}>
+                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{line.name}</span>
+                            <span style={{ fontSize: '12px', color: '#64748b' }}>
+                              {isUrdu ? 'آئٹم کی قیمت' : 'Item price'}
+                              {!line.includeInBill ? (isUrdu ? ' · بل میں شامل نہیں' : ' · listed only') : ''}
+                            </span>
+                          </td>
+                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
+                            {Number(line.price || 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

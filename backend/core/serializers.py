@@ -10,6 +10,9 @@ class TenantSerializer(serializers.ModelSerializer):
             'sms_enabled', 'default_country_code',
             'gh_default_check_in_time', 'gh_default_check_out_time',
             'tax_rate', 'overtime_rate_per_hour', 'default_currency',
+            'show_summary_guests', 'show_summary_rate_per_head',
+            'show_summary_food_venue', 'show_summary_combined_services',
+            'show_summary_tax',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'subdomain', 'plan_type', 'created_at', 'updated_at']

@@ -161,6 +161,13 @@ const Bookings = () => {
   const [eventOptionsOpen, setEventOptionsOpen] = useState(false);
   const [taxRate, setTaxRate] = useState(0.05);
   const [overtimeRate, setOvertimeRate] = useState(5000);
+  const [summaryVisibility, setSummaryVisibility] = useState({
+    guests: true,
+    ratePerHead: true,
+    foodVenue: true,
+    combinedServices: true,
+    tax: true,
+  });
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -192,6 +199,13 @@ const Bookings = () => {
       .then((tenant) => {
         setTaxRate(taxRateFromTenant(tenant));
         setOvertimeRate(overtimeRateFromTenant(tenant));
+        setSummaryVisibility({
+          guests: tenant?.show_summary_guests !== false,
+          ratePerHead: tenant?.show_summary_rate_per_head !== false,
+          foodVenue: tenant?.show_summary_food_venue !== false,
+          combinedServices: tenant?.show_summary_combined_services !== false,
+          tax: tenant?.show_summary_tax !== false,
+        });
       })
       .catch(() => {});
   }, []);
@@ -218,18 +232,16 @@ const Bookings = () => {
                         Number(formData.generator_charge || 0);
   const inventorySummaryLines = inventoryLines
     .map((line) => {
-      if (!line.inventory_item) return null;
+      if (!line.inventory_item || !line.include_in_bill) return null;
       const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
       if (!item) return null;
-      const quantity = Number(line.quantity_used || 0);
       const unitPrice = Number(item.price_per_unit || 0);
-      if (!Number.isFinite(quantity) || quantity <= 0) return null;
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) return null;
       return {
         key: line.id || line.inventory_item,
         name: item.name,
-        quantity,
         unitPrice,
-        total: quantity * unitPrice,
+        total: unitPrice,
       };
     })
     .filter(Boolean);
@@ -392,6 +404,7 @@ const Bookings = () => {
           inventory_item: String(r.inventory_item),
           quantity_used: r.quantity_used,
           original_quantity: r.quantity_used,
+          include_in_bill: Boolean(r.include_in_bill),
         }))
       );
     } catch {
@@ -408,7 +421,10 @@ const Bookings = () => {
     for (const line of inventoryLines.filter((candidate) => candidate.id)) {
       const qty = parseInt(line.quantity_used, 10);
       if (!qty || qty <= 0) continue;
-      await client.patch(`/inventory/booking-items/${line.id}/`, { quantity_used: qty });
+      await client.patch(`/inventory/booking-items/${line.id}/`, {
+        quantity_used: qty,
+        include_in_bill: Boolean(line.include_in_bill),
+      });
     }
     await Promise.all(
       existing
@@ -423,6 +439,7 @@ const Bookings = () => {
         booking: bookingId,
         inventory_item: itemId,
         quantity_used: qty,
+        include_in_bill: Boolean(line.include_in_bill),
       });
     }
   };
@@ -468,6 +485,7 @@ const Bookings = () => {
           {
             inventory_item: String(duplicate.id),
             quantity_used: Math.min(bookingQuantity, Number(duplicate.quantity)),
+            include_in_bill: false,
           },
         ]);
         setShowManualInventory(false);
@@ -497,6 +515,7 @@ const Bookings = () => {
         {
           inventory_item: String(createdItem.id),
           quantity_used: bookingQuantity,
+          include_in_bill: false,
         },
       ]);
       setManualInventory({
@@ -1214,10 +1233,9 @@ const Bookings = () => {
                   </div>
 
                   <div className="reservation-console__guests">
-                    <div className="reservation-console__section-label"><Users size={12} /> Guest Headcount</div>
+                    <div className="reservation-console__section-label"><Users size={12} /> Guests</div>
                     <div className="reservation-console__steppers">
                       <label>
-                        <span>Guests</span>
                         <input
                           type="number"
                           min="0"
@@ -1279,66 +1297,150 @@ const Bookings = () => {
                   <h2>
                     <Package size={13} />
                     Catering, Decor &amp; Operational Add-ons
+                    {inventoryLines.length > 0 && (
+                      <span>{inventoryLines.length} item{inventoryLines.length === 1 ? '' : 's'}</span>
+                    )}
                   </h2>
                 </div>
-                <div className="reservation-console__inventory-meta">
-                  <small>Allocate stock items required for this event</small>
+                <div className="reservation-console__inventory-toolbar">
+                  <small>Allocate stock items. Tick Bill to add that item’s unit price to the booking total.</small>
+                  <div className="reservation-console__inventory-actions">
+                    <button
+                      type="button"
+                      className="reservation-console__add-inventory"
+                      disabled={availableInventoryCatalog.length === 0}
+                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false }])}
+                    >
+                      <Plus size={14} /> Add Item
+                    </button>
+                    {canManage && (
+                      <button
+                        type="button"
+                        className="reservation-console__add-inventory reservation-console__add-inventory--manual"
+                        onClick={() => setShowManualInventory((visible) => !visible)}
+                      >
+                        {showManualInventory ? 'Close New Item' : '+ Create New Item'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="reservation-console__inventory-lines">
-                  {availableInventoryCatalog.length === 0 && (
-                    <span className="reservation-console__inventory-empty">
-                      No active inventory items. Add stock from the Inventory page first.
-                    </span>
+                  {availableInventoryCatalog.length === 0 && inventoryLines.length === 0 && (
+                    <div className="reservation-console__inventory-empty">
+                      <Package size={18} />
+                      <strong>No inventory stock yet</strong>
+                      <span>Add items from Inventory, or create one here for this booking.</span>
+                    </div>
+                  )}
+                  {availableInventoryCatalog.length > 0 && inventoryLines.length === 0 && (
+                    <div className="reservation-console__inventory-empty">
+                      <Package size={18} />
+                      <strong>No add-ons selected</strong>
+                      <span>Use Add Item to allocate chairs, decor, or catering stock.</span>
+                    </div>
                   )}
                   {inventoryLines.map((line, index) => {
                     const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
                     const available = Number(item?.quantity || 0) + Number(line.original_quantity || 0);
+                    const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
+                    const billAmount = line.include_in_bill ? unitPrice : 0;
                     const selectedByOtherLines = new Set(
                       inventoryLines
                         .filter((_, itemIndex) => itemIndex !== index)
                         .map((candidate) => String(candidate.inventory_item))
                     );
                     return (
-                      <div className="reservation-console__inventory-line" key={line.id || index}>
-                        <select disabled={Boolean(line.id)} value={line.inventory_item} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], inventory_item: e.target.value, quantity_used: 1 }; setInventoryLines(next); }}>
-                          <option value="">Select item</option>
-                          {availableInventoryCatalog.map((candidate) => (
-                            <option key={candidate.id} value={candidate.id} disabled={selectedByOtherLines.has(String(candidate.id))}>
-                              {candidate.name} ({candidate.quantity} {candidate.unit})
-                            </option>
-                          ))}
-                        </select>
-                        {item && (
-                          <>
-                            <div className="reservation-console__inventory-value">
-                              <small>Item</small>
-                              <strong>{item.name}</strong>
-                            </div>
-                            <div className="reservation-console__inventory-value">
-                              <small>Unit Price</small>
-                              <strong>PKR {Number(item.price_per_unit || 0).toLocaleString()}</strong>
-                            </div>
-                            <label className="reservation-console__inventory-quantity">
-                              <span>Booking Qty</span>
-                              <input type="number" min="1" max={available || undefined} aria-label={`Quantity for ${item.name}`} value={line.quantity_used} onChange={(e) => { const next = [...inventoryLines]; next[index] = { ...next[index], quantity_used: e.target.value }; setInventoryLines(next); }} />
-                              <small>{available} available</small>
-                            </label>
-                          </>
-                        )}
-                        <button type="button" aria-label={`Remove ${item?.name || 'inventory item'}`} onClick={() => setInventoryLines(inventoryLines.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+                      <div
+                        className="reservation-console__inventory-line"
+                        key={line.id || index}
+                      >
+                        <label className="reservation-console__inventory-bill" title="Add item price to bill">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(line.include_in_bill)}
+                            disabled={!item}
+                            aria-label={`Add ${item?.name || 'item'} price to bill`}
+                            onChange={(e) => {
+                              const next = [...inventoryLines];
+                              next[index] = { ...next[index], include_in_bill: e.target.checked };
+                              setInventoryLines(next);
+                            }}
+                          />
+                          <span>Bill</span>
+                        </label>
+
+                        <label className="reservation-console__inventory-field reservation-console__inventory-field--item">
+                          <span>Item</span>
+                          <select
+                            disabled={Boolean(line.id)}
+                            value={line.inventory_item}
+                            onChange={(e) => {
+                              const next = [...inventoryLines];
+                              next[index] = {
+                                ...next[index],
+                                inventory_item: e.target.value,
+                                quantity_used: 1,
+                                include_in_bill: false,
+                              };
+                              setInventoryLines(next);
+                            }}
+                          >
+                            <option value="">Select item</option>
+                            {availableInventoryCatalog.map((candidate) => (
+                              <option
+                                key={candidate.id}
+                                value={candidate.id}
+                                disabled={selectedByOtherLines.has(String(candidate.id))}
+                              >
+                                {candidate.name} ({candidate.quantity} {candidate.unit})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div className="reservation-console__inventory-field">
+                          <span>Unit Price</span>
+                          <div className="reservation-console__inventory-readout">
+                            {item ? `PKR ${unitPrice.toLocaleString()}` : '—'}
+                          </div>
+                        </div>
+
+                        <label className="reservation-console__inventory-field reservation-console__inventory-field--qty">
+                          <span>Qty</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={available || undefined}
+                            disabled={!item}
+                            aria-label={`Quantity for ${item?.name || 'inventory item'}`}
+                            value={line.quantity_used}
+                            onChange={(e) => {
+                              const next = [...inventoryLines];
+                              next[index] = { ...next[index], quantity_used: e.target.value };
+                              setInventoryLines(next);
+                            }}
+                          />
+                        </label>
+
+                        <div className="reservation-console__inventory-field reservation-console__inventory-field--amount">
+                          <span>Bill Amount</span>
+                          <div className="reservation-console__inventory-readout reservation-console__inventory-readout--amount">
+                            {item && line.include_in_bill ? `PKR ${billAmount.toLocaleString()}` : '—'}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="reservation-console__inventory-remove"
+                          aria-label={`Remove ${item?.name || 'inventory item'}`}
+                          onClick={() => setInventoryLines(inventoryLines.filter((_, itemIndex) => itemIndex !== index))}
+                        >
+                          ×
+                        </button>
                       </div>
                     );
                   })}
                 </div>
-                {canManage && (
-                  <button
-                    type="button"
-                    className="reservation-console__add-inventory reservation-console__add-inventory--manual"
-                    onClick={() => setShowManualInventory((visible) => !visible)}
-                  >
-                    {showManualInventory ? 'Close Manual Entry' : '+ Create New Item'}
-                  </button>
-                )}
                 {showManualInventory && canManage && (
                   <div className="reservation-console__manual-inventory">
                     <div className="reservation-console__manual-inventory-head">
@@ -1444,20 +1546,27 @@ const Bookings = () => {
                 <span>● Live</span>
               </header>
               <div className="reservation-console__summary-lines">
-                <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
-                <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
-                <div><span>Food &amp; Venue</span><b>{subtotal.toLocaleString()}</b></div>
-                <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
+                {summaryVisibility.guests && (
+                  <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
+                )}
+                {summaryVisibility.ratePerHead && (
+                  <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isEdit} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
+                )}
+                {summaryVisibility.foodVenue && (
+                  <div><span>Food &amp; Venue</span><b>{subtotal.toLocaleString()}</b></div>
+                )}
+                {summaryVisibility.combinedServices && (
+                  <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
+                )}
                 {inventorySummaryLines.map((line) => (
                   <div key={line.key} className="reservation-console__summary-inventory">
-                    <span>
-                      {line.name}
-                      <em>× {line.quantity}</em>
-                    </span>
+                    <span>{line.name}</span>
                     <b>{line.total.toLocaleString()}</b>
                   </div>
                 ))}
-                <div><span>Tax ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>{taxAmount.toLocaleString()}</b></div>
+                {summaryVisibility.tax && (
+                  <div><span>Tax ({(taxRate * 100).toFixed(1).replace(/\.0$/, '')}% GST)</span><b>{taxAmount.toLocaleString()}</b></div>
+                )}
               </div>
               {isEdit && !isPosted && (
                 <label className="reservation-console__status">
@@ -1951,7 +2060,7 @@ const Bookings = () => {
                     <button
                       type="button"
                       className="btn-secondary"
-                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1 }])}
+                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false }])}
                       style={{ alignSelf: 'flex-start' }}
                     >
                       + Add inventory item

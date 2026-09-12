@@ -39,7 +39,13 @@ def compute_booking_totals(booking, tax_rate=None, overtime_rate=None):
         + decoration_charge
         + Decimal(str(booking.generator_charge or 0))
     )
-    total_before_tax = subtotal + extra_services
+    inventory_total = Decimal('0.00')
+    if getattr(booking, 'pk', None):
+        allocations = getattr(booking, 'inventory_items', None)
+        if allocations is not None:
+            for allocation in allocations.select_related('inventory_item').filter(include_in_bill=True):
+                inventory_total += Decimal(str(allocation.inventory_item.price_per_unit or 0))
+    total_before_tax = subtotal + extra_services + inventory_total
     discount = Decimal(str(getattr(booking, 'discount_amount', 0) or 0))
     if discount < 0:
         discount = Decimal('0.00')
@@ -70,6 +76,7 @@ def compute_booking_totals(booking, tax_rate=None, overtime_rate=None):
         'guest_count': guest_count,
         'subtotal': subtotal,
         'extra_services': extra_services,
+        'inventory_total': inventory_total,
         'decoration_charge': decoration_charge,
         'overtime_charge': overtime_charge,
         'kitchen_charge': kitchen_charge,

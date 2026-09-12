@@ -33,8 +33,11 @@ class BookingInventoryItemViewSet(TenantQuerysetMixin, TenantAssignMixin, viewse
         return super().get_queryset().select_related('booking', 'inventory_item')
 
     def perform_destroy(self, instance):
+        booking = instance.booking
         InventoryService.reverse_booking_allocation(instance, user=self.request.user)
         instance.delete()
+        if booking is not None:
+            booking.save()
 
 
 class InventoryTransactionViewSet(TenantQuerysetMixin, viewsets.ReadOnlyModelViewSet):

@@ -37,6 +37,10 @@ class BookingInventoryItem(models.Model):
     booking = models.ForeignKey('bookings.Booking', on_delete=models.CASCADE, related_name='inventory_items')
     inventory_item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='booking_allocations')
     quantity_used = models.PositiveIntegerField(default=1)
+    include_in_bill = models.BooleanField(
+        default=False,
+        help_text='When true, the item unit price is added to the booking bill (quantity is for stock only).',
+    )
     notes = models.CharField(max_length=255, blank=True, default='')
 
     class Meta:

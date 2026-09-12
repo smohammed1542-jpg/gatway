@@ -30,6 +30,12 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 class BookingInventoryItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='inventory_item.name', read_only=True)
     item_unit = serializers.CharField(source='inventory_item.unit', read_only=True)
+    item_price = serializers.DecimalField(
+        source='inventory_item.price_per_unit',
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+    )
     booking_event = serializers.CharField(source='booking.event_name', read_only=True)
 
     class Meta:
@@ -53,6 +59,12 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    @staticmethod
+    def _refresh_booking_totals(booking):
+        if not booking:
+            return
+        booking.save()
+
     def create(self, validated_data):
         request = self.context.get('request')
         booking = validated_data['booking']
@@ -65,6 +77,7 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
         InventoryService.apply_booking_allocation(
             obj, previous_qty=0, user=request.user if request else None
         )
+        self._refresh_booking_totals(obj.booking)
         return obj
 
     def update(self, instance, validated_data):
@@ -74,6 +87,7 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         user = request.user if request else None
         InventoryService.apply_booking_allocation(obj, previous_qty=previous, user=user)
+        self._refresh_booking_totals(obj.booking)
         return obj
 
 

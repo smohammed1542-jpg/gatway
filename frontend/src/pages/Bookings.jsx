@@ -102,7 +102,6 @@ const Bookings = () => {
   const [manualInventory, setManualInventory] = useState({
     name: '',
     price_per_unit: '',
-    booking_quantity: '1',
     isNew: false,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -297,7 +296,7 @@ const Bookings = () => {
     setManualInventory({
       name: '',
       price_per_unit: '',
-      booking_quantity: '1',
+      isNew: false,
     });
     setScannedClient(null);
     setScanProcessing(false);
@@ -457,17 +456,13 @@ const Bookings = () => {
     if (!canManage || savingManualInventory) return;
 
     const name = manualInventory.name.trim();
-    const bookingQuantity = Number(manualInventory.booking_quantity);
-    const stockQuantity = bookingQuantity;
     const unit = 'units';
     const pricePerUnit = Number(manualInventory.price_per_unit || 0);
+    const unlimitedStock = 999999;
+    const bookingQuantity = 1;
 
     if (!name) {
       toast.error('Item name is required.');
-      return;
-    }
-    if (!Number.isInteger(bookingQuantity) || bookingQuantity <= 0) {
-      toast.error('Quantity must be a whole number greater than zero.');
       return;
     }
     if (!Number.isFinite(pricePerUnit) || pricePerUnit < 0) {
@@ -504,12 +499,12 @@ const Bookings = () => {
       const response = await client.post('/inventory/items/', {
         name,
         category: 'OTHER',
-        quantity: stockQuantity,
+        quantity: unlimitedStock,
         unit,
         price_per_unit: pricePerUnit,
-        status: stockQuantity <= 5 ? 'LOW_STOCK' : 'IN_STOCK',
+        status: 'IN_STOCK',
         last_restocked: new Date().toISOString().split('T')[0],
-        description: 'Created from booking reservation',
+        description: 'Created from booking reservation (unlimited stock)',
       });
       const createdItem = response.data;
       setInventoryCatalog((current) => [...current, createdItem]);
@@ -524,7 +519,6 @@ const Bookings = () => {
       setManualInventory({
         name: '',
         price_per_unit: '',
-        booking_quantity: '1',
         isNew: false,
       });
       setShowManualInventory(false);
@@ -1391,7 +1385,7 @@ const Bookings = () => {
                                 value={candidate.id}
                                 disabled={selectedByOtherLines.has(String(candidate.id))}
                               >
-                                {candidate.name} ({candidate.quantity} {candidate.unit})
+                                {candidate.name} ({Number(candidate.quantity) >= 999999 ? 'Unlimited' : `${candidate.quantity} ${candidate.unit}`})
                               </option>
                             ))}
                           </select>
@@ -1444,7 +1438,7 @@ const Bookings = () => {
                     <div className="reservation-console__manual-inventory-head">
                       <div>
                         <strong>Create Inventory Item</strong>
-                        <small>It will be saved to Inventory and selected for this booking.</small>
+                        <small>Saved with unlimited stock. Set Qty on the booking line after adding.</small>
                       </div>
                       <button type="button" aria-label="Close manual inventory form" onClick={() => setShowManualInventory(false)}>×</button>
                     </div>
@@ -1486,7 +1480,7 @@ const Bookings = () => {
                           <option value="">Select item</option>
                           {availableInventoryCatalog.map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.name} — {item.quantity} {item.unit}
+                              {item.name} — {Number(item.quantity) >= 999999 ? 'Unlimited' : `${item.quantity} ${item.unit}`}
                             </option>
                           ))}
                           <option value="__new__">+ Create new item</option>
@@ -1506,10 +1500,6 @@ const Bookings = () => {
                       <label>
                         <span>Price</span>
                         <input type="number" min="0" step="0.01" readOnly={Boolean(manualInventoryExistingItem)} placeholder="0.00" value={manualInventory.price_per_unit} onChange={(event) => setManualInventory({ ...manualInventory, price_per_unit: event.target.value })} />
-                      </label>
-                      <label>
-                        <span>Quantity</span>
-                        <input type="number" min="1" step="1" value={manualInventory.booking_quantity} onChange={(event) => setManualInventory({ ...manualInventory, booking_quantity: event.target.value })} />
                       </label>
                       <button type="button" disabled={savingManualInventory} onClick={handleCreateManualInventory}>
                         {savingManualInventory

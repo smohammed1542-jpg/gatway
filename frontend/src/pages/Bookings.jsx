@@ -482,12 +482,12 @@ const Bookings = () => {
       const alreadyAdded = inventoryLines.some(
         (line) => String(line.inventory_item) === String(duplicate.id)
       );
-      if (!alreadyAdded && Number(duplicate.quantity || 0) > 0) {
+      if (!alreadyAdded) {
         setInventoryLines((current) => [
           ...current,
           {
             inventory_item: String(duplicate.id),
-            quantity_used: Math.min(bookingQuantity, Number(duplicate.quantity)),
+            quantity_used: bookingQuantity,
             include_in_bill: false,
           },
         ]);
@@ -719,12 +719,6 @@ const Bookings = () => {
       if (!Number.isInteger(quantity) || quantity < 1) {
         setBookingError(`Enter a valid quantity for ${item.name}.`);
         toast.error('Invalid inventory quantity');
-        return;
-      }
-      const available = Number(item.quantity || 0) + Number(line.original_quantity || 0);
-      if (quantity > available) {
-        setBookingError(`Only ${available} ${item.unit || 'units'} of ${item.name} are available.`);
-        toast.error('Inventory quantity exceeds stock');
         return;
       }
     }
@@ -1344,7 +1338,6 @@ const Bookings = () => {
                   )}
                   {inventoryLines.map((line, index) => {
                     const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
-                    const available = Number(item?.quantity || 0) + Number(line.original_quantity || 0);
                     const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
                     const quantity = Number(line.quantity_used || 0);
                     const billAmount = line.include_in_bill && Number.isFinite(quantity) && quantity > 0
@@ -1416,7 +1409,6 @@ const Bookings = () => {
                           <input
                             type="number"
                             min="1"
-                            max={available || undefined}
                             disabled={!item}
                             aria-label={`Quantity for ${item?.name || 'inventory item'}`}
                             value={line.quantity_used}

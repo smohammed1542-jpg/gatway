@@ -235,13 +235,16 @@ const Bookings = () => {
       if (!line.inventory_item || !line.include_in_bill) return null;
       const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
       if (!item) return null;
+      const quantity = Number(line.quantity_used || 0);
       const unitPrice = Number(item.price_per_unit || 0);
       if (!Number.isFinite(unitPrice) || unitPrice < 0) return null;
+      if (!Number.isFinite(quantity) || quantity <= 0) return null;
       return {
         key: line.id || line.inventory_item,
         name: item.name,
+        quantity,
         unitPrice,
-        total: unitPrice,
+        total: quantity * unitPrice,
       };
     })
     .filter(Boolean);
@@ -1343,7 +1346,10 @@ const Bookings = () => {
                     const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
                     const available = Number(item?.quantity || 0) + Number(line.original_quantity || 0);
                     const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
-                    const billAmount = line.include_in_bill ? unitPrice : 0;
+                    const quantity = Number(line.quantity_used || 0);
+                    const billAmount = line.include_in_bill && Number.isFinite(quantity) && quantity > 0
+                      ? unitPrice * quantity
+                      : 0;
                     const selectedByOtherLines = new Set(
                       inventoryLines
                         .filter((_, itemIndex) => itemIndex !== index)

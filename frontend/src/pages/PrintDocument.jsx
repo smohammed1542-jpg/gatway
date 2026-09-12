@@ -247,12 +247,18 @@ const PrintDocument = () => {
 
         const inventoryRows = inventoryRes.data?.results || inventoryRes.data || [];
         setInventoryBillLines(
-          (Array.isArray(inventoryRows) ? inventoryRows : []).map((row) => ({
-            id: row.id,
-            name: row.item_name || 'Add-on item',
-            price: Number(row.item_price || 0),
-            includeInBill: Boolean(row.include_in_bill),
-          }))
+          (Array.isArray(inventoryRows) ? inventoryRows : []).map((row) => {
+            const unitPrice = Number(row.item_price || 0);
+            const quantity = Number(row.quantity_used || 0);
+            return {
+              id: row.id,
+              name: row.item_name || 'Add-on item',
+              unitPrice,
+              quantity,
+              price: unitPrice * (Number.isFinite(quantity) && quantity > 0 ? quantity : 0),
+              includeInBill: Boolean(row.include_in_bill),
+            };
+          })
         );
       } catch (err) {
         console.error(err);

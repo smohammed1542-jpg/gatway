@@ -39,7 +39,7 @@ class BookingInventoryItem(models.Model):
     quantity_used = models.PositiveIntegerField(default=1)
     include_in_bill = models.BooleanField(
         default=False,
-        help_text='When true, the item unit price is added to the booking bill (quantity is for stock only).',
+        help_text='When true, quantity × unit price is added to the booking bill.',
     )
     notes = models.CharField(max_length=255, blank=True, default='')
 

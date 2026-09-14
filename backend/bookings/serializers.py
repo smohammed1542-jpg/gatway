@@ -22,7 +22,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'customer': {'required': False, 'allow_null': True},
             'venue': {'required': False, 'allow_null': True},
             'event_name': {'required': False, 'allow_blank': True},
-            'slot': {'required': False, 'allow_blank': True},
+            'slot': {'required': False, 'allow_blank': True, 'allow_null': True},
             'event_date': {'required': False, 'allow_null': True},
         }
 
@@ -51,8 +51,8 @@ class BookingSerializer(serializers.ModelSerializer):
         for field in ('customer', 'venue', 'decoration_package'):
             if normalized.get(field) in ('', 'null', 'undefined'):
                 normalized[field] = None
-        if normalized.get('slot') is None:
-            normalized['slot'] = ''
+        if normalized.get('slot') in ('', None, 'null', 'undefined'):
+            normalized['slot'] = None
         if normalized.get('event_name') in (None, ''):
             status = normalized.get('booking_status') or getattr(self.instance, 'booking_status', 'PENDING')
             if status == 'DRAFT':

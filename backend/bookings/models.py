@@ -48,7 +48,13 @@ class Booking(models.Model):
     booking_id = models.CharField(max_length=50, blank=True, unique=True, null=True)
     booking_date = models.DateField(default=datetime.date.today)
     event_date = models.DateField(null=True, blank=True)
-    slot = models.CharField(max_length=20, choices=SLOT_CHOICES, blank=True, default='')
+    slot = models.CharField(
+        max_length=20,
+        choices=SLOT_CHOICES,
+        blank=True,
+        null=True,
+        default=None,
+    )
     custom_start_time = models.TimeField(null=True, blank=True)
     custom_end_time = models.TimeField(null=True, blank=True)
     

@@ -818,7 +818,7 @@ const Bookings = () => {
         booking_status: statusOverride || formData.booking_status,
         event_name: formData.event_name?.trim() || (isDraft ? 'Draft' : formData.event_name),
         event_date: formData.event_date || null,
-        slot: formData.slot || '',
+        slot: formData.slot || null,
         cnic: bookingCnic,
         customer: finalCustomerId ? parseInt(finalCustomerId, 10) : null,
         venue: formData.venue ? parseInt(formData.venue, 10) : null,

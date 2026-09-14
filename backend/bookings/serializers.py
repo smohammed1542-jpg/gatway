@@ -45,7 +45,7 @@ class BookingSerializer(serializers.ModelSerializer):
         # HTML clients commonly submit hidden optional time inputs as empty strings.
         # Normalize them before DRF's TimeField parsing runs.
         normalized = data.copy()
-        for field in ('custom_start_time', 'custom_end_time'):
+        for field in ('custom_start_time', 'custom_end_time', 'event_date', 'booking_date'):
             if normalized.get(field) == '':
                 normalized[field] = None
         for field in ('customer', 'venue', 'decoration_package'):
@@ -53,9 +53,12 @@ class BookingSerializer(serializers.ModelSerializer):
                 normalized[field] = None
         if normalized.get('slot') in ('', None, 'null', 'undefined'):
             normalized['slot'] = None
+        if not normalized.get('booking_date'):
+            from datetime import date as date_cls
+            normalized['booking_date'] = date_cls.today().isoformat()
         if normalized.get('event_name') in (None, ''):
             status = normalized.get('booking_status') or getattr(self.instance, 'booking_status', 'PENDING')
-            if status == 'DRAFT':
+            if status in ('DRAFT', 'PENDING'):
                 normalized['event_name'] = 'Draft'
         return super().to_internal_value(normalized)
 
@@ -65,11 +68,19 @@ class BookingSerializer(serializers.ModelSerializer):
             'booking_status',
             getattr(instance, 'booking_status', 'PENDING'),
         )
-        is_draft = merged_status == 'DRAFT'
+        # DRAFT always soft. Incomplete PENDING (legacy clients) also soft.
+        if merged_status == 'DRAFT':
+            is_draft = True
+        elif merged_status == 'PENDING':
+            cust = data.get('customer', getattr(instance, 'customer', None) if instance else None)
+            ven = data.get('venue', getattr(instance, 'venue', None) if instance else None)
+            is_draft = not cust or not ven
+        else:
+            is_draft = False
 
         venue = data.get('venue', getattr(instance, 'venue', None) if instance else None)
         event_date = data.get('event_date', getattr(instance, 'event_date', None) if instance else None)
-        slot = data.get('slot', getattr(instance, 'slot', '') if instance else '')
+        slot = data.get('slot', getattr(instance, 'slot', None) if instance else None) or ''
         custom_start_time = data.get(
             'custom_start_time',
             getattr(instance, 'custom_start_time', None) if instance else None,

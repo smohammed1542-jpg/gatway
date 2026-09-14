@@ -23,6 +23,7 @@ class Booking(models.Model):
     )
 
     SLOT_CHOICES = (
+        ('', 'Not set'),
         ('morning', 'Morning'),
         ('evening', 'Evening'),
         ('custom', 'Custom time'),

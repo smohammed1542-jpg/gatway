@@ -814,27 +814,28 @@ const Bookings = () => {
         ? (newCustomer.cnic || '')
         : (selectedCustomer?.cnic || '');
       const payload = {
-        ...formData,
+        booking_id: formData.booking_id || undefined,
         booking_status: statusOverride || formData.booking_status,
         event_name: formData.event_name?.trim() || (isDraft ? 'Draft' : formData.event_name),
+        booking_date: formData.booking_date || new Date().toISOString().split('T')[0],
         event_date: formData.event_date || null,
         slot: formData.slot || null,
-        cnic: bookingCnic,
+        cnic: bookingCnic || '',
         customer: finalCustomerId ? parseInt(finalCustomerId, 10) : null,
         venue: formData.venue ? parseInt(formData.venue, 10) : null,
         custom_start_time: formData.slot === 'custom' ? (formData.custom_start_time || null) : null,
         custom_end_time: formData.slot === 'custom' ? (formData.custom_end_time || null) : null,
-        gents_count: parseInt(formData.gents_count || 0, 10),
-        ladies_count: parseInt(formData.ladies_count || 0, 10),
-        rate_per_head: parseFloat(formData.rate_per_head || 0),
-        overtime_hours: parseFloat(formData.overtime_hours || 0),
-        kitchen_charge: parseFloat(formData.kitchen_charge || 0),
-        decoration_charge: parseFloat(formData.decoration_charge || 0),
+        gents_count: parseInt(formData.gents_count || 0, 10) || 0,
+        ladies_count: parseInt(formData.ladies_count || 0, 10) || 0,
+        rate_per_head: parseFloat(formData.rate_per_head || 0) || 0,
+        overtime_hours: parseFloat(formData.overtime_hours || 0) || 0,
+        kitchen_charge: parseFloat(formData.kitchen_charge || 0) || 0,
+        decoration_charge: parseFloat(formData.decoration_charge || 0) || 0,
         decoration_package: selectedDecorationId ? parseInt(selectedDecorationId, 10) : null,
-        deg_count: parseInt(formData.deg_count || 0, 10),
-        generator_charge: parseFloat(formData.generator_charge || 0),
-        advance_paid: parseFloat(formData.advance_paid || 0),
-        total_price: parseFloat(grandTotal),
+        deg_count: parseInt(formData.deg_count || 0, 10) || 0,
+        generator_charge: parseFloat(formData.generator_charge || 0) || 0,
+        advance_paid: parseFloat(formData.advance_paid || 0) || 0,
+        total_price: parseFloat(grandTotal) || 0,
       };
 
       let bookingId = editingId;
@@ -851,7 +852,7 @@ const Bookings = () => {
         );
       }
 
-      if (bookingId) {
+      if (bookingId && filledInventoryLines.length > 0) {
         try {
           await syncBookingInventory(bookingId, filledInventoryLines);
         } catch {
@@ -864,9 +865,19 @@ const Bookings = () => {
       fetchData();
     } catch (err) {
       const errData = err.response?.data;
-      const msg = errData?.non_field_errors?.[0]
-        || (typeof Object.values(errData || {})?.[0] === 'object' ? Object.values(errData)?.[0]?.[0] : Object.values(errData)?.[0])
-        || 'Failed to save booking details.';
+      let msg = 'Failed to save booking details.';
+      if (typeof errData === 'string') {
+        msg = errData;
+      } else if (errData?.detail) {
+        msg = Array.isArray(errData.detail) ? errData.detail[0] : String(errData.detail);
+      } else if (errData?.non_field_errors?.[0]) {
+        msg = errData.non_field_errors[0];
+      } else if (errData && typeof errData === 'object') {
+        const firstKey = Object.keys(errData)[0];
+        const firstVal = errData[firstKey];
+        const text = Array.isArray(firstVal) ? firstVal[0] : firstVal;
+        msg = firstKey && text ? `${firstKey}: ${text}` : String(text || msg);
+      }
       setBookingError(msg);
       toast.error(msg);
     } finally {

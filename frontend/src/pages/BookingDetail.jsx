@@ -31,6 +31,7 @@ const slotLabel = (slot) =>
   slot === 'morning' ? 'Morning (12pm – 4pm)' : 'Evening (7pm – 11pm)';
 
 const STATUS_STYLE = {
+  DRAFT: { bg: '#e2e8f0', color: '#475569', label: 'Draft' },
   PENDING: { bg: '#fef3c7', color: '#92400e', label: 'Pending' },
   CONFIRMED: { bg: '#dcfce7', color: '#166534', label: 'Confirmed' },
   COMPLETED: { bg: '#dbeafe', color: '#1e40af', label: 'Completed' },

@@ -17,7 +17,7 @@ from core.page_maintenance import page_maintenance_payload
 from core.permissions import IsAdminOrManager, IsAdminOrManagerOrStaffWrite, IsTenantOwner, IsMarriageHallApp
 from .models import Booking, MarriageHallPageVisibility
 from .serializers import BookingSerializer
-from .page_visibility import ensure_tenant_hall_pages, HALL_PAGE_KEYS
+from .page_visibility import ensure_tenant_hall_pages, HALL_MODULE_KEYS, HALL_PAGE_KEYS
 
 
 class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
@@ -70,17 +70,20 @@ class MarriageHallPageVisibilityView(APIView):
         ensure_tenant_hall_pages(tenant)
         rows = MarriageHallPageVisibility.objects.filter(tenant=tenant).order_by('sort_order', 'page_key')
         pages = []
+        modules = []
         for row in rows:
-            if row.page_key not in HALL_PAGE_KEYS:
-                continue
             maint = page_maintenance_payload(row)
-            pages.append({
+            item = {
                 'key': row.page_key,
                 'label': row.label,
                 'is_visible': row.is_visible,
                 **maint,
-            })
-        return Response({'pages': pages})
+            }
+            if row.page_key in HALL_MODULE_KEYS:
+                modules.append(item)
+            elif row.page_key in HALL_PAGE_KEYS:
+                pages.append(item)
+        return Response({'pages': pages, 'modules': modules})
 
 
 class MarriageHallReportsView(APIView):

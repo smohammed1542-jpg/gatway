@@ -3,11 +3,21 @@ from django.urls import path, include, re_path
 from django.conf import settings
 import os
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect
 from django.views.static import serve
 from django.contrib.staticfiles.views import serve as staticfiles_serve
 from django.views.decorators.cache import never_cache
 
 from core.media_views import serve_protected_media
+
+
+def redirect_admin_slash(request):
+    """SPA catch-all matches /admin before APPEND_SLASH can redirect to /admin/."""
+    qs = request.META.get('QUERY_STRING')
+    target = '/admin/'
+    if qs:
+        target = f'{target}?{qs}'
+    return redirect(target, permanent=False)
 
 FRONTEND_DIST = os.path.normpath(os.path.join(settings.BASE_DIR, '..', 'frontend', 'dist'))
 FRONTEND_ASSETS = os.path.join(FRONTEND_DIST, 'assets')
@@ -88,6 +98,7 @@ def _should_serve_frontend():
     return os.path.exists(FRONTEND_INDEX)
 
 urlpatterns = [
+    path('admin', redirect_admin_slash),
     path('admin/', admin.site.urls),
     path('api/health/', health_check),
     path('api/auth/', include('authentication.urls')),

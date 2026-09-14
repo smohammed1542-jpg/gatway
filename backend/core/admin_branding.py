@@ -31,6 +31,7 @@ ADMIN_MODEL_ORDER = {
     'bookings': [
         'marriagehallpagelive',
         'marriagehallpagemaintenance',
+        'marriagehallbooksummary',
         'booking',
     ],
     'customers': ['customer'],

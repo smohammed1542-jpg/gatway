@@ -7,16 +7,39 @@ from django.conf import settings
 from django.utils import timezone
 import datetime
 
+
 class BookingSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(source='customer.__str__', read_only=True)
-    venue_name = serializers.CharField(source='venue.name', read_only=True)
-    venue_capacity = serializers.IntegerField(source='venue.capacity', read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    venue_name = serializers.SerializerMethodField()
+    venue_capacity = serializers.SerializerMethodField()
     decoration_package_name = serializers.CharField(source='decoration_package.name', read_only=True, allow_null=True)
 
     class Meta:
         model = Booking
         fields = '__all__'
         read_only_fields = ['tenant', 'created_by', 'remaining_balance', 'payment_status', 'guest_count', 'updated_at']
+        extra_kwargs = {
+            'customer': {'required': False, 'allow_null': True},
+            'venue': {'required': False, 'allow_null': True},
+            'event_name': {'required': False, 'allow_blank': True},
+            'slot': {'required': False, 'allow_blank': True},
+            'event_date': {'required': False, 'allow_null': True},
+        }
+
+    def get_customer_name(self, obj):
+        if not obj.customer_id:
+            return 'Draft — no client'
+        return str(obj.customer)
+
+    def get_venue_name(self, obj):
+        if not obj.venue_id:
+            return '—'
+        return obj.venue.name
+
+    def get_venue_capacity(self, obj):
+        if not obj.venue_id:
+            return None
+        return obj.venue.capacity
 
     def to_internal_value(self, data):
         # HTML clients commonly submit hidden optional time inputs as empty strings.
@@ -25,20 +48,56 @@ class BookingSerializer(serializers.ModelSerializer):
         for field in ('custom_start_time', 'custom_end_time'):
             if normalized.get(field) == '':
                 normalized[field] = None
+        for field in ('customer', 'venue', 'decoration_package'):
+            if normalized.get(field) in ('', 'null', 'undefined'):
+                normalized[field] = None
+        if normalized.get('slot') is None:
+            normalized['slot'] = ''
+        if normalized.get('event_name') in (None, ''):
+            status = normalized.get('booking_status') or getattr(self.instance, 'booking_status', 'PENDING')
+            if status == 'DRAFT':
+                normalized['event_name'] = 'Draft'
         return super().to_internal_value(normalized)
 
     def validate(self, data):
-        venue = data.get('venue')
-        event_date = data.get('event_date')
-        slot = data.get('slot', 'morning')
-        custom_start_time = data.get('custom_start_time')
-        custom_end_time = data.get('custom_end_time')
-        gents_count = data.get('gents_count', 0)
-        ladies_count = data.get('ladies_count', 0)
-        guest_count = gents_count + ladies_count
+        instance = self.instance
+        merged_status = data.get(
+            'booking_status',
+            getattr(instance, 'booking_status', 'PENDING'),
+        )
+        is_draft = merged_status == 'DRAFT'
+
+        venue = data.get('venue', getattr(instance, 'venue', None) if instance else None)
+        event_date = data.get('event_date', getattr(instance, 'event_date', None) if instance else None)
+        slot = data.get('slot', getattr(instance, 'slot', '') if instance else '')
+        custom_start_time = data.get(
+            'custom_start_time',
+            getattr(instance, 'custom_start_time', None) if instance else None,
+        )
+        custom_end_time = data.get(
+            'custom_end_time',
+            getattr(instance, 'custom_end_time', None) if instance else None,
+        )
+        gents_count = data.get('gents_count', getattr(instance, 'gents_count', 0) if instance else 0)
+        ladies_count = data.get('ladies_count', getattr(instance, 'ladies_count', 0) if instance else 0)
+        guest_count = (gents_count or 0) + (ladies_count or 0)
+        customer = data.get('customer', getattr(instance, 'customer', None) if instance else None)
+
+        if not is_draft:
+            if not customer:
+                raise serializers.ValidationError({'customer': 'Customer is required to confirm a booking.'})
+            if not venue:
+                raise serializers.ValidationError({'venue': 'Venue is required to confirm a booking.'})
+            if not event_date:
+                raise serializers.ValidationError({'event_date': 'Event date is required to confirm a booking.'})
+            if not slot:
+                raise serializers.ValidationError({'slot': 'Time slot is required to confirm a booking.'})
+            event_name = data.get('event_name', getattr(instance, 'event_name', '') if instance else '')
+            if not str(event_name or '').strip():
+                raise serializers.ValidationError({'event_name': 'Event title is required to confirm a booking.'})
 
         # Determine start_date and end_date from event_date and slot
-        if event_date:
+        if event_date and slot:
             if slot == 'morning':
                 start_dt = datetime.datetime.combine(event_date, datetime.time(12, 0))
                 end_dt = datetime.datetime.combine(event_date, datetime.time(16, 0))
@@ -51,14 +110,19 @@ class BookingSerializer(serializers.ModelSerializer):
                 data['custom_end_time'] = None
             else:
                 if not custom_start_time or not custom_end_time:
-                    raise serializers.ValidationError({
-                        'custom_start_time': 'Start and end times are required for a custom slot.'
-                    })
-                start_dt = datetime.datetime.combine(event_date, custom_start_time)
-                end_dt = datetime.datetime.combine(event_date, custom_end_time)
-                if end_dt <= start_dt:
-                    end_dt += timedelta(days=1)
-            
+                    if is_draft:
+                        start_dt = datetime.datetime.combine(event_date, datetime.time(12, 0))
+                        end_dt = datetime.datetime.combine(event_date, datetime.time(16, 0))
+                    else:
+                        raise serializers.ValidationError({
+                            'custom_start_time': 'Start and end times are required for a custom slot.'
+                        })
+                else:
+                    start_dt = datetime.datetime.combine(event_date, custom_start_time)
+                    end_dt = datetime.datetime.combine(event_date, custom_end_time)
+                    if end_dt <= start_dt:
+                        end_dt += timedelta(days=1)
+
             if settings.USE_TZ:
                 current_tz = timezone.get_current_timezone()
                 data['start_date'] = timezone.make_aware(start_dt, current_tz)
@@ -66,6 +130,11 @@ class BookingSerializer(serializers.ModelSerializer):
             else:
                 data['start_date'] = start_dt
                 data['end_date'] = end_dt
+        elif is_draft and not event_date:
+            # Incomplete draft — keep placeholder window so DB constraints stay valid.
+            now = timezone.now()
+            data.setdefault('start_date', now)
+            data.setdefault('end_date', now + timedelta(hours=1))
 
         start_date = data.get('start_date')
         end_date = data.get('end_date')
@@ -91,32 +160,32 @@ class BookingSerializer(serializers.ModelSerializer):
                 "Start date must be before end date."
             )
 
-        # ── Capacity Check ──
-        if venue and guest_count > venue.capacity:
+        # Capacity / overlap only for non-draft bookings with a hall
+        if not is_draft and venue and guest_count > venue.capacity:
             raise serializers.ValidationError(
                 f"Guest count ({guest_count}) exceeds the capacity of '{venue.name}' "
                 f"which is {venue.capacity} seats. Please reduce guests or choose a bigger hall."
             )
 
-        # ── Overlap / Conflict Check ──
-        overlapping_bookings = Booking.objects.filter(
-            venue=venue,
-            booking_status__in=['PENDING', 'CONFIRMED'],
-        ).filter(
-            Q(start_date__lt=end_date, end_date__gt=start_date)
-        )
-
-        if self.instance:
-            overlapping_bookings = overlapping_bookings.exclude(id=self.instance.id)
-
-        if overlapping_bookings.exists():
-            conflict = overlapping_bookings.first()
-            conflict_start = conflict.start_date.strftime('%d %b %Y, %I:%M %p')
-            conflict_end = conflict.end_date.strftime('%d %b %Y, %I:%M %p')
-            raise serializers.ValidationError(
-                f"'{venue.name}' is already booked from {conflict_start} to {conflict_end} "
-                f"for '{conflict.event_name}'. Please choose different dates or another hall."
+        if not is_draft and venue and start_date and end_date:
+            overlapping_bookings = Booking.objects.filter(
+                venue=venue,
+                booking_status__in=['PENDING', 'CONFIRMED'],
+            ).filter(
+                Q(start_date__lt=end_date, end_date__gt=start_date)
             )
+
+            if self.instance:
+                overlapping_bookings = overlapping_bookings.exclude(id=self.instance.id)
+
+            if overlapping_bookings.exists():
+                conflict = overlapping_bookings.first()
+                conflict_start = conflict.start_date.strftime('%d %b %Y, %I:%M %p')
+                conflict_end = conflict.end_date.strftime('%d %b %Y, %I:%M %p')
+                raise serializers.ValidationError(
+                    f"'{venue.name}' is already booked from {conflict_start} to {conflict_end} "
+                    f"for '{conflict.event_name}'. Please choose different dates or another hall."
+                )
 
         return data
 
@@ -152,4 +221,3 @@ class BookingSerializer(serializers.ModelSerializer):
                 recorded_by=user if user and user.is_authenticated else None,
             )
         return booking
-

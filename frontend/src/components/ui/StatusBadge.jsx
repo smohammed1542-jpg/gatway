@@ -2,6 +2,7 @@ const STATUS_MAP = {
   CONFIRMED: 'confirmed',
   COMPLETED: 'completed',
   PAID: 'paid',
+  DRAFT: 'default',
   PENDING: 'pending',
   PARTIAL: 'partial',
   UNPAID: 'unpaid',

@@ -9,6 +9,7 @@ import random
 
 class Booking(models.Model):
     STATUS_CHOICES = (
+        ('DRAFT', 'Draft'),
         ('PENDING', 'Pending'),
         ('CONFIRMED', 'Confirmed'),
         ('COMPLETED', 'Completed'),
@@ -28,14 +29,26 @@ class Booking(models.Model):
     )
     
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='bookings', null=True, blank=True)
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='bookings')
-    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name='bookings')
-    
-    event_name = models.CharField(max_length=255)
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        null=True,
+        blank=True,
+    )
+    venue = models.ForeignKey(
+        Venue,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        null=True,
+        blank=True,
+    )
+
+    event_name = models.CharField(max_length=255, blank=True, default='Draft')
     booking_id = models.CharField(max_length=50, blank=True, unique=True, null=True)
     booking_date = models.DateField(default=datetime.date.today)
     event_date = models.DateField(null=True, blank=True)
-    slot = models.CharField(max_length=20, choices=SLOT_CHOICES, default='morning')
+    slot = models.CharField(max_length=20, choices=SLOT_CHOICES, blank=True, default='')
     custom_start_time = models.TimeField(null=True, blank=True)
     custom_end_time = models.TimeField(null=True, blank=True)
     
@@ -213,6 +226,15 @@ class MarriageHallPageLive(MarriageHallPageVisibility):
         proxy = True
         verbose_name = 'MH page — show in menu'
         verbose_name_plural = '1 · MH pages — Show in menu (live)'
+
+
+class MarriageHallBookSummary(MarriageHallPageVisibility):
+    """Proxy for admin: booking summary line show/hide only."""
+
+    class Meta:
+        proxy = True
+        verbose_name = 'Book Summary line'
+        verbose_name_plural = '3 · Book Summary — hide / show lines'
 
 
 class MarriageHallPageMaintenance(MarriageHallPageVisibility):

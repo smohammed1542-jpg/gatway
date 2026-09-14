@@ -25,19 +25,6 @@ class TenantAdmin(AdminOnlyAdminMixin, admin.ModelAdmin):
                 '<strong>Marriage Hall</strong> page show/hide and maintenance times for this tenant.'
             ),
         }),
-        ('Booking summary lines', {
-            'fields': (
-                'show_summary_guests',
-                'show_summary_rate_per_head',
-                'show_summary_food_venue',
-                'show_summary_combined_services',
-                'show_summary_tax',
-            ),
-            'description': (
-                'Show or hide booking summary rows on the reservation screen. '
-                'Totals still calculate in the background even if a line is hidden.'
-            ),
-        }),
         ('Timestamps', {
             'classes': ('collapse',),
             'fields': ('created_at', 'updated_at'),
@@ -46,12 +33,17 @@ class TenantAdmin(AdminOnlyAdminMixin, admin.ModelAdmin):
 
     def get_inlines(self, request, obj):
         from guesthouse.admin import GuestHousePageLiveInline, GuestHousePageMaintenanceInline
-        from bookings.admin import MarriageHallPageLiveInline, MarriageHallPageMaintenanceInline
+        from bookings.admin import (
+            MarriageHallBookSummaryInline,
+            MarriageHallPageLiveInline,
+            MarriageHallPageMaintenanceInline,
+        )
         return [
             GuestHousePageLiveInline,
             GuestHousePageMaintenanceInline,
             MarriageHallPageLiveInline,
             MarriageHallPageMaintenanceInline,
+            MarriageHallBookSummaryInline,
         ]
 
     def get_object(self, request, object_id, from_field=None):

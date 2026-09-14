@@ -8,10 +8,11 @@ from core.models import Tenant
 
 from .models import (
     Booking,
+    MarriageHallBookSummary,
     MarriageHallPageLive,
     MarriageHallPageMaintenance,
 )
-from .page_visibility import ensure_tenant_hall_pages
+from .page_visibility import ensure_tenant_hall_pages, HALL_MODULE_KEYS, HALL_PAGE_KEYS
 
 
 @admin.register(Booking)
@@ -64,7 +65,7 @@ class _HallPageAdminBase(AdminOnlyAdminMixin, admin.ModelAdmin):
 
 
 class MarriageHallPageLiveInline(admin.TabularInline):
-    """Show/hide Marriage Hall pages inside Tenant edit screen."""
+    """Show/hide Marriage Hall sidebar pages inside Tenant edit screen."""
     model = MarriageHallPageLive
     extra = 0
     fields = ('label', 'page_key', 'is_visible')
@@ -73,8 +74,34 @@ class MarriageHallPageLiveInline(admin.TabularInline):
     can_delete = False
     verbose_name = 'Page'
     verbose_name_plural = (
-        'Marriage Hall — <strong>Show in menu</strong> (tick = page visible in app sidebar)'
+        'Marriage Hall — <strong>Show in menu</strong> (sidebar pages only)'
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_PAGE_KEYS)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class MarriageHallBookSummaryInline(admin.TabularInline):
+    """Show/hide booking summary bill lines inside Tenant edit screen."""
+    model = MarriageHallBookSummary
+    extra = 0
+    fields = ('label', 'page_key', 'is_visible')
+    readonly_fields = ('label', 'page_key')
+    ordering = ('sort_order',)
+    can_delete = False
+    verbose_name = 'Line'
+    verbose_name_plural = (
+        'Book Summary — <strong>hide / show</strong> booking bill lines'
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_MODULE_KEYS)
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -97,6 +124,9 @@ class MarriageHallPageMaintenanceInline(admin.StackedInline):
         'Marriage Hall — <strong>Maintenance & reopen time</strong> (set when page opens again)'
     )
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_PAGE_KEYS)
+
     def has_add_permission(self, request, obj=None):
         return False
 
@@ -110,16 +140,20 @@ class MarriageHallPageLiveAdmin(_HallPageAdminBase):
 
     list_display = ('label', 'page_key', 'tenant', 'live_badge', 'is_visible')
     list_editable = ('is_visible',)
+    list_filter = ('tenant', 'is_visible')
 
     fieldsets = (
         (None, {
             'fields': ('tenant', 'label', 'page_key', 'is_visible', 'sort_order'),
             'description': (
-                'Tick <strong>Show in menu</strong> to display this page in the app. '
-                'Untick to hide it from the sidebar and block direct URL access.'
+                'Tick <strong>Show in menu</strong> to display this page in the app sidebar. '
+                'Untick to hide it. Booking bill lines are managed under <strong>Book Summary</strong>.'
             ),
         }),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_PAGE_KEYS)
 
     @admin.display(description='Status')
     def live_badge(self, obj):
@@ -133,6 +167,51 @@ class MarriageHallPageLiveAdmin(_HallPageAdminBase):
         extra_context['subtitle'] = (
             '<strong>For:</strong> hiding or showing Marriage Hall pages in the app sidebar. '
             'Tick <strong>Show in menu</strong> = visible. Untick = hidden. Save at the bottom.'
+        )
+        return super().changelist_view(request, extra_context=extra_context)
+
+
+@admin.register(MarriageHallBookSummary)
+class MarriageHallBookSummaryAdmin(_HallPageAdminBase):
+    """Show or hide individual Booking Summary bill lines."""
+
+    list_display = ('label', 'page_key', 'tenant', 'live_badge', 'is_visible')
+    list_editable = ('is_visible',)
+    list_filter = ('tenant', 'is_visible')
+    list_display_links = ('label',)
+
+    fieldsets = (
+        (None, {
+            'fields': ('tenant', 'label', 'page_key', 'is_visible', 'sort_order'),
+            'description': (
+                'Untick <strong>Show</strong> to hide that line on the Bookings summary panel. '
+                'Totals still calculate in the background. Save at the bottom, then refresh the app.'
+            ),
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_MODULE_KEYS)
+
+    @admin.display(description='Status')
+    def live_badge(self, obj):
+        if obj.is_visible:
+            return mark_safe('<span style="color:#15803d;font-weight:700;">Shown</span>')
+        return mark_safe('<span style="color:#64748b;font-weight:700;">Hidden</span>')
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == 'is_visible' and formfield is not None:
+            formfield.label = 'Show on bill'
+        return formfield
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['title'] = 'Book Summary — hide / show lines'
+        extra_context['subtitle'] = (
+            '<strong>For:</strong> Guaranteed Guests, Rate / Head, Venue, Combined Services, '
+            'and Tax (5% GST) on the Bookings reservation summary. '
+            'Untick = hide that line. Tick = show. Save at the bottom.'
         )
         return super().changelist_view(request, extra_context=extra_context)
 
@@ -158,6 +237,9 @@ class MarriageHallPageMaintenanceAdmin(MaintenanceUntilAdminMixin, _HallPageAdmi
             ),
         }),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(page_key__in=HALL_PAGE_KEYS)
 
     @admin.display(description='Status')
     def maintenance_badge(self, obj):

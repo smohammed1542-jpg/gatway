@@ -66,7 +66,9 @@ const BookingCalendar = () => {
       
       const list = bookRes.data.results || bookRes.data || [];
       setBookings(
-        list.map((b) => ({
+        list
+          .filter((b) => b.booking_status !== 'DRAFT')
+          .map((b) => ({
           ...b,
           dateObj: b.event_date
             ? parseISO(b.event_date)

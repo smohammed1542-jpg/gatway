@@ -1,4 +1,13 @@
 /** Marriage Hall page keys — must match backend `DEFAULT_HALL_PAGES`. */
+/** In-app modules (not sidebar routes) — toggled from Django admin Book Summary. */
+export const HALL_MODULE_KEYS = {
+  SUMMARY_GUESTS: 'summary_guests',
+  SUMMARY_RATE_PER_HEAD: 'summary_rate_per_head',
+  SUMMARY_FOOD_VENUE: 'summary_food_venue',
+  SUMMARY_COMBINED_SERVICES: 'summary_combined_services',
+  SUMMARY_TAX: 'summary_tax',
+};
+
 export const HALL_PAGE_KEYS = {
   DASHBOARD: 'dashboard',
   BOOKINGS: 'bookings',

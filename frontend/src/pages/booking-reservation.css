@@ -842,16 +842,20 @@
   display: block;
   margin-top: 4px;
   color: var(--rc-green);
-  font-size: 17px;
-  line-height: 1;
+  font-size: clamp(13px, 2.8vw, 17px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .reservation-console__grand-total small {
   display: block;
-  margin-top: -8px;
+  margin-top: 2px;
   color: #748783;
-  font-size: 6px;
-  text-align: right;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: left;
 }
 
 .reservation-console__advance {
@@ -1809,13 +1813,17 @@
 
 .reservation-console__grand-total strong {
   margin-top: 4px;
-  font-size: 20px;
-  line-height: 28px;
+  font-size: clamp(14px, 1.8vw, 18px);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .reservation-console__grand-total small {
-  margin-top: -18px;
+  margin-top: 2px;
   font-size: 10px;
+  line-height: 1.3;
+  text-align: left;
 }
 
 .reservation-console__advance {
@@ -2880,4 +2888,14 @@
   .hall-reservation-form .reservation-services-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Invoice mode: highlight editable guest + inventory blocks */
+.reservation-console--invoice .reservation-console__guests input {
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.reservation-console--invoice .reservation-console__inventory.is-invoice-editable {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
 }

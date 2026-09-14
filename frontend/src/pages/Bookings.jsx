@@ -74,14 +74,6 @@ const resolveBookingStatusStyle = (booking) => {
   return BOOKING_STATUS_STYLE[booking.booking_status] || BOOKING_STATUS_STYLE.PENDING;
 };
 
-const isInvalidStatusChoiceError = (err) => {
-  const data = err?.response?.data;
-  if (!data || typeof data !== 'object') return false;
-  const statusErr = data.booking_status;
-  const text = Array.isArray(statusErr) ? statusErr[0] : statusErr;
-  return typeof text === 'string' && /not a valid choice/i.test(text);
-};
-
 const DEFAULT_EVENT_OPTIONS = [
   'Barat Ceremony',
   'Walima Reception',

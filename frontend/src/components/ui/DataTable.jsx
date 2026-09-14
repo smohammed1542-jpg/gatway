@@ -1,14 +1,46 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Columns3 } from 'lucide-react';
 import EmptyState from './EmptyState';
 import { Inbox } from 'lucide-react';
 
-function RowMenu({ items, onClose }) {
+function RowMenu({ items, onClose, anchorRef }) {
   const ref = useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, openUp: false });
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const anchor = anchorRef?.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const menuWidth = 160;
+      const estimatedHeight = Math.max(48, items.length * 40 + 12);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < estimatedHeight + 12 && rect.top > estimatedHeight;
+      const left = Math.min(
+        Math.max(8, rect.right - menuWidth),
+        window.innerWidth - menuWidth - 8,
+      );
+      setCoords({
+        top: openUp ? rect.top - 4 : rect.bottom + 4,
+        left,
+        openUp,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchorRef, items.length]);
 
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+      if (ref.current?.contains(e.target)) return;
+      if (anchorRef?.current?.contains(e.target)) return;
+      onClose();
     };
     const onKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -19,10 +51,22 @@ function RowMenu({ items, onClose }) {
       document.removeEventListener('mousedown', handler);
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, anchorRef]);
 
-  return (
-    <div className="dash-menu__dropdown" ref={ref} role="menu">
+  return createPortal(
+    <div
+      className={`dash-menu__dropdown dash-menu__dropdown--portal${coords.openUp ? ' dash-menu__dropdown--up' : ''}`}
+      ref={ref}
+      role="menu"
+      style={{
+        position: 'fixed',
+        top: coords.openUp ? undefined : coords.top,
+        bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
+        left: coords.left,
+        right: 'auto',
+        zIndex: 10050,
+      }}
+    >
       {items.map((item) => (
         <button
           key={item.label}
@@ -38,6 +82,36 @@ function RowMenu({ items, onClose }) {
           {item.label}
         </button>
       ))}
+    </div>,
+    document.body,
+  );
+}
+
+function RowActionsCell({ rowId, openMenuId, setOpenMenuId, items }) {
+  const triggerRef = useRef(null);
+  const isOpen = openMenuId === rowId;
+
+  return (
+    <div className="dash-table__row-action">
+      <div className="dash-menu">
+        <button
+          type="button"
+          ref={triggerRef}
+          className="dash-menu__trigger"
+          aria-label="Row actions"
+          aria-expanded={isOpen}
+          onClick={() => setOpenMenuId(isOpen ? null : rowId)}
+        >
+          <MoreHorizontal size={18} />
+        </button>
+        {isOpen && (
+          <RowMenu
+            items={items}
+            anchorRef={triggerRef}
+            onClose={() => setOpenMenuId(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -219,27 +293,12 @@ export default function DataTable({
                   ))}
                   {rowActions && (
                     <td onClick={(e) => e.stopPropagation()}>
-                      <div className="dash-table__row-action">
-                        <div className="dash-menu">
-                          <button
-                            type="button"
-                            className="dash-menu__trigger"
-                            aria-label="Row actions"
-                            aria-expanded={openMenuId === rowId}
-                            onClick={() =>
-                              setOpenMenuId(openMenuId === rowId ? null : rowId)
-                            }
-                          >
-                            <MoreHorizontal size={18} />
-                          </button>
-                          {openMenuId === rowId && (
-                            <RowMenu
-                              items={rowActions(row)}
-                              onClose={() => setOpenMenuId(null)}
-                            />
-                          )}
-                        </div>
-                      </div>
+                      <RowActionsCell
+                        rowId={rowId}
+                        openMenuId={openMenuId}
+                        setOpenMenuId={setOpenMenuId}
+                        items={rowActions(row)}
+                      />
                     </td>
                   )}
                 </tr>

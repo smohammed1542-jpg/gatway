@@ -1042,6 +1042,29 @@
   animation: dashMenuIn 0.15s ease;
 }
 
+.dash-menu__dropdown--portal {
+  position: fixed;
+  right: auto;
+  top: auto;
+  margin-top: 0;
+  z-index: 10050;
+}
+
+.dash-menu__dropdown--up {
+  animation: dashMenuInUp 0.15s ease;
+}
+
+@keyframes dashMenuInUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes dashMenuIn {
   from {
     opacity: 0;

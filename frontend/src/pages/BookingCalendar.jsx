@@ -23,6 +23,19 @@ import CancelBookingModal from '../components/bookings/CancelBookingModal';
 
 const slotLabel = (slot) => (slot === 'morning' ? 'Morning (12pm – 4pm)' : 'Evening (7pm – 11pm)');
 
+const isDraftLikeBooking = (booking) => {
+  if (!booking) return false;
+  if (booking.booking_status === 'DRAFT') return true;
+  if (booking.notes === '__draft__') return true;
+  if (booking.booking_status !== 'PENDING') return false;
+  return (
+    !booking.customer
+    || !booking.venue
+    || !booking.event_date
+    || booking.event_name === 'Draft'
+  );
+};
+
 const BookingCalendar = () => {
   const navigate = useNavigate();
   const { canAccessPayments, canManage, canOperate } = usePermissions();
@@ -67,7 +80,7 @@ const BookingCalendar = () => {
       const list = bookRes.data.results || bookRes.data || [];
       setBookings(
         list
-          .filter((b) => b.booking_status !== 'DRAFT')
+          .filter((b) => !isDraftLikeBooking(b))
           .map((b) => ({
           ...b,
           dateObj: b.event_date

@@ -55,6 +55,33 @@ const BOOKING_STATUS_STYLE = {
   CANCELLED: { bg: '#fee2e2', color: '#991b1b', label: 'Cancelled' },
 };
 
+/** Draft rows: explicit DRAFT, or legacy PENDING placeholders (live API may not accept DRAFT yet). */
+const isDraftLikeBooking = (booking) => {
+  if (!booking) return false;
+  if (booking.booking_status === 'DRAFT') return true;
+  if (booking.notes === '__draft__') return true;
+  if (booking.booking_status !== 'PENDING') return false;
+  return (
+    !booking.customer
+    || !booking.venue
+    || !booking.event_date
+    || booking.event_name === 'Draft'
+  );
+};
+
+const resolveBookingStatusStyle = (booking) => {
+  if (isDraftLikeBooking(booking)) return BOOKING_STATUS_STYLE.DRAFT;
+  return BOOKING_STATUS_STYLE[booking.booking_status] || BOOKING_STATUS_STYLE.PENDING;
+};
+
+const isInvalidStatusChoiceError = (err) => {
+  const data = err?.response?.data;
+  if (!data || typeof data !== 'object') return false;
+  const statusErr = data.booking_status;
+  const text = Array.isArray(statusErr) ? statusErr[0] : statusErr;
+  return typeof text === 'string' && /not a valid choice/i.test(text);
+};
+
 const DEFAULT_EVENT_OPTIONS = [
   'Barat Ceremony',
   'Walima Reception',
@@ -704,7 +731,7 @@ const Bookings = () => {
       return;
     }
     setBookingError('');
-    const isDraft = (statusOverride || formData.booking_status) === 'DRAFT' && viewMode === 'create';
+    const isDraft = viewMode === 'create' && statusOverride === 'DRAFT';
 
     // Select active venue
     const selectedHall = halls.find(h => String(h.id) === String(formData.venue));
@@ -836,6 +863,7 @@ const Bookings = () => {
         generator_charge: parseFloat(formData.generator_charge || 0) || 0,
         advance_paid: parseFloat(formData.advance_paid || 0) || 0,
         total_price: parseFloat(grandTotal) || 0,
+        ...(isDraft ? { notes: '__draft__' } : {}),
       };
 
       let bookingId = editingId;
@@ -843,13 +871,19 @@ const Bookings = () => {
         await client.put(`/bookings/${editingId}/`, payload);
         toast.success(viewMode === 'invoice' ? 'Invoice updated successfully' : 'Reservation updated successfully');
       } else {
-        const created = await client.post('/bookings/', payload);
+        let created;
+        try {
+          created = await client.post('/bookings/', payload);
+        } catch (err) {
+          // Live API may not have DRAFT choice deployed yet — fall back to PENDING.
+          if (payload.booking_status === 'DRAFT' && isInvalidStatusChoiceError(err)) {
+            created = await client.post('/bookings/', { ...payload, booking_status: 'PENDING' });
+          } else {
+            throw err;
+          }
+        }
         bookingId = created.data.id;
-        toast.success(
-          payload.booking_status === 'DRAFT'
-            ? 'Draft saved'
-            : 'Reservation saved successfully'
-        );
+        toast.success(isDraft ? 'Draft saved' : 'Reservation saved successfully');
       }
 
       if (bookingId && filledInventoryLines.length > 0) {
@@ -1057,7 +1091,7 @@ const Bookings = () => {
                     );
                   }
                   if (key === 'status') {
-                    const st = BOOKING_STATUS_STYLE[booking.booking_status] || BOOKING_STATUS_STYLE.PENDING;
+                    const st = resolveBookingStatusStyle(booking);
                     return <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>{st.label}</span>;
                   }
                   if (key === 'payment') {

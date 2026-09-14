@@ -723,6 +723,51 @@ const Bookings = () => {
     }
   };
 
+  const ensureLegacyDraftCustomer = async () => {
+    const existing = customers.find((c) => (
+      customerDisplayName(c) === 'Draft Client'
+      || c.notes === '__draft_placeholder__'
+    ));
+    if (existing) return existing.id;
+    const phone = `0399${String(Date.now()).slice(-7)}`;
+    const custRes = await client.post('/customers/', buildCustomerPayload({
+      full_name: 'Draft Client',
+      phone,
+      notes: '__draft_placeholder__',
+    }));
+    setCustomers((prev) => [...prev, custRes.data]);
+    return custRes.data.id;
+  };
+
+  const buildLegacyDraftPayload = async (base) => {
+    const today = new Date().toISOString().split('T')[0];
+    let customerId = base.customer;
+    if (!customerId) {
+      customerId = await ensureLegacyDraftCustomer();
+    }
+    let venueId = base.venue;
+    if (!venueId) {
+      const hall = hallsForSelect[0] || halls.find((h) => h.status !== 'INACTIVE') || halls[0];
+      if (!hall) {
+        throw new Error('No hall available to save draft. Add an active hall first.');
+      }
+      venueId = hall.id;
+    }
+    const slot = base.slot || 'morning';
+    return {
+      ...base,
+      booking_status: 'PENDING',
+      customer: Number(customerId),
+      venue: Number(venueId),
+      event_date: base.event_date || base.booking_date || today,
+      slot,
+      event_name: base.event_name?.trim() || 'Draft',
+      notes: '__draft__',
+      custom_start_time: slot === 'custom' ? (base.custom_start_time || null) : null,
+      custom_end_time: slot === 'custom' ? (base.custom_end_time || null) : null,
+    };
+  };
+
   const handleSubmit = async (e, statusOverride) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -875,11 +920,14 @@ const Bookings = () => {
         try {
           created = await client.post('/bookings/', payload);
         } catch (err) {
-          // Live API may not have DRAFT choice deployed yet — fall back to PENDING.
-          if (payload.booking_status === 'DRAFT' && isInvalidStatusChoiceError(err)) {
+          if (!isDraft) throw err;
+          try {
+            // Older live API: no DRAFT status — try PENDING with same payload.
             created = await client.post('/bookings/', { ...payload, booking_status: 'PENDING' });
-          } else {
-            throw err;
+          } catch (err2) {
+            // Older live API: customer/venue/slot/date still required — fill safe defaults.
+            const legacyPayload = await buildLegacyDraftPayload(payload);
+            created = await client.post('/bookings/', legacyPayload);
           }
         }
         bookingId = created.data.id;
@@ -898,8 +946,8 @@ const Bookings = () => {
       setViewMode('list');
       fetchData();
     } catch (err) {
-      const errData = err.response?.data;
-      let msg = 'Failed to save booking details.';
+      const errData = err?.response?.data;
+      let msg = err?.message || 'Failed to save booking details.';
       if (typeof errData === 'string') {
         msg = errData;
       } else if (errData?.detail) {

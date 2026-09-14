@@ -4,13 +4,10 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Printer, 
   ChevronLeft, 
-  Sparkles, 
   Wallet, 
   FileText, 
   Clock, 
-  CheckCircle,
   User,
-  FileCheck,
   Edit,
   Save,
   Check,
@@ -22,6 +19,7 @@ import { formatCollectDuePKR, hasCollectDue } from '../utils/currency';
 import AppLogo from '../components/AppLogo';
 import { BRAND_FULL_NAME } from '../constants/brand';
 import usePersistentState from '../hooks/usePersistentState';
+import '../print.css';
 
 // HTML5 Canvas Digital Signature Pad Component
 const SignaturePad = ({ label, subtitle, onSave }) => {
@@ -334,11 +332,14 @@ const PrintDocument = () => {
     (sum, line) => (line.includeInBill ? sum + Number(line.price || 0) : sum),
     0
   );
+  const chargedInventoryLines = inventoryBillLines.filter((line) => line.includeInBill);
   const totalBeforeTax = subtotal + extraServices + inventoryTotal;
-  const taxAmount = totalBeforeTax * 0.05;
+  const taxRatePercent = 5;
+  const taxAmount = totalBeforeTax * (taxRatePercent / 100);
   const grandTotal = totalBeforeTax + taxAmount;
   const remainingBalance = grandTotal - Number(advancePaid || 0);
   const showBillRow = (amount) => isEditable || Number(amount || 0) > 0;
+  const fmt = (value) => Number(value || 0).toLocaleString();
 
   const handlePrint = () => {
     window.print();
@@ -442,6 +443,14 @@ const PrintDocument = () => {
   };
 
   const isUrdu = printLanguage === 'urdu';
+  const slotLabel = slot === 'morning'
+    ? (isUrdu ? 'صبح' : 'Morning')
+    : slot === 'custom'
+      ? (isUrdu ? 'کسٹم' : 'Custom')
+      : (isUrdu ? 'شام' : 'Evening');
+  const partyLeftLabel = activeDocType === 'operations_report'
+    ? (isUrdu ? 'کسٹمر' : 'Customer')
+    : (isUrdu ? 'بل وصول کنندہ' : 'Billed to');
 
   return (
     <div style={{
@@ -501,145 +510,64 @@ const PrintDocument = () => {
       `}</style>
 
       {/* Floating Glass Toolbar */}
-      <div id="non-printable-toolbar" style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        backgroundColor: 'rgba(15, 23, 42, 0.8)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        padding: '16px 24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        maxWidth: '1200px',
-        margin: '0 auto'
-      }}>
-        {/* Back navigation */}
-        <button 
+      <div id="non-printable-toolbar" className="print-doc-toolbar">
+        <button
+          type="button"
+          className="print-doc-toolbar__back"
           onClick={() => navigate('/bookings')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '10px',
-            padding: '10px 16px',
-            color: '#f8fafc',
-            fontWeight: '600',
-            fontSize: '13px',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
         >
-          <ChevronLeft size={16} /> Bookings List
+          <ChevronLeft size={16} />
+          Bookings
         </button>
 
-        {/* Document Selection Segmented Tabs */}
-        <div style={{
-          display: 'flex',
-          backgroundColor: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '12px',
-          padding: '4px',
-          gap: '2px'
-        }}>
-          {[
-            ...(booking?.booking_status === 'CANCELLED' ? [
-              { id: 'cancellation_notice', label: 'Cancellation Notice', icon: <XCircle size={14} />, desc: 'منسوخی کا نوٹس' },
-            ] : [
-              { id: 'advance_receipt', label: 'Advance Receipt', icon: <Wallet size={14} />, desc: 'ایڈوانس وصولی کی رسیڈ' },
-              { id: 'final_bill', label: 'Final Bill Summary', icon: <FileText size={14} />, desc: 'ایونٹ کا فائنل بل' },
-              { id: 'operations_report', label: 'Setup & Logistics', icon: <Clock size={14} />, desc: 'تفصیلی رپورٹ' },
-            ]),
-          ].map(tab => {
-            const isActive = activeDocType === tab.id;
-            return (
+        <div className="print-doc-toolbar__tabs">
+          <div className="print-doc-toolbar__seg" role="tablist" aria-label="Document type">
+            {(booking?.booking_status === 'CANCELLED'
+              ? [
+                  { id: 'cancellation_notice', label: 'Cancellation', icon: <XCircle size={14} /> },
+                ]
+              : [
+                  { id: 'advance_receipt', label: 'Advance', icon: <Wallet size={14} /> },
+                  { id: 'final_bill', label: 'Final Bill', icon: <FileText size={14} /> },
+                  { id: 'operations_report', label: 'Logistics', icon: <Clock size={14} /> },
+                ]
+            ).map((tab) => (
               <button
                 key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeDocType === tab.id}
+                className={`print-doc-toolbar__tab${activeDocType === tab.id ? ' is-active' : ''}`}
                 onClick={() => setActiveDocType(tab.id)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  padding: '6px 20px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  backgroundColor: isActive ? '#5BD51E' : 'transparent',
-                  color: isActive ? 'white' : '#94a3b8',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  minWidth: '150px'
-                }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', fontSize: '13px' }}>
-                  {tab.icon}
-                  {tab.label}
-                </div>
-                <span style={{ fontSize: '9px', opacity: isActive ? 0.9 : 0.6, marginTop: '2px' }}>{tab.desc}</span>
+                {tab.icon}
+                <span>{tab.label}</span>
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          {/* Language Selection */}
-          <div style={{ display: 'flex', gap: '4px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '10px' }}>
+        <div className="print-doc-toolbar__actions">
+          <div className="print-doc-toolbar__lang" role="group" aria-label="Print language">
             <button
+              type="button"
+              className={printLanguage === 'english' ? 'is-active' : ''}
               onClick={() => setPrintLanguage('english')}
-              style={{
-                padding: '6px 16px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: printLanguage === 'english' ? '#5BD51E' : 'transparent',
-                color: printLanguage === 'english' ? 'white' : '#94a3b8',
-                fontWeight: '700',
-                fontSize: '13px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
             >
-              English
+              EN
             </button>
             <button
+              type="button"
+              className={printLanguage === 'urdu' ? 'is-active' : ''}
               onClick={() => setPrintLanguage('urdu')}
-              style={{
-                padding: '6px 16px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: printLanguage === 'urdu' ? '#5BD51E' : 'transparent',
-                color: printLanguage === 'urdu' ? 'white' : '#94a3b8',
-                fontWeight: '700',
-                fontSize: '13px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
             >
               اردو
             </button>
           </div>
 
-          {/* Print Button */}
-          <button 
-            onClick={handlePrint}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: '#5BD51E',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '12px 24px',
-              color: 'white',
-              fontWeight: '700',
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(91, 213, 30, 0.4)',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Printer size={18} /> Print Document
+          <button type="button" className="print-doc-toolbar__print" onClick={handlePrint}>
+            <Printer size={16} />
+            <span>Print</span>
           </button>
         </div>
       </div>
@@ -649,10 +577,10 @@ const PrintDocument = () => {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'flex-start',
-        gap: '40px',
-        maxWidth: '1220px',
-        margin: '40px auto 0 auto',
-        padding: '0 20px',
+        gap: '28px',
+        maxWidth: '1100px',
+        margin: '24px auto 0 auto',
+        padding: '0 16px',
         boxSizing: 'border-box'
       }}>
         
@@ -662,114 +590,51 @@ const PrintDocument = () => {
           boxSizing: 'border-box'
         }}>
           
-          {/* A5 white sheet card */}
-          <div className="printable-card" style={{
-            backgroundColor: 'white',
-            color: '#1e293b',
-            borderRadius: '16px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            border: '1px solid rgba(255,255,255,0.05)',
-            padding: '36px 28px',
-            minHeight: '740px',
-            boxSizing: 'border-box',
-            position: 'relative'
-          }}>
-            
-            {/* Watermark in Preview */}
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%) rotate(-35deg)',
-              opacity: 0.02,
-              fontSize: '90px',
-              fontWeight: '900',
-              color: '#0f172a',
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em'
-            }}>
-              Gateway Centre
-            </div>
-
-            {/* NEW DOCUMENT HEADER */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <AppLogo size="md" tone="dark" />
-                <div>
-                  <h1 style={{ fontSize: '32px', color: '#0f172a', fontWeight: '900', letterSpacing: '-0.03em', margin: 0, lineHeight: '1' }}>{BRAND_FULL_NAME.toUpperCase()}</h1>
-                  <h2 style={{ fontSize: '14px', color: '#64748b', fontWeight: '800', letterSpacing: '0.15em', textTransform: 'uppercase', margin: '6px 0 0 0' }}>Venue Management</h2>
+          <div className="printable-card pdoc">
+            <header className="pdoc__header">
+              <div className="pdoc__brand">
+                <AppLogo size="sm" tone="dark" />
+                <div className="pdoc__brand-text">
+                  <h1>{BRAND_FULL_NAME}</h1>
+                  <p>{isUrdu ? 'ویینیو مینجمنٹ' : 'Venue management'}</p>
                 </div>
               </div>
-              
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '42px', fontWeight: '900', color: '#f1f5f9', textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: '1' }}>
-                  {activeDocType === 'cancellation_notice'
-                    ? (isUrdu ? 'منسوخی' : 'CANCELLED')
-                    : activeDocType === 'advance_receipt'
-                      ? (isUrdu ? 'رسیڈ' : 'RECEIPT')
-                      : activeDocType === 'final_bill'
-                        ? (isUrdu ? 'بل' : 'INVOICE')
-                        : (isUrdu ? 'ورک شیٹ' : 'WORKSHEET')}
+              <div className="pdoc__docmeta">
+                <div className="pdoc__docmeta-row">
+                  <span>{isUrdu ? 'حوالہ' : 'Ref'}</span>
+                  <strong>{booking.booking_id || `BK-${booking.id}`}</strong>
                 </div>
-                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{isUrdu ? 'حوالہ نمبر' : 'Reference No.'}</span>
-                    <span style={{ color: '#0f172a', fontSize: '13px', fontWeight: '800', width: '120px', textAlign: 'right' }}>{booking.booking_id || `BK-${booking.id}`}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{isUrdu ? 'تاریخ اجراء' : 'Date Issued'}</span>
-                    <span style={{ color: '#0f172a', fontSize: '13px', fontWeight: '800', width: '120px', textAlign: 'right' }}>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                  </div>
+                <div className="pdoc__docmeta-row">
+                  <span>{isUrdu ? 'تاریخ' : 'Date'}</span>
+                  <strong>{new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
                 </div>
               </div>
-            </div>
+            </header>
 
-            {/* COMPANY INFO BAR */}
-            <div style={{ backgroundColor: '#f8fafc', borderTop: '2px solid #5BD51E', borderBottom: '1px solid #e2e8f0', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', marginBottom: '48px', fontSize: '12px', color: '#475569', fontWeight: '600' }}>
-              <span>Main Bypass Chowk, Near Civic Center</span>
-              <span>+92 300 1234567</span>
-              <span>contact@gatewayhall.com</span>
-            </div>
-
-            {/* TWO COLUMN INFO META GRID */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr', 
-              gap: '60px', 
-              marginBottom: '48px'
-            }}>
-              {/* Billed To */}
+            <div className="pdoc__parties">
               <div>
-                <h4 style={{ fontWeight: '800', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', marginBottom: '16px' }}>
-                  {isUrdu ? 'کس کے نام پر' : 'Billed To'}
-                </h4>
-                <div style={{ color: '#0f172a', fontSize: '14px', lineHeight: '1.6' }}>
-                  <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '6px' }}>{renderInput(customerName, setCustomerName, 'text', { fontWeight: '900' })}</div>
-                  <div style={{ fontWeight: '600' }}>{renderInput(customerPhone, setCustomerPhone)}</div>
-                  <div style={{ fontWeight: '600' }}>{isUrdu ? 'شناختی کارڈ:' : 'CNIC:'} {renderInput(customerCnic, setCustomerCnic)}</div>
-                  <div style={{ color: '#64748b', marginTop: '4px' }}>{renderInput(customerAddress, setCustomerAddress)}</div>
-                </div>
+                <p className="pdoc__party-label">{partyLeftLabel}</p>
+                <div className="pdoc__party-name">{renderInput(customerName, setCustomerName, 'text')}</div>
+                <p className="pdoc__party-line">{renderInput(customerPhone, setCustomerPhone)}</p>
+                <p className="pdoc__party-line">{isUrdu ? 'شناختی کارڈ' : 'CNIC'}: {renderInput(customerCnic, setCustomerCnic)}</p>
+                {customerAddress ? <p className="pdoc__party-line">{renderInput(customerAddress, setCustomerAddress)}</p> : null}
               </div>
-              
-              {/* Event Details */}
               <div>
-                <h4 style={{ fontWeight: '800', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', marginBottom: '16px' }}>
-                  {isUrdu ? 'تقریب کی تفصیلات' : 'Event Details'}
-                </h4>
-                <div style={{ color: '#0f172a', fontSize: '14px', lineHeight: '1.6' }}>
-                  <div style={{ fontWeight: '900', fontSize: '18px', marginBottom: '6px' }}>{renderInput(eventName, setEventName, 'text', { fontWeight: '900' })}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: isUrdu ? '70px 1fr' : '60px 1fr', gap: '8px' }}>
-                    <span style={{ color: '#94a3b8', fontWeight: '600' }}>{isUrdu ? 'ہال:' : 'Venue:'}</span>
-                    <span style={{ fontWeight: '700' }}>{renderInput(venueName, setVenueName)}</span>
-                    
-                    <span style={{ color: '#94a3b8', fontWeight: '600' }}>{isUrdu ? 'تاریخ:' : 'Date:'}</span>
-                    <span style={{ fontWeight: '700' }}>{renderInput(eventDate, setEventDate, 'date')}</span>
-                    
-                    <span style={{ color: '#94a3b8', fontWeight: '600' }}>{isUrdu ? 'وقت:' : 'Slot:'}</span>
-                    <span style={{ fontWeight: '700' }}>{renderSelect(slot, setSlot, [{ value: 'morning', label: isUrdu ? 'صبح (Morning)' : 'Morning (12pm–4pm)' }, { value: 'evening', label: isUrdu ? 'شام (Evening)' : 'Evening (7pm–11pm)' }])}</span>
-                  </div>
+                <p className="pdoc__party-label">{isUrdu ? 'تقریب' : 'Event'}</p>
+                <div className="pdoc__party-name">{renderInput(eventName, setEventName, 'text')}</div>
+                <div className="pdoc__party-grid">
+                  <span>{isUrdu ? 'ہال' : 'Venue'}</span>
+                  <strong>{renderInput(venueName, setVenueName)}</strong>
+                  <span>{isUrdu ? 'تاریخ' : 'Date'}</span>
+                  <strong>{renderInput(eventDate, setEventDate, 'date')}</strong>
+                  <span>{isUrdu ? 'وقت' : 'Slot'}</span>
+                  <strong>
+                    {renderSelect(slot, setSlot, [
+                      { value: 'morning', label: isUrdu ? 'صبح' : 'Morning' },
+                      { value: 'evening', label: isUrdu ? 'شام' : 'Evening' },
+                      { value: 'custom', label: isUrdu ? 'کسٹم' : 'Custom' },
+                    ])}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -778,39 +643,54 @@ const PrintDocument = () => {
             
             {/* Tab 1: Advance Receipt View */}
             {activeDocType === 'advance_receipt' && (
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ 
-                  backgroundColor: '#f5fdf2', 
-                  border: '1.5px dashed #c0f7a6', 
-                  padding: '24px 30px', 
-                  borderRadius: '12px', 
-                  textAlign: 'center', 
-                  marginBottom: '32px' 
-                }}>
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#288005', textTransform: 'uppercase', tracking: '0.1em' }}>Secure Booking Advance Amount (ایڈوانس رقم کی تفصیل)</span>
-                  <h2 style={{ fontSize: '32px', fontWeight: '900', color: '#5BD51E', margin: '8px 0', letterSpacing: '-0.03em' }}>
-                    PKR {isEditable ? (
-                       <span style={{ fontSize: '18px' }}>
-                        {renderInput(advancePaid, setAdvancePaid, 'number', { style: { textAlign: 'center', maxWidth: '200px' } })}
-                      </span>
-                    ) : (
-                      Number(advancePaid).toLocaleString()
-                    )}
-                  </h2>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#c0f7a6', color: '#1e5e03', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800' }}>
-                    <CheckCircle size={12} /> SECURED DEPOSIT
+              <div className="pbill">
+                <div className="pbill-advance">
+                  <span className="pbill-advance__label">
+                    {isUrdu ? 'ایڈوانس رقم' : 'Advance Amount Received'}
+                  </span>
+                  <p className="pbill-advance__amount">
+                    PKR {isEditable
+                      ? renderInput(advancePaid, setAdvancePaid, 'number', { style: { textAlign: 'center', maxWidth: '180px' } })
+                      : fmt(advancePaid)}
+                  </p>
+                  <span className="pbill-advance__badge">
+                    {isUrdu ? 'ڈپازٹ محفوظ' : 'SECURED DEPOSIT'}
+                  </span>
+                </div>
+
+                <div className="pbill-summary">
+                  <div className="pbill-summary__row">
+                    <span>{isUrdu ? 'اندازاً کل بل' : 'Estimated grand total'}</span>
+                    <strong>PKR {fmt(grandTotal)}</strong>
+                  </div>
+                  <div className="pbill-summary__row">
+                    <span>{isUrdu ? 'ادا شدہ ایڈوانس' : 'Advance paid'}</span>
+                    <strong>PKR {fmt(advancePaid)}</strong>
+                  </div>
+                  <div className="pbill-summary__row">
+                    <span>{isUrdu ? 'باقی رقم' : 'Balance remaining'}</span>
+                    <strong>{formatCollectDuePKR(remainingBalance)}</strong>
                   </div>
                 </div>
 
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '24px', fontSize: '13px', lineHeight: '1.6' }}>
-                  <h5 style={{ fontWeight: '800', fontSize: '14px', marginBottom: '10px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <FileCheck size={16} color="#5BD51E" /> Contractual Terms & Obligations:
-                  </h5>
-                  <ol style={{ paddingLeft: '18px', margin: 0, color: '#475569' }}>
-                    <li style={{ marginBottom: '8px' }}>The advance payment of <strong>PKR {Number(advancePaid).toLocaleString()}</strong> reserves the venue slot exclusively.</li>
-                    <li style={{ marginBottom: '8px' }}>Outstanding contract balance of <strong>{formatCollectDuePKR(remainingBalance)}</strong> is strictly due no later than 24 hours prior to the start slot.</li>
-                    <li style={{ marginBottom: '8px' }}>Cancellations done less than 14 days before the scheduled event date will forfeit 100% of the securing deposit.</li>
-                    <li style={{ marginBottom: '8px' }}>Any damages caused to the venue structure, lighting fixtures, or decorations will be added to the final billing statement.</li>
+                <div className="pbill-terms">
+                  <h5>{isUrdu ? 'شرائط' : 'Terms'}</h5>
+                  <ol>
+                    <li>
+                      {isUrdu
+                        ? `ایڈوانس PKR ${fmt(advancePaid)} ہال سلاٹ محفوظ کرتا ہے۔`
+                        : `Advance of PKR ${fmt(advancePaid)} reserves this venue slot.`}
+                    </li>
+                    <li>
+                      {isUrdu
+                        ? `باقی رقم ${formatCollectDuePKR(remainingBalance)} ایونٹ سے کم از کم 24 گھنٹے پہلے ادا کرنی ہوگی۔`
+                        : `Outstanding balance ${formatCollectDuePKR(remainingBalance)} is due at least 24 hours before the event.`}
+                    </li>
+                    <li>
+                      {isUrdu
+                        ? 'ایونٹ سے 14 دن سے کم پہلے منسوخی پر ایڈوانس قابلِ واپسی نہیں۔'
+                        : 'Cancellations within 14 days of the event forfeit the advance deposit.'}
+                    </li>
                   </ol>
                 </div>
               </div>
@@ -818,120 +698,117 @@ const PrintDocument = () => {
 
             {/* Tab 2: Event Final Bill View */}
             {activeDocType === 'final_bill' && (
-              <div style={{ marginTop: '30px' }}>
-                <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
-                    <thead>
-                      <tr style={{ background: '#0f172a', borderBottom: 'none', fontWeight: '800', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '11px' }}>
-                        <th style={{ padding: '16px 24px', textAlign: 'left', borderRadius: '12px 0 0 0' }}>{isUrdu ? 'بل کی تفصیل' : 'Billing Item & Description'}</th>
-                        <th style={{ padding: '16px 24px', textAlign: 'right', borderRadius: '0 12px 0 0' }}>{isUrdu ? 'رقم' : 'Amount (PKR)'}</th>
-                      </tr>
-                    </thead>
-                    <tbody style={{ backgroundColor: '#ffffff' }}>
-                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '18px 24px' }}>
-                          <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'ہال کی بکنگ' : 'Primary Venue Space Reservation'}</span>
-                          <span style={{ fontSize: '12px', color: '#64748b' }}>
-                            {isUrdu ? 'مہمانوں کی تعداد:' : 'Attendance:'} {renderInput(gentsCount, setGentsCount, 'number', { width: '50px' })} {isUrdu ? 'مرد' : 'gents'} + {renderInput(ladiesCount, setLadiesCount, 'number', { width: '50px' })} {isUrdu ? 'خواتین' : 'ladies'} @ PKR {renderInput(ratePerHead, setRatePerHead, 'number', { width: '70px' })}/{isUrdu ? 'فی کس' : 'head'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>{subtotal.toLocaleString()}</td>
-                      </tr>
-                      {showBillRow(overtimeAmount) && (
-                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '18px 24px' }}>
-                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'اوور ٹائم کی سہولت' : 'Overtime Booking Facility'}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>
-                              {renderInput(overtimeHours, setOvertimeHours, 'number', { width: '50px' })} {isUrdu ? 'اضافی گھنٹے' : 'hours over schedule'} @ PKR 5,000 / {isUrdu ? 'گھنٹہ' : 'hour'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>{overtimeAmount.toLocaleString()}</td>
-                        </tr>
-                      )}
-                      {showBillRow(kitchenAmount) && (
-                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '18px 24px' }}>
-                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'باورچی خانہ اور دیگ سیٹ اپ' : 'Catering Kitchen & Deg Setup'}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'باورچی خانے کے برتن اور عملے کی مدد' : 'Preparations setup including kitchen utensils and staff assistance'}</span>
-                          </td>
-                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                            {renderInput(kitchenCharge, setKitchenCharge, 'number', { width: '100px', textAlign: 'right' })}
-                          </td>
-                        </tr>
-                      )}
-                      {showBillRow(decorationAmount) && (
-                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '18px 24px' }}>
-                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'ڈیکوریشن اور تھیم' : 'Elite Decoration & Theme Setup'}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'اسٹیج، پریمیئم ٹیبل کپڑے، ایل ای ڈی بیک ڈراپ، اور پھولوں کی سجاوٹ' : 'Stage layout, premium table fabrics, LED backdrop, and floral arrangements'}</span>
-                          </td>
-                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                            {renderInput(decorationCharge, setDecorationCharge, 'number', { width: '100px', textAlign: 'right' })}
-                          </td>
-                        </tr>
-                      )}
-                      {showBillRow(generatorAmount) && (
-                        <tr style={{ borderBottom: inventoryBillLines.length ? '1px solid #f1f5f9' : undefined }}>
-                          <td style={{ padding: '18px 24px' }}>
-                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{isUrdu ? 'جنریٹر کی سہولت' : 'Alternative Power Backups'}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>{isUrdu ? 'ہیوی ڈیوٹی ڈیزل جنریٹر' : 'Heavy-duty diesel generator diagnostic activation fee'}</span>
-                          </td>
-                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                            {renderInput(generatorCharge, setGeneratorCharge, 'number', { width: '100px', textAlign: 'right' })}
-                          </td>
-                        </tr>
-                      )}
-                      {inventoryBillLines.map((line, index) => (
-                        <tr
-                          key={line.id}
-                          style={{ borderBottom: index < inventoryBillLines.length - 1 ? '1px solid #f1f5f9' : undefined }}
-                        >
-                          <td style={{ padding: '18px 24px' }}>
-                            <span style={{ fontWeight: '800', color: '#0f172a', display: 'block', fontSize: '14px', marginBottom: '4px' }}>{line.name}</span>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>
-                              {isUrdu ? 'آئٹم کی قیمت' : 'Item price'}
-                              {!line.includeInBill ? (isUrdu ? ' · بل میں شامل نہیں' : ' · listed only') : ''}
-                            </span>
-                          </td>
-                          <td style={{ padding: '18px 24px', textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>
-                            {Number(line.price || 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="pbill">
+                <table className="pbill__table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '46%' }}>{isUrdu ? 'تفصیل' : 'Description'}</th>
+                      <th className="pbill__num" style={{ width: '14%' }}>{isUrdu ? 'مقدار' : 'Qty'}</th>
+                      <th className="pbill__num" style={{ width: '18%' }}>{isUrdu ? 'ریٹ' : 'Rate'}</th>
+                      <th className="pbill__num" style={{ width: '22%' }}>{isUrdu ? 'رقم' : 'Amount'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <span className="pbill__item">{isUrdu ? 'ہال بکنگ' : 'Hall booking'}</span>
+                        <span className="pbill__meta">
+                          {isUrdu ? 'مہمان' : 'Guests'}: {renderInput(gentsCount, setGentsCount, 'number', { width: '44px' })} {isUrdu ? 'مرد' : 'M'}
+                          {' + '}
+                          {renderInput(ladiesCount, setLadiesCount, 'number', { width: '44px' })} {isUrdu ? 'خواتین' : 'F'}
+                        </span>
+                      </td>
+                      <td className="pbill__num">{fmt(totalAttendance)}</td>
+                      <td className="pbill__num">{renderInput(ratePerHead, setRatePerHead, 'number', { width: '70px', textAlign: 'right' })}</td>
+                      <td className="pbill__num">{fmt(subtotal)}</td>
+                    </tr>
 
-                {/* Totals Section */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
-                  <div style={{ width: '380px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ fontWeight: '600', color: '#64748b', fontSize: '13px' }}>{isUrdu ? 'ٹیکس کے بغیر رقم' : 'Subtotal before taxes'}</span>
-                      <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>{totalBeforeTax.toLocaleString()}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #e2e8f0' }}>
-                      <span style={{ fontWeight: '600', color: '#64748b', fontSize: '13px' }}>{isUrdu ? 'ٹیکس (5%)' : 'Provincial Venue Taxes (5%)'}</span>
-                      <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '14px' }}>{taxAmount.toLocaleString()}</span>
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: '#f5fdf2', border: '1.5px dashed #5BD51E', borderRadius: '12px', marginTop: '16px', marginBottom: '16px' }}>
-                      <span style={{ fontWeight: '900', color: '#166534', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{isUrdu ? 'کل رقم' : 'Grand Total'}</span>
-                      <span style={{ fontWeight: '900', color: '#15803d', fontSize: '20px' }}>PKR {grandTotal.toLocaleString()}</span>
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', backgroundColor: remainingBalance <= 0 ? '#f0fdf4' : '#fef2f2', border: '1px solid', borderColor: remainingBalance <= 0 ? '#bbf7d0' : '#fecaca', borderRadius: '12px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: '900', color: remainingBalance <= 0 ? '#166534' : '#991b1b', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                          {remainingBalance <= 0 ? 'BALANCE CLEARED' : 'NET BALANCE DUE'}
-                        </span>
-                        <span style={{ fontSize: '11px', color: remainingBalance <= 0 ? '#166534' : '#991b1b', opacity: 0.8, marginTop: '2px', fontWeight: '700' }}>
-                          {remainingBalance <= 0 ? '(بل مکمل طور پر ادا شدہ)' : '(باقی رقم واجب الادا)'}
-                        </span>
-                      </div>
-                      <span style={{ fontWeight: '900', color: hasCollectDue(remainingBalance) ? '#b91c1c' : '#15803d', fontSize: '22px' }}>
-                        {formatCollectDuePKR(remainingBalance)}
-                      </span>
-                    </div>
+                    {showBillRow(overtimeAmount) && (
+                      <tr>
+                        <td>
+                          <span className="pbill__item">{isUrdu ? 'اوور ٹائم' : 'Overtime'}</span>
+                          <span className="pbill__meta">{isUrdu ? 'فی گھنٹہ' : 'Per extra hour'}</span>
+                        </td>
+                        <td className="pbill__num">{renderInput(overtimeHours, setOvertimeHours, 'number', { width: '44px', textAlign: 'right' })}</td>
+                        <td className="pbill__num">5,000</td>
+                        <td className="pbill__num">{fmt(overtimeAmount)}</td>
+                      </tr>
+                    )}
+
+                    {showBillRow(kitchenAmount) && (
+                      <tr>
+                        <td>
+                          <span className="pbill__item">{isUrdu ? 'کچن / دیگ' : 'Kitchen / Deg setup'}</span>
+                          <span className="pbill__meta">{isUrdu ? 'کیٹرنگ سہولت' : 'Catering facility charge'}</span>
+                        </td>
+                        <td className="pbill__num">1</td>
+                        <td className="pbill__num">{renderInput(kitchenCharge, setKitchenCharge, 'number', { width: '80px', textAlign: 'right' })}</td>
+                        <td className="pbill__num">{fmt(kitchenAmount)}</td>
+                      </tr>
+                    )}
+
+                    {showBillRow(decorationAmount) && (
+                      <tr>
+                        <td>
+                          <span className="pbill__item">{isUrdu ? 'ڈیکوریشن' : 'Decoration'}</span>
+                          <span className="pbill__meta">{isUrdu ? 'تھیم اور سجاوٹ' : 'Theme & setup charge'}</span>
+                        </td>
+                        <td className="pbill__num">1</td>
+                        <td className="pbill__num">{renderInput(decorationCharge, setDecorationCharge, 'number', { width: '80px', textAlign: 'right' })}</td>
+                        <td className="pbill__num">{fmt(decorationAmount)}</td>
+                      </tr>
+                    )}
+
+                    {showBillRow(generatorAmount) && (
+                      <tr>
+                        <td>
+                          <span className="pbill__item">{isUrdu ? 'جنریٹر' : 'Generator'}</span>
+                          <span className="pbill__meta">{isUrdu ? 'بجلی بیک اپ' : 'Power backup charge'}</span>
+                        </td>
+                        <td className="pbill__num">1</td>
+                        <td className="pbill__num">{renderInput(generatorCharge, setGeneratorCharge, 'number', { width: '80px', textAlign: 'right' })}</td>
+                        <td className="pbill__num">{fmt(generatorAmount)}</td>
+                      </tr>
+                    )}
+
+                    {chargedInventoryLines.map((line) => (
+                      <tr key={line.id}>
+                        <td>
+                          <span className="pbill__item">{line.name}</span>
+                          <span className="pbill__meta">{isUrdu ? 'انوینٹری آئٹم' : 'Inventory add-on'}</span>
+                        </td>
+                        <td className="pbill__num">{fmt(line.quantity)}</td>
+                        <td className="pbill__num">{fmt(line.unitPrice)}</td>
+                        <td className="pbill__num">{fmt(line.price)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="pbill__totals">
+                  <div className="pbill__totals-row">
+                    <span>{isUrdu ? 'سب ٹوٹل' : 'Subtotal'}</span>
+                    <strong>{fmt(totalBeforeTax)}</strong>
+                  </div>
+                  <div className="pbill__totals-row">
+                    <span>{isUrdu ? `ٹیکس (${taxRatePercent}%)` : `Tax (${taxRatePercent}%)`}</span>
+                    <strong>{fmt(taxAmount)}</strong>
+                  </div>
+                  <div className="pbill__totals-row pbill__totals-row--grand">
+                    <span>{isUrdu ? 'کل رقم' : 'Grand total'}</span>
+                    <strong>PKR {fmt(grandTotal)}</strong>
+                  </div>
+                  <div className="pbill__totals-row">
+                    <span>{isUrdu ? 'ایڈوانس وصول' : 'Advance received'}</span>
+                    <strong>PKR {isEditable
+                      ? renderInput(advancePaid, setAdvancePaid, 'number', { width: '90px', textAlign: 'right' })
+                      : fmt(advancePaid)}</strong>
+                  </div>
+                  <div className={`pbill__totals-row pbill__totals-row--due${remainingBalance <= 0 ? ' is-cleared' : ''}`}>
+                    <span>{remainingBalance <= 0
+                      ? (isUrdu ? 'بل صاف' : 'Balance cleared')
+                      : (isUrdu ? 'باقی رقم' : 'Balance due')}</span>
+                    <strong>{formatCollectDuePKR(remainingBalance)}</strong>
                   </div>
                 </div>
               </div>
@@ -1032,118 +909,101 @@ const PrintDocument = () => {
 
             {/* Tab 3: Operations Setup & Logistics View */}
             {activeDocType === 'operations_report' && (
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
-                  <div style={{ border: '1px solid #e2e8f0', padding: '20px', borderRadius: '12px', backgroundColor: '#fafbfc' }}>
-                    <h4 style={{ fontWeight: '800', fontSize: '11px', textTransform: 'uppercase', tracking: '0.08em', color: '#0f172a', borderBottom: '1.5px solid #5BD51E', paddingBottom: '6px', marginBottom: '12px' }}>
-                      {isUrdu ? 'ہال کا نقشہ' : 'Venue Floor Layout'}
-                    </h4>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'گنجائش:' : 'Target Capacity Limit:'}</strong> {venue?.capacity || booking.venue_capacity} {isUrdu ? 'نشستیں' : 'seats'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'مہمانوں کی تعداد:' : 'Registered Attendees:'}</strong> {totalAttendance} {isUrdu ? 'مہمان' : 'guests total'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'مردانہ نشستیں:' : 'Gents Section setup:'}</strong> {renderInput(gentsCount, setGentsCount, 'number', { width: '80px' })} {isUrdu ? 'کرسیاں' : 'chairs'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'زنانہ نشستیں:' : 'Ladies Section setup:'}</strong> {renderInput(ladiesCount, setLadiesCount, 'number', { width: '80px' })} {isUrdu ? 'کرسیاں' : 'chairs'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'اسٹیج کی جگہ:' : 'Stage Location:'}</strong> {isUrdu ? 'سامنے' : 'Central Front Focus'}</p>
+              <div className="plog">
+                <div className="plog__grid">
+                  <div className="plog__card">
+                    <h4>{isUrdu ? 'مہمان / ہال' : 'Guests / Hall'}</h4>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'گنجائش' : 'Capacity'}</span>
+                      <strong>{venue?.capacity || booking.venue_capacity || '—'} {isUrdu ? 'نشستیں' : 'seats'}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'کل مہمان' : 'Total guests'}</span>
+                      <strong>{fmt(totalAttendance)}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'مرد' : 'Gents'}</span>
+                      <strong>{renderInput(gentsCount, setGentsCount, 'number', { width: '56px', textAlign: 'right' })}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'خواتین' : 'Ladies'}</span>
+                      <strong>{renderInput(ladiesCount, setLadiesCount, 'number', { width: '56px', textAlign: 'right' })}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'سلاٹ' : 'Slot'}</span>
+                      <strong>{slotLabel}</strong>
+                    </div>
                   </div>
-                  
-                  <div style={{ border: '1px solid #e2e8f0', padding: '20px', borderRadius: '12px', backgroundColor: '#fafbfc' }}>
-                    <h4 style={{ fontWeight: '800', fontSize: '11px', textTransform: 'uppercase', tracking: '0.08em', color: '#0f172a', borderBottom: '1.5px solid #5BD51E', paddingBottom: '6px', marginBottom: '12px' }}>
-                      {isUrdu ? 'کیٹرنگ اور دیگر تفصیلات' : 'Catering & Utility Specs'}
-                    </h4>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'باورچی خانے تک رسائی:' : 'Kitchen Access:'}</strong> {isUrdu ? 'اسٹاف کے لیے' : 'Standard Staff Active'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'جنریٹر کی ضرورت:' : 'Generator Requirement:'}</strong> {generatorCharge > 0 ? (isUrdu ? 'جنریٹر بک ہے' : 'Diagnostic Checked Backup Active') : (isUrdu ? 'جنریٹر کی ضرورت نہیں' : 'No Backup requested')}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'بجلی بند ہونے کی صورت میں:' : 'Power Outage Protocols:'}</strong> {isUrdu ? '10 سیکنڈ کے اندر چلایا جائے گا' : 'Instant 10-sec switchover'}</p>
-                    <p style={{ margin: '8px 0', fontSize: '13px' }}><strong>{isUrdu ? 'اسٹاف:' : 'Staff Allocation:'}</strong> {isUrdu ? '6 ویٹر / 2 ہیلپر' : '6 Waiters / 2 Kitchen Helps'}</p>
+
+                  <div className="plog__card">
+                    <h4>{isUrdu ? 'سروسز' : 'Services'}</h4>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'کچن' : 'Kitchen'}</span>
+                      <strong>{kitchenAmount > 0 ? `PKR ${fmt(kitchenAmount)}` : (isUrdu ? 'نہیں' : 'No')}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'ڈیکوریشن' : 'Decoration'}</span>
+                      <strong>{decorationAmount > 0 ? `PKR ${fmt(decorationAmount)}` : (isUrdu ? 'نہیں' : 'No')}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'جنریٹر' : 'Generator'}</span>
+                      <strong>{generatorAmount > 0 ? `PKR ${fmt(generatorAmount)}` : (isUrdu ? 'نہیں' : 'No')}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'اوور ٹائم' : 'Overtime'}</span>
+                      <strong>{Number(overtimeHours) > 0 ? `${fmt(overtimeHours)} ${isUrdu ? 'گھنٹے' : 'hrs'}` : (isUrdu ? 'نہیں' : 'No')}</strong>
+                    </div>
+                    <div className="plog__row">
+                      <span>{isUrdu ? 'ایڈوانس' : 'Advance'}</span>
+                      <strong>PKR {fmt(advancePaid)}</strong>
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '24px', backgroundColor: '#f8fafc' }}>
-                  <h5 style={{ fontWeight: '800', color: '#0f172a', fontSize: '14px', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={16} color="#5BD51E" /> Operational Execution Checklist:
-                  </h5>
-                  <ul style={{ margin: 0, paddingLeft: '18px', color: '#475569', fontSize: '13px', lineHeight: '1.6' }}>
-                    <li style={{ marginBottom: '8px' }}>Floor cleaners must complete sanitization and stage dusting 3 hours before start slot.</li>
-                    <li style={{ marginBottom: '8px' }}>Inspect gents & ladies separation curtain structures if double layouts are activated.</li>
-                    <li style={{ marginBottom: '8px' }}>Test audio-visual microphones, main ceiling chandelier, and backup gen wiring before guests arrive.</li>
-                    <li style={{ marginBottom: '8px' }}>Coordinate dining timing with the kitchen head to ensure hot serving exactly at the scheduled minute.</li>
+                {inventoryBillLines.length > 0 && (
+                  <div className="plog__card">
+                    <h4>{isUrdu ? 'انوینٹری آئٹمز' : 'Inventory items'}</h4>
+                    {inventoryBillLines.map((line) => (
+                      <div className="plog__row" key={line.id}>
+                        <span>{line.name}{line.includeInBill ? '' : (isUrdu ? ' (بلا چارج)' : ' (no charge)')}</span>
+                        <strong>× {fmt(line.quantity)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="plog__card">
+                  <h4>{isUrdu ? 'چیک لسٹ' : 'Checklist'}</h4>
+                  <ul className="plog__list">
+                    <li>{isUrdu ? 'ہال صفائی اور سٹیج تیار' : 'Hall cleaning and stage ready'}</li>
+                    <li>{isUrdu ? 'لائٹنگ / آڈیو چیک' : 'Lighting / audio check'}</li>
+                    <li>{isUrdu ? 'مہمان سیٹنگ مرد / خواتین کے مطابق' : 'Seating set for gents / ladies counts'}</li>
+                    {generatorAmount > 0 && (
+                      <li>{isUrdu ? 'جنریٹر بیک اپ چیک' : 'Generator backup checked'}</li>
+                    )}
+                    {inventoryBillLines.length > 0 && (
+                      <li>{isUrdu ? 'انوینٹری آئٹمز ایونٹ سے پہلے تیار' : 'Inventory items staged before event'}</li>
+                    )}
                   </ul>
                 </div>
               </div>
             )}
 
-            {/* DUAL SIGNATURE LINES AT THE BOTTOM */}
-            <div style={{ marginTop: '80px', display: 'flex', justifyContent: 'space-between', padding: '0 20px' }}>
-              
-              {/* Authorized Officer Signature Column */}
-              <div style={{ textAlign: 'center', width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ 
-                  borderBottom: '1px solid #94a3b8', 
-                  width: '100%', 
-                  height: '60px', 
-                  marginBottom: '8px', 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'flex-end',
-                  position: 'relative'
-                }}>
-                  {officerSig ? (
-                    <img 
-                      src={officerSig} 
-                      alt="Officer Signature" 
-                      style={{ maxHeight: '55px', maxWidth: '100%', objectFit: 'contain' }} 
-                    />
-                  ) : (
-                    <span style={{ fontSize: '10px', color: '#cbd5e1', fontStyle: 'italic', marginBottom: '8px' }}>
-                      [ Draw Signature on Right ]
-                    </span>
-                  )}
+            <div className="pdoc__sigs">
+              <div className="pdoc__sig">
+                <div className="pdoc__sig-line">
+                  {officerSig ? <img src={officerSig} alt="Officer signature" /> : null}
                 </div>
-                <p style={{ fontSize: '12px', fontWeight: '800', color: '#334155', margin: 0 }}>{isUrdu ? 'آفیسر کے دستخط' : 'Authorized Officer Sign'}</p>
-                <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>{isUrdu ? 'گیٹ وے مینجمنٹ اسٹاف' : 'Gateway Management Staff'}</p>
+                <strong>{isUrdu ? 'آفیسر دستخط' : 'Officer signature'}</strong>
+                <span>{isUrdu ? 'مینجمنٹ' : 'Management'}</span>
               </div>
-              
-              {/* Customer Signature Column */}
-              <div style={{ textAlign: 'center', width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ 
-                  borderBottom: '1px solid #94a3b8', 
-                  width: '100%', 
-                  height: '60px', 
-                  marginBottom: '8px', 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'flex-end',
-                  position: 'relative'
-                }}>
-                  {customerSig ? (
-                    <img 
-                      src={customerSig} 
-                      alt="Customer Signature" 
-                      style={{ maxHeight: '55px', maxWidth: '100%', objectFit: 'contain' }} 
-                    />
-                  ) : (
-                    <span style={{ fontSize: '10px', color: '#cbd5e1', fontStyle: 'italic', marginBottom: '8px' }}>
-                      [ Draw Signature on Right ]
-                    </span>
-                  )}
+              <div className="pdoc__sig">
+                <div className="pdoc__sig-line">
+                  {customerSig ? <img src={customerSig} alt="Customer signature" /> : null}
                 </div>
-                <p style={{ fontSize: '12px', fontWeight: '800', color: '#334155', margin: 0 }}>{isUrdu ? 'گاہک کے دستخط' : 'Customer Acknowledgement'}</p>
-                <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0' }}>{isUrdu ? 'کلائنٹ' : 'Client Contract Holder'}</p>
+                <strong>{isUrdu ? 'کسٹمر دستخط' : 'Customer signature'}</strong>
+                <span>{isUrdu ? 'کلائنٹ' : 'Client'}</span>
               </div>
-
-            </div>
-
-            {/* FOOTER NOTICE */}
-            <div style={{ 
-              position: 'absolute', 
-              bottom: '40px', 
-              left: '50px', 
-              right: '50px', 
-              borderTop: '1px solid #e2e8f0', 
-              paddingTop: '16px', 
-              textAlign: 'center', 
-              fontSize: '11px', 
-              color: '#94a3b8' 
-            }}>
-              This is a computer-generated contract receipt issued by the Hallora SaaS Platform. Hand-drawn digital signatures are verified in real-time.
             </div>
 
           </div>
@@ -1232,7 +1092,7 @@ const PrintDocument = () => {
           </div>
           
           <p style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5', marginBottom: '20px' }}>
-            Draw directly inside the pads below. The signatures will dynamically sync onto the A4 sheet.
+            Draw directly inside the pads below. Signatures sync onto the A5 sheet.
           </p>
 
           {/* Canvas Signature Pad 1: Officer */}

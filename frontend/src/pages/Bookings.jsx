@@ -1334,7 +1334,7 @@ const Bookings = () => {
                     const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
                     const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
                     const quantity = Number(line.quantity_used || 0);
-                    const billAmount = line.include_in_bill && Number.isFinite(quantity) && quantity > 0
+                    const billAmount = item && Number.isFinite(quantity) && quantity > 0
                       ? unitPrice * quantity
                       : 0;
                     const selectedByOtherLines = new Set(
@@ -1417,7 +1417,7 @@ const Bookings = () => {
                         <div className="reservation-console__inventory-field reservation-console__inventory-field--amount">
                           <span>Bill Amount</span>
                           <div className="reservation-console__inventory-readout reservation-console__inventory-readout--amount">
-                            {item && line.include_in_bill ? `PKR ${billAmount.toLocaleString()}` : '—'}
+                            {item ? `PKR ${billAmount.toLocaleString()}` : '—'}
                           </div>
                         </div>
 

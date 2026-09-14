@@ -119,6 +119,8 @@ const Bookings = () => {
   const [selectedDecorationId, setSelectedDecorationId] = useState('');
   const [inventoryCatalog, setInventoryCatalog] = useState([]);
   const [inventoryLines, setInventoryLines] = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const inventoryHydratedRef = useRef(true);
   const [showManualInventory, setShowManualInventory] = useState(false);
   const [savingManualInventory, setSavingManualInventory] = useState(false);
   const [manualInventory, setManualInventory] = useState({
@@ -207,7 +209,7 @@ const Bookings = () => {
         client.get('/venues/'),
         client.get('/customers/'),
         client.get('/decorations/packages/?is_active=true').catch(() => ({ data: [] })),
-        client.get('/inventory/items/').catch(() => ({ data: [] })),
+        client.get('/inventory/items/?page_size=1000').catch(() => ({ data: [] })),
       ]);
       setBookings(bookingsRes.data.results || bookingsRes.data || []);
       setHalls(hallsRes.data.results || hallsRes.data || []);
@@ -256,7 +258,10 @@ const Bookings = () => {
   const inventorySummaryLines = inventoryLines
     .map((line) => {
       if (!line.inventory_item || !line.include_in_bill) return null;
-      const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
+      const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item))
+        || (line.item_name
+          ? { name: line.item_name, price_per_unit: line.item_price ?? 0 }
+          : null);
       if (!item) return null;
       const quantity = Number(line.quantity_used || 0);
       const unitPrice = Number(item.price_per_unit || 0);
@@ -315,6 +320,8 @@ const Bookings = () => {
     setEditingId(null);
     setSelectedDecorationId('');
     setInventoryLines([]);
+    setInventoryLoading(false);
+    inventoryHydratedRef.current = true;
     setShowManualInventory(false);
     setSavingManualInventory(false);
     setManualInventory({
@@ -421,25 +428,58 @@ const Bookings = () => {
   };
 
   const loadBookingInventory = async (bookingId) => {
+    inventoryHydratedRef.current = false;
+    setInventoryLoading(true);
+    setInventoryLines([]);
     try {
-      const res = await client.get(`/inventory/booking-items/?booking=${bookingId}`);
-      const rows = res.data.results || res.data || [];
-      setInventoryLines(
-        rows.map((r) => ({
-          id: r.id,
-          inventory_item: String(r.inventory_item),
-          quantity_used: r.quantity_used,
-          original_quantity: r.quantity_used,
-          include_in_bill: Boolean(r.include_in_bill),
-        }))
+      const res = await client.get(
+        `/inventory/booking-items/?booking=${bookingId}&page_size=1000`
       );
+      const rows = res.data.results || res.data || [];
+      const mapped = rows.map((r) => ({
+        id: r.id,
+        inventory_item: String(r.inventory_item),
+        quantity_used: r.quantity_used,
+        original_quantity: r.quantity_used,
+        include_in_bill: Boolean(r.include_in_bill),
+        item_name: r.item_name || '',
+        item_price: r.item_price,
+        item_unit: r.item_unit || 'units',
+      }));
+      setInventoryLines(mapped);
+      // Keep allocated items visible even if missing from the current catalog page.
+      setInventoryCatalog((prev) => {
+        const byId = new Map(prev.map((item) => [String(item.id), item]));
+        for (const row of rows) {
+          const id = String(row.inventory_item);
+          if (byId.has(id)) continue;
+          byId.set(id, {
+            id: row.inventory_item,
+            name: row.item_name || `Item #${id}`,
+            unit: row.item_unit || 'units',
+            price_per_unit: row.item_price ?? 0,
+            quantity: 0,
+            status: 'IN_STOCK',
+          });
+        }
+        return Array.from(byId.values());
+      });
     } catch {
       setInventoryLines([]);
+      toast.error('Failed to load booking inventory items');
+    } finally {
+      inventoryHydratedRef.current = true;
+      setInventoryLoading(false);
     }
   };
 
   const syncBookingInventory = async (bookingId, lines = inventoryLines) => {
-    const res = await client.get(`/inventory/booking-items/?booking=${bookingId}`);
+    if (!inventoryHydratedRef.current) {
+      throw new Error('Inventory is still loading');
+    }
+    const res = await client.get(
+      `/inventory/booking-items/?booking=${bookingId}&page_size=1000`
+    );
     const existing = res.data.results || res.data || [];
     const retainedIds = new Set(
       lines.filter((line) => line.id).map((line) => Number(line.id))
@@ -569,7 +609,7 @@ const Bookings = () => {
     setViewMode('create');
   };
 
-  const populateBookingForm = (booking) => {
+  const populateBookingForm = async (booking) => {
     setEditingId(booking.id);
     setFormData({
       booking_id: booking.booking_id || `BK-${booking.id}`,
@@ -596,19 +636,19 @@ const Bookings = () => {
     setNewCustomerMode(false);
     setBookingError('');
     setSelectedDecorationId(booking.decoration_package ? String(booking.decoration_package) : '');
-    loadBookingInventory(booking.id);
+    await loadBookingInventory(booking.id);
   };
 
-  const handleEditClick = (booking) => {
+  const handleEditClick = async (booking) => {
     if (!canManage) {
       toast.error('You do not have permission to edit bookings.');
       return;
     }
-    populateBookingForm(booking);
+    await populateBookingForm(booking);
     setViewMode('edit');
   };
 
-  const handleInvoiceClick = (booking) => {
+  const handleInvoiceClick = async (booking) => {
     if (!canManage) {
       toast.error('You do not have permission to edit invoices.');
       return;
@@ -617,7 +657,7 @@ const Bookings = () => {
       toast.error('Posted or cancelled bookings cannot be invoiced.');
       return;
     }
-    populateBookingForm(booking);
+    await populateBookingForm(booking);
     setViewMode('invoice');
   };
 
@@ -780,15 +820,26 @@ const Bookings = () => {
       return;
     }
 
+    if ((viewMode === 'edit' || viewMode === 'invoice') && !inventoryHydratedRef.current) {
+      toast.error('Inventory is still loading. Please wait a moment and try again.');
+      return;
+    }
+
     // Only validate inventory lines that were started (item selected or qty entered)
     const filledInventoryLines = inventoryLines.filter(
       (line) => line.inventory_item || Number(line.quantity_used) > 0 || line.include_in_bill
     );
     const selectedInventoryIds = new Set();
     for (const line of filledInventoryLines) {
-      const item = availableInventoryCatalog.find(
+      const item = inventoryCatalog.find(
         (candidate) => String(candidate.id) === String(line.inventory_item)
-      );
+      ) || (line.inventory_item && line.item_name
+        ? {
+            id: line.inventory_item,
+            name: line.item_name,
+            price_per_unit: line.item_price,
+          }
+        : null);
       const quantity = Number(line.quantity_used);
       if (!item) {
         setBookingError('Please select a valid inventory item, or remove empty add-on rows.');
@@ -926,7 +977,15 @@ const Bookings = () => {
         toast.success(isDraft ? 'Draft saved' : 'Reservation saved successfully');
       }
 
-      if (bookingId && filledInventoryLines.length > 0) {
+      // Always sync on edit/invoice (empty = clear). On create, sync when lines exist.
+      const shouldSyncInventory =
+        bookingId
+        && (
+          viewMode === 'edit'
+          || viewMode === 'invoice'
+          || filledInventoryLines.length > 0
+        );
+      if (shouldSyncInventory) {
         try {
           await syncBookingInventory(bookingId, filledInventoryLines);
         } catch {
@@ -1454,22 +1513,39 @@ const Bookings = () => {
                   </div>
                 </div>
                 <div className="reservation-console__inventory-lines">
-                  {availableInventoryCatalog.length === 0 && inventoryLines.length === 0 && (
+                  {inventoryLoading && (
+                    <div className="reservation-console__inventory-empty">
+                      <Package size={18} />
+                      <strong>Loading add-ons…</strong>
+                      <span>Fetching saved inventory items for this booking.</span>
+                    </div>
+                  )}
+                  {!inventoryLoading && availableInventoryCatalog.length === 0 && inventoryLines.length === 0 && (
                     <div className="reservation-console__inventory-empty">
                       <Package size={18} />
                       <strong>No inventory stock yet</strong>
                       <span>Add items from Inventory, or create one here for this booking.</span>
                     </div>
                   )}
-                  {availableInventoryCatalog.length > 0 && inventoryLines.length === 0 && (
+                  {!inventoryLoading && availableInventoryCatalog.length > 0 && inventoryLines.length === 0 && (
                     <div className="reservation-console__inventory-empty">
                       <Package size={18} />
                       <strong>No add-ons selected</strong>
                       <span>Use Add Item to allocate chairs, decor, or catering stock.</span>
                     </div>
                   )}
-                  {inventoryLines.map((line, index) => {
-                    const item = availableInventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item));
+                  {!inventoryLoading && inventoryLines.map((line, index) => {
+                    const item = inventoryCatalog.find((candidate) => String(candidate.id) === String(line.inventory_item))
+                      || (line.inventory_item && line.item_name
+                        ? {
+                            id: line.inventory_item,
+                            name: line.item_name,
+                            unit: line.item_unit || 'units',
+                            price_per_unit: line.item_price ?? 0,
+                            quantity: 0,
+                            status: 'IN_STOCK',
+                          }
+                        : null);
                     const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
                     const quantity = Number(line.quantity_used || 0);
                     const billAmount = item && Number.isFinite(quantity) && quantity > 0
@@ -1480,10 +1556,14 @@ const Bookings = () => {
                         .filter((_, itemIndex) => itemIndex !== index)
                         .map((candidate) => String(candidate.inventory_item))
                     );
+                    const selectOptions = [...availableInventoryCatalog];
+                    if (item && !selectOptions.some((candidate) => String(candidate.id) === String(item.id))) {
+                      selectOptions.unshift(item);
+                    }
                     return (
                       <div
                         className="reservation-console__inventory-line"
-                        key={line.id || index}
+                        key={line.id || `new-${index}-${line.inventory_item || 'empty'}`}
                       >
                         <label className="reservation-console__inventory-bill" title="Add item price to bill">
                           <input
@@ -1517,7 +1597,7 @@ const Bookings = () => {
                             }}
                           >
                             <option value="">Select item</option>
-                            {availableInventoryCatalog.map((candidate) => (
+                            {selectOptions.map((candidate) => (
                               <option
                                 key={candidate.id}
                                 value={candidate.id}
@@ -1722,8 +1802,8 @@ const Bookings = () => {
               </div>
               {bookingError && <div className="reservation-console__error">{bookingError}</div>}
               {!isPosted && (
-                <button className="reservation-console__confirm" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving…' : isInvoice ? 'Confirm Invoice' : 'Confirm Booking'}
+                <button className="reservation-console__confirm" type="submit" disabled={isSubmitting || inventoryLoading}>
+                  {isSubmitting ? 'Saving…' : inventoryLoading ? 'Loading inventory…' : isInvoice ? 'Confirm Invoice' : 'Confirm Booking'}
                 </button>
               )}
               {!isPosted && viewMode === 'create' && <button className="reservation-console__hold" type="button" disabled={isSubmitting} onClick={handlePendingSubmit}>{isSubmitting ? 'Saving…' : 'Save Draft'}</button>}

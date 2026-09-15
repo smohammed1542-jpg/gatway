@@ -1,7 +1,11 @@
 [build]
-builder = "nixpacks"
+builder = "RAILPACK"
 buildCommand = "python manage.py collectstatic --noinput"
 
 [deploy]
 startCommand = "bash start.sh"
 restartPolicyType = "on_failure"
+
+# Used by Railpack/mise during image build (Python attestation probe fails for 3.12.8).
+[build.variables]
+MISE_PYTHON_GITHUB_ATTESTATIONS = "false"

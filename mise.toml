@@ -1,0 +1,4 @@
+# Railpack/mise: Python 3.12.8 binaries may lack GitHub attestations,
+# which breaks Railway builds. Keep checksum verification; skip attestations.
+[settings]
+python.github_attestations = false

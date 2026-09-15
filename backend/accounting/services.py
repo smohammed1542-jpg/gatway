@@ -615,6 +615,7 @@ class AccountingService:
         if existing:
             return existing
         from bookings.pricing import compute_booking_totals
+
         totals = totals or compute_booking_totals(booking)
         inv = Invoice.objects.create(
             tenant=booking.tenant,
@@ -631,8 +632,19 @@ class AccountingService:
             created_by=user or booking.created_by,
             invoice_no=f'TMP-{booking.pk}-{timezone.now().timestamp()}',
         )
-        inv.invoice_no = sequences.next_document_no(booking.tenant, 'INV')
-        inv.save(update_fields=['invoice_no'])
+        # Assign a real number; retry if sequence was stale vs unique constraint.
+        for _ in range(5):
+            inv.invoice_no = sequences.next_document_no(booking.tenant, 'INV')
+            try:
+                with transaction.atomic():
+                    inv.save(update_fields=['invoice_no'])
+                break
+            except IntegrityError:
+                continue
+        else:
+            raise ValueError(
+                'Could not allocate a unique invoice number. Try saving the booking again.'
+            )
         AccountingService._refresh_invoice_status(inv)
         return inv
 
@@ -726,8 +738,18 @@ class AccountingService:
             created_by=user or stay.created_by,
             invoice_no=f'TMP-STAY-{stay.pk}-{timezone.now().timestamp()}',
         )
-        inv.invoice_no = sequences.next_document_no(stay.tenant, 'INV')
-        inv.save(update_fields=['invoice_no'])
+        for _ in range(5):
+            inv.invoice_no = sequences.next_document_no(stay.tenant, 'INV')
+            try:
+                with transaction.atomic():
+                    inv.save(update_fields=['invoice_no'])
+                break
+            except IntegrityError:
+                continue
+        else:
+            raise ValueError(
+                'Could not allocate a unique invoice number. Try saving again.'
+            )
         AccountingService._refresh_invoice_status(inv)
         return inv
 

@@ -550,6 +550,33 @@ class ERPAlignmentTests(TestCase):
         self.assertNotEqual(n1, n2)
         self.assertTrue(n1.startswith('JE-'))
 
+    def test_document_sequence_skips_existing_invoice_numbers(self):
+        """Stale DocumentSequence must not reuse invoice_no already on Invoice rows."""
+        from accounting.models import DocumentSequence, Invoice
+        from accounting.sequences import next_document_no
+        from customers.models import Customer
+
+        customer = Customer.objects.create(
+            tenant=self.tenant, first_name='Ali', last_name='Khan', phone='03001234567'
+        )
+        Invoice.objects.create(
+            tenant=self.tenant,
+            customer=customer,
+            invoice_date=date.today(),
+            status='ISSUED',
+            subtotal=Decimal('100'),
+            tax=Decimal('0'),
+            total=Decimal('100'),
+            invoice_no='INV-000003',
+        )
+        DocumentSequence.objects.update_or_create(
+            tenant=self.tenant,
+            doc_type='INV',
+            defaults={'last_number': 2},
+        )
+        next_no = next_document_no(self.tenant, 'INV')
+        self.assertEqual(next_no, 'INV-000004')
+
     def test_inventory_movement_posts_gl(self):
         from inventory.models import InventoryItem
         from inventory.services import InventoryService

@@ -145,6 +145,7 @@ const Bookings = () => {
   );
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [eventDateFilter, setEventDateFilter] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   
   // Primary Form Data
@@ -1040,14 +1041,20 @@ const Bookings = () => {
 
 
   // Filter list bookings
-  const filteredBookings = bookings.filter(b => {
+  const bookingEventDate = (booking) => {
+    const raw = booking?.event_date || booking?.start_date || '';
+    return String(raw).slice(0, 10);
+  };
+  const filteredBookings = bookings.filter((b) => {
     const q = searchQuery.toLowerCase();
-    return (
-      (b.event_name || '').toLowerCase().includes(q) ||
-      (b.customer_name || '').toLowerCase().includes(q) ||
-      (b.venue_name || '').toLowerCase().includes(q) ||
-      (b.booking_id || '').toLowerCase().includes(q)
+    const matchesSearch = !q || (
+      (b.event_name || '').toLowerCase().includes(q)
+      || (b.customer_name || '').toLowerCase().includes(q)
+      || (b.venue_name || '').toLowerCase().includes(q)
+      || (b.booking_id || '').toLowerCase().includes(q)
     );
+    const matchesDate = !eventDateFilter || bookingEventDate(b) === eventDateFilter;
+    return matchesSearch && matchesDate;
   });
 
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
@@ -1130,13 +1137,31 @@ const Bookings = () => {
             </div>
 
             {/* Filter Search */}
-            <div className="search-toolbar">
+            <div className="search-toolbar bookings-list-toolbar">
               <SearchInput
                 variant="inset"
                 placeholder="Search reservations by event name, customer first/last name, hall tag, or booking ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              <label className="bookings-date-filter">
+                <span>Event date</span>
+                <input
+                  type="date"
+                  value={eventDateFilter}
+                  onChange={(e) => setEventDateFilter(e.target.value)}
+                  aria-label="Filter bookings by event date"
+                />
+                {eventDateFilter && (
+                  <button
+                    type="button"
+                    className="bookings-date-filter__clear"
+                    onClick={() => setEventDateFilter('')}
+                  >
+                    Clear
+                  </button>
+                )}
+              </label>
             </div>
 
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1146,7 +1171,11 @@ const Bookings = () => {
                 showColumnChooser
                 pageSize={0}
                 emptyTitle="No bookings match your criteria"
-                emptyDescription="Try another search or create a new booking."
+                emptyDescription={
+                  eventDateFilter
+                    ? 'No bookings on this event date. Clear the date filter or pick another day.'
+                    : 'Try another search or create a new booking.'
+                }
                 columns={[
                   { key: 'customer', label: 'Customer / Event' },
                   { key: 'hall', label: 'Hall' },

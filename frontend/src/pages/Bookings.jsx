@@ -1006,7 +1006,7 @@ const Bookings = () => {
       };
       if (typeof errData === 'string') {
         msg = looksLikeHtml(errData)
-          ? 'Server error while saving booking. Often the Accounting fiscal period is closed for the event year — reopen it in Admin / Accounting, then try again.'
+          ? 'Server error while saving booking. Please try again, or contact admin if it continues.'
           : errData;
       } else if (errData?.detail) {
         msg = Array.isArray(errData.detail) ? errData.detail[0] : String(errData.detail);
@@ -1018,10 +1018,10 @@ const Bookings = () => {
         const text = Array.isArray(firstVal) ? firstVal[0] : firstVal;
         msg = firstKey && text ? `${firstKey}: ${text}` : String(text || msg);
       } else if (status === 500 || looksLikeHtml(errData)) {
-        msg = 'Server error while saving booking. Check that the Accounting fiscal period is open for the event year, then try again.';
+        msg = 'Server error while saving booking. Please try again, or contact admin if it continues.';
       }
       if (looksLikeHtml(msg)) {
-        msg = 'Server error while saving booking. Check that the Accounting fiscal period is open for the event year, then try again.';
+        msg = 'Server error while saving booking. Please try again, or contact admin if it continues.';
       }
       setBookingError(msg);
       toast.error(msg);

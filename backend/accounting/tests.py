@@ -128,22 +128,24 @@ class AccountingPostingTests(TestCase):
         self.assertTrue(tb['balanced'])
         self.assertEqual(tb['total_debit'], tb['total_credit'])
 
-    def test_closed_period_blocks_posting(self):
+    def test_closed_period_auto_reopens_on_posting(self):
         from accounting.models import FiscalPeriod
         period = FiscalPeriod.objects.filter(tenant=self.tenant).first()
         self.assertIsNotNone(period)
         period.is_closed = True
         period.save(update_fields=['is_closed'])
-        with self.assertRaises(ValueError):
-            AccountingService.post_entry(
-                self.tenant,
-                entry_date=date.today(),
-                memo='Closed',
-                source_type='manual',
-                source_id=1,
-                lines=[('1000', 10, 0, ''), ('4000', 0, 10, '')],
-                user=self.user,
-            )
+        entry = AccountingService.post_entry(
+            self.tenant,
+            entry_date=date.today(),
+            memo='Reopen closed period',
+            source_type='manual',
+            source_id=1,
+            lines=[('1000', 10, 0, ''), ('4000', 0, 10, '')],
+            user=self.user,
+        )
+        self.assertIsNotNone(entry)
+        period.refresh_from_db()
+        self.assertFalse(period.is_closed)
 
     def test_unbalanced_journal_rejected(self):
         with self.assertRaises(ValueError):

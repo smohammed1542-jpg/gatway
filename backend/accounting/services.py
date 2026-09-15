@@ -103,14 +103,7 @@ class AccountingService:
                 is_default=True,
             )
         year = timezone.localdate().year
-        FiscalPeriod.objects.get_or_create(
-            tenant=tenant,
-            name=str(year),
-            defaults={
-                'start_date': date(year, 1, 1),
-                'end_date': date(year, 12, 31),
-            },
-        )
+        AccountingService.ensure_open_fiscal_period(tenant, date(year, 1, 1))
         # Ensure a default bank account linked to GL Bank
         if not BankAccount.objects.filter(tenant=tenant).exists():
             bank_gl = Account.objects.filter(tenant=tenant, code=BANK).first()
@@ -122,6 +115,43 @@ class AccountingService:
                     gl_account=bank_gl,
                     is_default=True,
                 )
+
+    @staticmethod
+    def ensure_open_fiscal_period(tenant, entry_date):
+        """
+        Ensure a fiscal period covers entry_date and is open.
+
+        Hall bookings/payments must not fail because a year was left closed in admin.
+        Reopens any covering closed period; creates the calendar year if none exists.
+        """
+        if not tenant or not entry_date:
+            return None
+        if hasattr(entry_date, 'date') and callable(entry_date.date):
+            entry_date = entry_date.date()
+
+        covering = FiscalPeriod.objects.filter(
+            tenant=tenant,
+            start_date__lte=entry_date,
+            end_date__gte=entry_date,
+        )
+        if covering.exists():
+            covering.filter(is_closed=True).update(is_closed=False)
+            return covering.order_by('-start_date').first()
+
+        year = entry_date.year
+        period, _created = FiscalPeriod.objects.get_or_create(
+            tenant=tenant,
+            name=str(year),
+            defaults={
+                'start_date': date(year, 1, 1),
+                'end_date': date(year, 12, 31),
+                'is_closed': False,
+            },
+        )
+        if period.is_closed:
+            period.is_closed = False
+            period.save(update_fields=['is_closed', 'updated_at'])
+        return period
 
     @staticmethod
     def account(tenant, code):
@@ -153,16 +183,8 @@ class AccountingService:
 
     @staticmethod
     def assert_period_open(tenant, entry_date):
-        if not tenant or not entry_date:
-            return
-        closed = FiscalPeriod.objects.filter(
-            tenant=tenant,
-            is_closed=True,
-            start_date__lte=entry_date,
-            end_date__gte=entry_date,
-        ).exists()
-        if closed:
-            raise ValueError('This fiscal period is closed. Reopen the period before posting.')
+        # Operational posts auto-reopen closed periods instead of failing the booking.
+        AccountingService.ensure_open_fiscal_period(tenant, entry_date)
 
     @staticmethod
     def find_posted(tenant, source_type, source_id, *, lock=False):

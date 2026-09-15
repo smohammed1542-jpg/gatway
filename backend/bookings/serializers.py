@@ -212,7 +212,7 @@ class BookingSerializer(serializers.ModelSerializer):
         try:
             return super().update(instance, validated_data)
         except ValueError as exc:
-            # Accounting posts (closed fiscal period, unbalanced journal, etc.)
+            # Accounting posts (unbalanced journal, etc.) → readable 400, not HTML 500.
             raise serializers.ValidationError({'detail': str(exc)}) from exc
 
     def create(self, validated_data):
@@ -242,5 +242,4 @@ class BookingSerializer(serializers.ModelSerializer):
                 )
             return booking
         except ValueError as exc:
-            # e.g. "This fiscal period is closed. Reopen the period before posting."
             raise serializers.ValidationError({'detail': str(exc)}) from exc

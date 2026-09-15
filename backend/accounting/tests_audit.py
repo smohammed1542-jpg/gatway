@@ -376,21 +376,23 @@ class AccountingAuditTests(TestCase):
         health = reports.integrity_check(self.tenant)
         self.assertTrue(health['ok'], health['issues'])
 
-    def test_closed_period_blocks_api_and_service(self):
+    def test_closed_period_auto_reopens_on_service_post(self):
         from accounting.models import FiscalPeriod
         period = FiscalPeriod.objects.filter(tenant=self.tenant).first()
         period.is_closed = True
         period.save(update_fields=['is_closed'])
-        with self.assertRaises(ValueError):
-            AccountingService.post_entry(
-                self.tenant,
-                entry_date=date.today(),
-                memo='x',
-                source_type='manual',
-                source_id=1,
-                lines=[(CASH, 10, 0, ''), ('3000', 0, 10, '')],
-                user=self.admin,
-            )
+        entry = AccountingService.post_entry(
+            self.tenant,
+            entry_date=date.today(),
+            memo='x',
+            source_type='manual',
+            source_id=1,
+            lines=[(CASH, 10, 0, ''), ('3000', 0, 10, '')],
+            user=self.admin,
+        )
+        self.assertIsNotNone(entry)
+        period.refresh_from_db()
+        self.assertFalse(period.is_closed)
 
     def test_staff_cannot_post_opening_or_reverse(self):
         client = APIClient()

@@ -179,7 +179,9 @@ class Booking(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.event_name} - {self.customer.last_name}"
+        if self.customer_id:
+            return f'{self.event_name} - {self.customer.display_name}'
+        return f'{self.event_name} - (draft)'
 
 
 class MarriageHallPageVisibility(models.Model):

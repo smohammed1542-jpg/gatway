@@ -19,4 +19,14 @@ def post_booking_ledger(sender, instance, **kwargs):
         'advance_paid', 'remaining_balance', 'payment_status', 'total_price', 'updated_at',
     }:
         return
-    AccountingService.sync_booking(instance, user=getattr(instance, 'created_by', None))
+    # Let ValueError bubble (serializer converts to 400). Other unexpected
+    # accounting failures should not become opaque HTML 500s without context —
+    # re-raise as ValueError so the API can return a readable message.
+    try:
+        AccountingService.sync_booking(instance, user=getattr(instance, 'created_by', None))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(
+            f'Accounting post failed while saving booking: {exc}'
+        ) from exc

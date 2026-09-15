@@ -998,18 +998,30 @@ const Bookings = () => {
       fetchData();
     } catch (err) {
       const errData = err?.response?.data;
+      const status = err?.response?.status;
       let msg = err?.message || 'Failed to save booking details.';
+      const looksLikeHtml = (value) => {
+        const text = String(value || '');
+        return /<!doctype|<html[\s>]|Server Error \(500\)/i.test(text);
+      };
       if (typeof errData === 'string') {
-        msg = errData;
+        msg = looksLikeHtml(errData)
+          ? 'Server error while saving booking. Often the Accounting fiscal period is closed for the event year — reopen it in Admin / Accounting, then try again.'
+          : errData;
       } else if (errData?.detail) {
         msg = Array.isArray(errData.detail) ? errData.detail[0] : String(errData.detail);
       } else if (errData?.non_field_errors?.[0]) {
         msg = errData.non_field_errors[0];
-      } else if (errData && typeof errData === 'object') {
+      } else if (errData && typeof errData === 'object' && !looksLikeHtml(errData)) {
         const firstKey = Object.keys(errData)[0];
         const firstVal = errData[firstKey];
         const text = Array.isArray(firstVal) ? firstVal[0] : firstVal;
         msg = firstKey && text ? `${firstKey}: ${text}` : String(text || msg);
+      } else if (status === 500 || looksLikeHtml(errData)) {
+        msg = 'Server error while saving booking. Check that the Accounting fiscal period is open for the event year, then try again.';
+      }
+      if (looksLikeHtml(msg)) {
+        msg = 'Server error while saving booking. Check that the Accounting fiscal period is open for the event year, then try again.';
       }
       setBookingError(msg);
       toast.error(msg);

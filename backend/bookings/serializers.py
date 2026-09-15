@@ -209,7 +209,11 @@ class BookingSerializer(serializers.ModelSerializer):
         user = request.user if request and hasattr(request, 'user') else None
         if user and user.is_authenticated:
             validated_data['updated_by'] = user
-        return super().update(instance, validated_data)
+        try:
+            return super().update(instance, validated_data)
+        except ValueError as exc:
+            # Accounting posts (closed fiscal period, unbalanced journal, etc.)
+            raise serializers.ValidationError({'detail': str(exc)}) from exc
 
     def create(self, validated_data):
         request = self.context.get('request')
@@ -218,17 +222,25 @@ class BookingSerializer(serializers.ModelSerializer):
             validated_data['created_by'] = user
             if getattr(user, 'tenant', None):
                 validated_data['tenant'] = user.tenant
-        advance = validated_data.get('advance_paid') or 0
-        booking = super().create(validated_data)
-        if advance and float(advance) > 0:
-            from finance.models import Payment
-            Payment.objects.create(
-                booking=booking,
-                amount=advance,
-                payment_method='CASH',
-                status='COMPLETED',
-                notes='Initial advance at booking',
-                tenant=booking.tenant,
-                recorded_by=user if user and user.is_authenticated else None,
+        if not validated_data.get('tenant'):
+            raise serializers.ValidationError(
+                {'detail': 'Your account has no hall tenant assigned. Contact admin.'}
             )
-        return booking
+        advance = validated_data.get('advance_paid') or 0
+        try:
+            booking = super().create(validated_data)
+            if advance and float(advance) > 0:
+                from finance.models import Payment
+                Payment.objects.create(
+                    booking=booking,
+                    amount=advance,
+                    payment_method='CASH',
+                    status='COMPLETED',
+                    notes='Initial advance at booking',
+                    tenant=booking.tenant,
+                    recorded_by=user if user and user.is_authenticated else None,
+                )
+            return booking
+        except ValueError as exc:
+            # e.g. "This fiscal period is closed. Reopen the period before posting."
+            raise serializers.ValidationError({'detail': str(exc)}) from exc

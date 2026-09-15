@@ -146,6 +146,7 @@ const Bookings = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [eventDateFilter, setEventDateFilter] = useState('');
+  const [invoiceCollectNow, setInvoiceCollectNow] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   
   // Primary Form Data
@@ -282,7 +283,10 @@ const Bookings = () => {
   const totalBeforeTax = subtotal + extraServices + inventoryTotal;
   const taxAmount = totalBeforeTax * taxRate;
   const grandTotal = totalBeforeTax + taxAmount;
-  const remainingBalance = grandTotal - Number(formData.advance_paid || 0);
+  const previousPaid = Number(formData.advance_paid || 0);
+  const invoiceCollectAmount = isInvoice ? Number(invoiceCollectNow || 0) : 0;
+  const remainingBeforeCollect = grandTotal - previousPaid;
+  const remainingBalance = remainingBeforeCollect - invoiceCollectAmount;
   const isPosted = isPostedBooking(formData.booking_status);
 
   const resetForm = () => {
@@ -333,6 +337,7 @@ const Bookings = () => {
     setScannedClient(null);
     setScanProcessing(false);
     setSavingScannedClient(false);
+    setInvoiceCollectNow('');
   };
 
   const selectClientFromScan = (customer) => {
@@ -637,6 +642,7 @@ const Bookings = () => {
     setNewCustomerMode(false);
     setBookingError('');
     setSelectedDecorationId(booking.decoration_package ? String(booking.decoration_package) : '');
+    setInvoiceCollectNow('');
     await loadBookingInventory(booking.id);
   };
 
@@ -826,6 +832,23 @@ const Bookings = () => {
       return;
     }
 
+    if (viewMode === 'invoice') {
+      const collect = Number(invoiceCollectNow || 0);
+      const dueBefore = grandTotal - Number(formData.advance_paid || 0);
+      if (!Number.isFinite(collect) || collect < 0) {
+        setBookingError('Enter a valid amount to collect now.');
+        toast.error('Invalid collect amount');
+        return;
+      }
+      if (collect - dueBefore > 0.009) {
+        setBookingError(
+          `Collect now (PKR ${collect.toLocaleString()}) cannot exceed balance due (PKR ${Math.max(0, dueBefore).toLocaleString()}).`
+        );
+        toast.error('Collect amount exceeds balance due');
+        return;
+      }
+    }
+
     // Only validate inventory lines that were started (item selected or qty entered)
     const filledInventoryLines = inventoryLines.filter(
       (line) => line.inventory_item || Number(line.quantity_used) > 0 || line.include_in_bill
@@ -958,7 +981,30 @@ const Bookings = () => {
       let bookingId = editingId;
       if (viewMode === 'edit' || viewMode === 'invoice') {
         await client.put(`/bookings/${editingId}/`, payload);
-        toast.success(viewMode === 'invoice' ? 'Invoice updated successfully' : 'Reservation updated successfully');
+        if (viewMode === 'invoice') {
+          const collect = Number(invoiceCollectNow || 0);
+          if (collect > 0) {
+            try {
+              await client.post('/finance/payments/', {
+                booking: editingId,
+                amount: collect,
+                payment_method: 'CASH',
+                status: 'COMPLETED',
+                notes: 'Collected on invoice confirm',
+              });
+              toast.success(`Invoice updated · PKR ${collect.toLocaleString()} collected`);
+            } catch (payErr) {
+              const payMsg = payErr?.response?.data?.detail
+                || payErr?.response?.data?.amount?.[0]
+                || 'Invoice saved but payment could not be recorded';
+              toast.error(typeof payMsg === 'string' ? payMsg : 'Invoice saved but payment could not be recorded');
+            }
+          } else {
+            toast.success('Invoice updated successfully');
+          }
+        } else {
+          toast.success('Reservation updated successfully');
+        }
       } else {
         let created;
         try {
@@ -1833,13 +1879,35 @@ const Bookings = () => {
                 <small>Inclusive Taxes</small>
               </div>
               <label className="reservation-console__advance">
-                <span>Advance Amount Received</span>
+                <span>{isInvoice ? 'Already Received' : 'Advance Amount Received'}</span>
                 <div>PKR <input type="number" min="0" max={grandTotal || undefined} disabled={isFormLocked} value={displayNumField(formData.advance_paid)} onChange={(e) => setFormData({ ...formData, advance_paid: toFloatField(e.target.value) })} /></div>
               </label>
+              {isInvoice && !isPosted && (
+                <label className="reservation-console__advance reservation-console__advance--collect">
+                  <span>Collect Now</span>
+                  <div>
+                    PKR
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      max={Math.max(0, remainingBeforeCollect) || undefined}
+                      value={displayNumField(invoiceCollectNow)}
+                      onChange={(e) => setInvoiceCollectNow(toFloatField(e.target.value))}
+                      aria-label="Amount to collect now on invoice"
+                      placeholder="0"
+                    />
+                  </div>
+                </label>
+              )}
               <div className="reservation-console__balance">
                 <span>Balance Due</span>
                 <strong>{formatCollectDuePKR(remainingBalance)}</strong>
-                <small>Pending at execution</small>
+                <small>
+                  {isInvoice && invoiceCollectAmount > 0
+                    ? `After collecting PKR ${invoiceCollectAmount.toLocaleString()}`
+                    : 'Pending at execution'}
+                </small>
               </div>
               {bookingError && <div className="reservation-console__error">{bookingError}</div>}
               {!isPosted && (

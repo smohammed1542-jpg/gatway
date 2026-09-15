@@ -2899,3 +2899,12 @@
 .reservation-console--invoice .reservation-console__inventory.is-invoice-editable {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
 }
+
+.reservation-console--invoice .reservation-console__advance--collect > div {
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.reservation-console--invoice .reservation-console__advance--collect input {
+  background: #fff;
+}

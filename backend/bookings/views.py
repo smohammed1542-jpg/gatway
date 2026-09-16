@@ -21,13 +21,14 @@ from .page_visibility import ensure_tenant_hall_pages, HALL_MODULE_KEYS, HALL_PA
 
 
 class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
-    queryset = Booking.objects.all().order_by('-event_date', '-id')
+    queryset = Booking.objects.all().order_by('-created_at', '-id')
     serializer_class = BookingSerializer
     permission_classes = [IsMarriageHallApp, IsAdminOrManagerOrStaffWrite, IsTenantOwner]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['booking_status', 'payment_status', 'venue', 'customer', 'decoration_package']
     search_fields = ['event_name', 'customer__first_name', 'customer__last_name', 'customer__full_name']
-    ordering_fields = ['start_date', 'created_at']
+    ordering_fields = ['start_date', 'created_at', 'event_date', 'id']
+    ordering = ['-created_at', '-id']
 
     def get_queryset(self):
         return super().get_queryset().select_related('customer', 'venue', 'decoration_package')

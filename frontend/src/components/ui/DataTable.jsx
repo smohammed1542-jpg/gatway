@@ -184,7 +184,8 @@ export default function DataTable({
     sections.sort((a, b) => {
       const av = getGroupSortValue ? getGroupSortValue(a.key, a.rows) : a.key;
       const bv = getGroupSortValue ? getGroupSortValue(b.key, b.rows) : b.key;
-      return compareValues(av, bv);
+      // Newest group keys first (e.g. latest booking day on top)
+      return compareValues(bv, av);
     });
     return sections;
   }, [sorted, groupBy, getGroupSortValue]);

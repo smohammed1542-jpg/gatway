@@ -36,15 +36,15 @@ import { usePageTitle } from '../context/PageTitleContext';
 import CancelBookingModal from '../components/bookings/CancelBookingModal';
 import CnicScannerPanel from '../components/guesthouse/CnicScannerPanel';
 import ScannedGuestPanel from '../components/guesthouse/ScannedGuestPanel';
-import { resolveGuestFromIdScan, isPhoneCompleteForAutoSave, saveGuestFromDraft } from '../utils/idCardCustomer';
+import { resolveGuestFromIdScan, isPhoneCompleteForAutoSave, saveGuestFromDraft, findCustomerByCnic } from '../utils/idCardCustomer';
 import DataTable from '../components/ui/DataTable';
 import { getTenant } from '../api/core';
 import { useHallPageVisibility } from '../context/HallPageVisibilityContext';
 import { HALL_MODULE_KEYS } from '../constants/hallPages';
 import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 import { resolveMediaUrl } from '../utils/media';
-import { validatePakPhone } from '../utils/phone';
-import { formatCnic } from '../utils/cnicScanner';
+import { validatePakPhone, formatPakPhone, PAK_PHONE_INPUT_MAX_LENGTH, PAK_PHONE_PLACEHOLDER } from '../utils/phone';
+import { formatCnic, formatCnicInput, cnicDigits, CNIC_PLACEHOLDER, CNIC_INPUT_MAX_LENGTH } from '../utils/cnicScanner';
 import './booking-reservation.css';
 
 const BOOKING_STATUS_STYLE = {
@@ -218,6 +218,9 @@ const Bookings = () => {
     address: ''
   });
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
+  const [clientNameQuery, setClientNameQuery] = useState('');
+  const [clientNameSuggestionsOpen, setClientNameSuggestionsOpen] = useState(false);
+  const [cnicLookupStatus, setCnicLookupStatus] = useState(''); // '', 'found', 'new'
 
   const [bookingError, setBookingError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -356,6 +359,9 @@ const Bookings = () => {
     });
     setNewCustomerMode(false);
     setNewCustomerErrors({});
+    setClientNameQuery('');
+    setClientNameSuggestionsOpen(false);
+    setCnicLookupStatus('');
     setBookingError('');
     setEditingId(null);
     setSelectedDecorationId('');
@@ -394,6 +400,9 @@ const Bookings = () => {
       phone: '',
       address: '',
     });
+    setClientNameQuery(customerDisplayName(customer));
+    setClientNameSuggestionsOpen(false);
+    setCnicLookupStatus(customer.cnic ? 'found' : '');
     toast.success(`Client selected: ${customerDisplayName(customer)}`, { id: 'booking-id-scan' });
   };
 
@@ -445,6 +454,9 @@ const Bookings = () => {
       setScannedClient(result.draft);
       setNewCustomer({ ...result.draft });
       setNewCustomerMode(true);
+      setFormData((prev) => ({ ...prev, customer: '', cnic: result.draft.cnic || prev.cnic }));
+      setClientNameQuery(result.draft.full_name || '');
+      setCnicLookupStatus(result.draft.cnic ? 'new' : '');
       toast('ID card read — check fields and add phone', { id: 'booking-id-scan', icon: 'ℹ️' });
     } catch {
       toast.error('Failed to process ID card');
@@ -676,6 +688,9 @@ const Bookings = () => {
     });
     setNewCustomerMode(false);
     setBookingError('');
+    setClientNameQuery(booking.customer_name || '');
+    setClientNameSuggestionsOpen(false);
+    setCnicLookupStatus(booking.cnic ? 'found' : '');
     setSelectedDecorationId(booking.decoration_package ? String(booking.decoration_package) : '');
     setInvoiceCollectNow('');
     await loadBookingInventory(booking.id);
@@ -750,42 +765,227 @@ const Bookings = () => {
     setNewCustomerErrors((current) => ({ ...current, [field]: '' }));
   };
 
-  const handleSaveNewCustomerInline = async () => {
-    setBookingError('');
-    if (!validateNewCustomerFields()) {
-      setBookingError('Please complete the highlighted client fields.');
-      toast.error('Required fields missing');
+  const beginNewClientDraft = (overrides = {}) => {
+    setNewCustomerMode(true);
+    setFormData((prev) => ({ ...prev, customer: '' }));
+    setNewCustomer((current) => ({
+      full_name: overrides.full_name ?? current.full_name,
+      cnic: overrides.cnic ?? current.cnic,
+      email: overrides.email ?? current.email,
+      phone: overrides.phone ?? current.phone,
+      address: overrides.address ?? current.address,
+    }));
+    if (overrides.full_name != null) setClientNameQuery(overrides.full_name);
+  };
+
+  const handleClientCnicChange = (rawValue) => {
+    const formatted = formatCnicInput(rawValue);
+    const digits = cnicDigits(formatted);
+    setFormData((prev) => ({ ...prev, cnic: formatted }));
+
+    if (digits.length < 13) {
+      setCnicLookupStatus('');
+      if (formData.customer && !newCustomerMode) {
+        const selected = customers.find((c) => String(c.id) === String(formData.customer));
+        if (cnicDigits(selected?.cnic) !== digits) {
+          beginNewClientDraft({
+            cnic: formatted,
+            full_name: clientNameQuery || customerDisplayName(selected),
+            phone: selected?.phone || newCustomer.phone || '',
+            address: selected?.address || newCustomer.address || '',
+          });
+        }
+      } else if (newCustomerMode || !formData.customer) {
+        updateNewCustomerField('cnic', formatted);
+        if (!newCustomerMode && digits.length > 0) {
+          beginNewClientDraft({
+            cnic: formatted,
+            full_name: clientNameQuery,
+            phone: newCustomer.phone,
+            address: newCustomer.address || '',
+          });
+        }
+      }
       return;
     }
-    
+
+    const match = findCustomerByCnic(customers, formatted);
+    if (match) {
+      selectClientFromScan(match);
+      setCnicLookupStatus('found');
+      return;
+    }
+
+    beginNewClientDraft({
+      cnic: formatted,
+      full_name: clientNameQuery,
+      phone: newCustomer.phone || '',
+      address: newCustomer.address || '',
+    });
+    setCnicLookupStatus('new');
+    toast('CNIC not registered — enter name & phone, then press Enter', {
+      id: 'booking-cnic-lookup',
+      icon: 'ℹ️',
+    });
+  };
+
+  const handleClientPhoneChange = (rawValue) => {
+    const formatted = formatPakPhone(rawValue);
+    if (formData.customer && !newCustomerMode) {
+      const selected = customers.find((c) => String(c.id) === String(formData.customer));
+      beginNewClientDraft({
+        full_name: clientNameQuery || customerDisplayName(selected),
+        phone: formatted,
+        cnic: selected?.cnic || formData.cnic || '',
+        address: selected?.address || newCustomer.address || '',
+      });
+      setCnicLookupStatus(cnicDigits(selected?.cnic || formData.cnic).length === 13 ? 'new' : '');
+      return;
+    }
+    if (!newCustomerMode) {
+      beginNewClientDraft({
+        full_name: clientNameQuery,
+        phone: formatted,
+        cnic: formData.cnic || newCustomer.cnic || '',
+        address: newCustomer.address || '',
+      });
+      return;
+    }
+    updateNewCustomerField('phone', formatted);
+  };
+
+  const handleClientAddressChange = (value) => {
+    if (formData.customer && !newCustomerMode) {
+      const selected = customers.find((c) => String(c.id) === String(formData.customer));
+      beginNewClientDraft({
+        full_name: clientNameQuery || customerDisplayName(selected),
+        phone: selected?.phone || newCustomer.phone || '',
+        cnic: selected?.cnic || formData.cnic || '',
+        address: value,
+      });
+      setCnicLookupStatus(cnicDigits(selected?.cnic || formData.cnic).length === 13 ? 'new' : '');
+      return;
+    }
+    if (!newCustomerMode) {
+      beginNewClientDraft({
+        full_name: clientNameQuery,
+        phone: newCustomer.phone || '',
+        cnic: formData.cnic || newCustomer.cnic || '',
+        address: value,
+      });
+      return;
+    }
+    updateNewCustomerField('address', value);
+  };
+
+  const handleClientNameChange = (value) => {
+    setClientNameQuery(value);
+    setClientNameSuggestionsOpen(true);
+    if (formData.customer && !newCustomerMode) {
+      const selected = customers.find((c) => String(c.id) === String(formData.customer));
+      const selectedName = customerDisplayName(selected);
+      if (value.trim() !== selectedName) {
+        beginNewClientDraft({
+          full_name: value,
+          phone: selected?.phone || '',
+          cnic: selected?.cnic || formData.cnic || '',
+          address: selected?.address || newCustomer.address || '',
+        });
+        setCnicLookupStatus(cnicDigits(selected?.cnic || formData.cnic).length === 13 ? 'new' : '');
+      }
+      return;
+    }
+    if (!newCustomerMode && value.trim()) {
+      beginNewClientDraft({
+        full_name: value,
+        phone: newCustomer.phone || '',
+        cnic: formData.cnic || newCustomer.cnic || '',
+        address: newCustomer.address || '',
+      });
+      return;
+    }
+    updateNewCustomerField('full_name', value);
+  };
+
+  const handleSelectRegisteredClient = (customer) => {
+    selectClientFromScan(customer);
+  };
+
+  const handleClientNameKeyDown = async (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const name = clientNameQuery.trim();
+    if (!name) return;
+
+    const exact = customers.find(
+      (c) => customerDisplayName(c).toLowerCase() === name.toLowerCase()
+    );
+    if (exact) {
+      selectClientFromScan(exact);
+      return;
+    }
+
+    if (!newCustomerMode) {
+      beginNewClientDraft({
+        full_name: name,
+        phone: newCustomer.phone || '',
+        cnic: formData.cnic || newCustomer.cnic || '',
+        address: newCustomer.address || '',
+      });
+    } else {
+      updateNewCustomerField('full_name', name);
+    }
+
+    await handleSaveNewCustomerInline({
+      full_name: name,
+      phone: newCustomer.phone || '',
+      cnic: formData.cnic || newCustomer.cnic || '',
+      address: newCustomer.address || '',
+    });
+  };
+
+  const handleSaveNewCustomerInline = async (overrides = {}) => {
+    setBookingError('');
+    const draft = { ...newCustomer, ...overrides };
+    if (overrides.full_name != null) {
+      setNewCustomer((current) => ({ ...current, ...overrides }));
+    }
+    const errors = {};
+    if (!draft.full_name?.trim()) errors.full_name = 'Full name is required.';
+    const phoneError = validatePakPhone(draft.phone);
+    if (phoneError) errors.phone = phoneError;
+    setNewCustomerErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setBookingError('Please complete the highlighted client fields.');
+      toast.error(errors.phone || errors.full_name || 'Required fields missing');
+      setNewCustomerMode(true);
+      return;
+    }
+
     try {
-      const customerPayload = buildCustomerPayload(newCustomer);
+      const customerPayload = buildCustomerPayload(draft);
       const custRes = await client.post('/customers/', customerPayload);
       const savedCust = custRes.data;
-      
-      // Add the new client to the local customers list so they appear in dropdowns
-      setCustomers(prev => [...prev, savedCust]);
-      
-      // Auto-select this newly created client
-      setFormData(prev => ({
+
+      setCustomers((prev) => [...prev, savedCust]);
+      setFormData((prev) => ({
         ...prev,
         customer: savedCust.id,
-        cnic: savedCust.cnic || newCustomer.cnic || prev.cnic,
+        cnic: savedCust.cnic || draft.cnic || prev.cnic,
       }));
-      
-      // Switch back to "Select Client" mode to display the selected new client
       setNewCustomerMode(false);
-      
-      // Clear inline client fields
       setNewCustomer({
         full_name: '',
         cnic: '',
         email: '',
         phone: '',
-        address: ''
+        address: '',
       });
       setNewCustomerErrors({});
-      
+      setClientNameQuery(customerDisplayName(savedCust));
+      setClientNameSuggestionsOpen(false);
+      setCnicLookupStatus(savedCust.cnic ? 'found' : '');
+
       toast.success(`Client saved and selected: ${customerDisplayName(savedCust)}`);
     } catch (err) {
       const errData = err.response?.data;
@@ -1126,25 +1326,68 @@ const Bookings = () => {
     const raw = booking?.event_date || booking?.start_date || '';
     return String(raw).slice(0, 10);
   };
-  const filteredBookings = bookings.filter((b) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || (
-      (b.event_name || '').toLowerCase().includes(q)
-      || (b.customer_name || '').toLowerCase().includes(q)
-      || (b.venue_name || '').toLowerCase().includes(q)
-      || (b.booking_id || '').toLowerCase().includes(q)
-    );
-    const matchesDate = !eventDateFilter || bookingEventDate(b) === eventDateFilter;
-    return matchesSearch && matchesDate;
-  });
+  const filteredBookings = bookings
+    .filter((b) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q || (
+        (b.event_name || '').toLowerCase().includes(q)
+        || (b.customer_name || '').toLowerCase().includes(q)
+        || (b.venue_name || '').toLowerCase().includes(q)
+        || (b.booking_id || '').toLowerCase().includes(q)
+      );
+      const matchesDate = !eventDateFilter || bookingEventDate(b) === eventDateFilter;
+      return matchesSearch && matchesDate;
+    })
+    .sort((a, b) => {
+      // Newest created booking always on top (any event day)
+      const createdA = a.created_at || '';
+      const createdB = b.created_at || '';
+      if (createdA && createdB && createdA !== createdB) {
+        return createdB.localeCompare(createdA);
+      }
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+
+  const bookingRecencyValue = (booking) => {
+    if (booking?.created_at) return String(booking.created_at);
+    // Zero-pad id so numeric string compare matches newest-first
+    return `id:${String(booking?.id || 0).padStart(12, '0')}`;
+  };
 
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
   const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
-  const selectedCustomerPhone = selectedCustomer?.phone || 'Not available';
-  const selectedCustomerCnic = selectedCustomer?.cnic || formData.cnic;
-  const selectedCustomerCnicDisplay = selectedCustomerCnic
-    ? formatCnic(selectedCustomerCnic)
-    : 'CNIC';
+  const clientPhoneValue = newCustomerMode
+    ? (newCustomer.phone || '')
+    : (selectedCustomer?.phone || '');
+  const clientCnicValue = newCustomerMode
+    ? (newCustomer.cnic || formData.cnic || '')
+    : (formData.cnic || selectedCustomer?.cnic || '');
+  const clientNameValue = newCustomerMode
+    ? (newCustomer.full_name || clientNameQuery)
+    : (selectedCustomer ? (clientNameQuery || customerDisplayName(selectedCustomer)) : clientNameQuery);
+  const clientAddressValue = newCustomerMode
+    ? (newCustomer.address || '')
+    : (selectedCustomer?.address || '');
+  const clientNameSuggestions = (() => {
+    if (!clientNameSuggestionsOpen || isFormLocked) return [];
+    const q = clientNameQuery.trim().toLowerCase();
+    const selectedName = selectedCustomer
+      ? customerDisplayName(selectedCustomer).toLowerCase()
+      : '';
+    // On open with selected/empty name show full list; filter only while typing a search
+    const shouldFilter = Boolean(q) && q !== selectedName;
+    const list = shouldFilter
+      ? customers.filter((c) => {
+        const name = customerDisplayName(c).toLowerCase();
+        const phone = String(c.phone || '').toLowerCase();
+        const cnic = cnicDigits(c.cnic);
+        return name.includes(q) || phone.includes(q) || (cnic && cnic.includes(cnicDigits(q)));
+      })
+      : customers;
+    return [...list]
+      .sort((a, b) => customerDisplayName(a).localeCompare(customerDisplayName(b)))
+      .slice(0, 60);
+  })();
   const manualInventoryExistingItem = !manualInventory.isNew
     ? inventoryCatalog.find(
       (item) => item.name?.trim().toLowerCase() === manualInventory.name.trim().toLowerCase()
@@ -1289,11 +1532,19 @@ const Bookings = () => {
                 ]}
                 data={filteredBookings}
                 groupBy={(booking) => bookingEventDate(booking) || 'undated'}
-                getGroupSortValue={(key) => (key === 'undated' ? '9999-12-31' : key)}
+                getGroupSortValue={(key, rows = []) => {
+                  // Day group with the most recently created booking floats to top
+                  let newest = '';
+                  for (const row of rows) {
+                    const value = bookingRecencyValue(row);
+                    if (value > newest) newest = value;
+                  }
+                  return newest || (key === 'undated' ? '' : key);
+                }}
                 getSortValue={(row, key) => {
                   if (key === 'customer') return row.customer_name || row.event_name;
                   if (key === 'hall') return row.venue_name;
-                  if (key === 'date') return row.event_date || row.start_date;
+                  if (key === 'date') return bookingRecencyValue(row);
                   if (key === 'status') return row.booking_status;
                   if (key === 'payment') return row.payment_status;
                   if (key === 'due') return Number(row.remaining_balance || 0);
@@ -1487,56 +1738,108 @@ const Bookings = () => {
                 </div>
 
                 <div className="reservation-console__client-grid">
-                  <label className="reservation-console__client-select">
-                    <span>Registered Client Selector</span>
-                    <select required={!newCustomerMode} disabled={isFormLocked || newCustomerMode} value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })}>
-                      <option value="">Select registered client</option>
-                      {customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>{customerDisplayName(customer)}</option>
-                      ))}
-                    </select>
+                  <label className={`reservation-console__client-select${newCustomerErrors.full_name ? ' has-error' : ''}`}>
+                    <span>Client Name</span>
+                    <div className="reservation-console__client-name-wrap">
+                      <div className="reservation-console__client-name-field">
+                        <input
+                          type="text"
+                          required
+                          disabled={isFormLocked}
+                          placeholder="Select or type client name"
+                          value={clientNameValue}
+                          onChange={(e) => handleClientNameChange(e.target.value)}
+                          onFocus={() => setClientNameSuggestionsOpen(true)}
+                          onBlur={() => setTimeout(() => setClientNameSuggestionsOpen(false), 180)}
+                          onKeyDown={handleClientNameKeyDown}
+                          autoComplete="off"
+                          aria-expanded={clientNameSuggestionsOpen}
+                          aria-controls="reservation-client-options"
+                        />
+                        <button
+                          type="button"
+                          className="reservation-console__client-name-toggle"
+                          disabled={isFormLocked}
+                          aria-label={clientNameSuggestionsOpen ? 'Close client list' : 'Open client list'}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => setClientNameSuggestionsOpen((open) => !open)}
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                      {clientNameSuggestionsOpen && !isFormLocked && (
+                        <div className="reservation-console__client-suggestions" id="reservation-client-options" role="listbox">
+                          {clientNameSuggestions.length === 0 ? (
+                            <div className="reservation-console__client-suggestions-empty">
+                              No registered clients found
+                            </div>
+                          ) : (
+                            clientNameSuggestions.map((customer) => {
+                              const selected = String(formData.customer) === String(customer.id);
+                              return (
+                                <button
+                                  key={customer.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={selected}
+                                  className={selected ? 'is-selected' : ''}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleSelectRegisteredClient(customer)}
+                                >
+                                  <strong>{customerDisplayName(customer)}</strong>
+                                  <span>
+                                    {customer.phone || 'No phone'}
+                                    {customer.cnic ? ` · ${formatCnic(customer.cnic)}` : ''}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {newCustomerErrors.full_name && <small>{newCustomerErrors.full_name}</small>}
                   </label>
-                  <label>
+                  <label className={newCustomerErrors.phone ? 'has-error' : ''}>
                     <span>Phone Contact</span>
-                    <div className="reservation-console__readout">{selectedCustomerPhone}</div>
+                    <input
+                      type="tel"
+                      disabled={isFormLocked}
+                      maxLength={PAK_PHONE_INPUT_MAX_LENGTH}
+                      placeholder={PAK_PHONE_PLACEHOLDER}
+                      value={clientPhoneValue}
+                      onChange={(e) => handleClientPhoneChange(e.target.value)}
+                    />
+                    {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
                   </label>
                   <label>
                     <span>CNIC Identity</span>
-                    <div className="reservation-console__readout reservation-console__mono">{selectedCustomerCnicDisplay}</div>
+                    <input
+                      type="text"
+                      className="reservation-console__mono"
+                      disabled={isFormLocked}
+                      maxLength={CNIC_INPUT_MAX_LENGTH}
+                      placeholder={CNIC_PLACEHOLDER}
+                      value={clientCnicValue ? formatCnicInput(clientCnicValue) : ''}
+                      onChange={(e) => handleClientCnicChange(e.target.value)}
+                    />
                   </label>
-                  {!isFormLocked && (
-                    <button type="button" className="reservation-console__new-client" onClick={() => { setNewCustomerMode((current) => !current); setScannedClient(null); }}>
-                      <UserPlus size={12} /> {newCustomerMode ? 'Select Client' : '+ New Client'}
-                    </button>
+                  {newCustomerMode && !isFormLocked && (
+                    <label className="reservation-console__client-address-field">
+                      <span>Address</span>
+                      <input
+                        type="text"
+                        placeholder="Street, area, city"
+                        value={clientAddressValue}
+                        onChange={(e) => handleClientAddressChange(e.target.value)}
+                      />
+                    </label>
                   )}
                 </div>
-
-                {newCustomerMode && !isFormLocked && (
-                  <div className="reservation-console__new-client-panel">
-                    <label className={`reservation-console__client-field${newCustomerErrors.full_name ? ' has-error' : ''}`}>
-                      <span>Full name *</span>
-                      <input type="text" required aria-invalid={Boolean(newCustomerErrors.full_name)} placeholder="Full name" value={newCustomer.full_name} onChange={(e) => updateNewCustomerField('full_name', e.target.value)} />
-                      {newCustomerErrors.full_name && <small>{newCustomerErrors.full_name}</small>}
-                    </label>
-                    <label className={`reservation-console__client-field${newCustomerErrors.phone ? ' has-error' : ''}`}>
-                      <span>Phone number *</span>
-                      <input type="tel" required maxLength={13} aria-invalid={Boolean(newCustomerErrors.phone)} placeholder="0300 1234567" value={newCustomer.phone} onChange={(e) => updateNewCustomerField('phone', e.target.value)} />
-                      {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
-                    </label>
-                    <label className="reservation-console__client-field">
-                      <span>CNIC</span>
-                      <input type="text" placeholder="CNIC (optional)" value={newCustomer.cnic} onChange={(e) => updateNewCustomerField('cnic', e.target.value)} />
-                    </label>
-                    <label className="reservation-console__client-field">
-                      <span>Email</span>
-                      <input type="email" placeholder="Email (optional)" value={newCustomer.email} onChange={(e) => updateNewCustomerField('email', e.target.value)} />
-                    </label>
-                    <label className="reservation-console__client-field reservation-console__client-address">
-                      <span>Address</span>
-                      <input type="text" placeholder="Residential address (optional)" value={newCustomer.address} onChange={(e) => updateNewCustomerField('address', e.target.value)} />
-                    </label>
-                    <button type="button" onClick={handleSaveNewCustomerInline}>Save &amp; Select</button>
-                  </div>
+                {cnicLookupStatus === 'new' && !isFormLocked && (
+                  <p className="reservation-console__client-hint">
+                    CNIC not registered — enter name &amp; phone, then press Enter to add client.
+                  </p>
                 )}
               </section>
 
@@ -1569,7 +1872,7 @@ const Bookings = () => {
                               onClick={() => setFormData({
                                 ...formData,
                                 venue: selected ? '' : hall.id,
-                                rate_per_head: selected ? 1200 : (hall.price_per_head || 1200),
+                                rate_per_head: selected ? 1200 : (hall.price_per_day || hall.price_per_head || 1200),
                               })}
                             >
                               <strong>{hall.name}</strong>
@@ -1589,7 +1892,7 @@ const Bookings = () => {
                           setFormData({
                             ...formData,
                             venue: event.target.value,
-                            rate_per_head: hall?.price_per_head || 1200,
+                            rate_per_head: hall?.price_per_day || hall?.price_per_head || 1200,
                           });
                         }}
                       >
@@ -1940,7 +2243,7 @@ const Bookings = () => {
                 {summaryVisibility.guests && (
                   <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
                 )}
-                {summaryVisibility.ratePerHead && (
+                {summaryVisibility.ratePerHead && selectedHall && (
                   <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isFormLocked} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
                 )}
                 {summaryVisibility.venue && (
@@ -2289,7 +2592,7 @@ const Bookings = () => {
                                   if (isSel) {
                                     setFormData({ ...formData, venue: '', rate_per_head: 1200 });
                                   } else {
-                                    setFormData({ ...formData, venue: h.id, rate_per_head: h.price_per_head || 1200 });
+                                    setFormData({ ...formData, venue: h.id, rate_per_head: h.price_per_day || h.price_per_head || 1200 });
                                   }
                                 }}
                                 style={{

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Plus,
   Calendar as CalendarIcon,
   Clock,
   MapPin,
@@ -226,17 +225,6 @@ const BookingCalendar = () => {
   return (
     <>
     <div className="animate-fade-in">
-      <div className="page-header">
-        <div>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Visualize your venue schedule and upcoming events.</p>
-        </div>
-        {canOperate && (
-        <button className="btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={18} /> New Booking
-        </button>
-        )}
-      </div>
-
       <div className="calendar-layout">
         <div className="card booking-calendar-card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
           <div className="booking-calendar-card__header" style={{ borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

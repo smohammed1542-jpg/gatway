@@ -39,8 +39,22 @@
 
 .erp-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
+}
+
+.erp-table tbody td {
+  padding: 10px 12px;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  color: var(--text-main);
+  vertical-align: middle;
+  background: var(--surface);
+}
+
+.erp-table tbody td:first-child {
+  border-left: 1px solid #e2e8f0;
 }
 
 .erp-table thead th {
@@ -48,15 +62,20 @@
   top: 0;
   z-index: 2;
   text-align: left;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding: 8px 12px;
-  background: var(--surface-elevated);
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
   white-space: nowrap;
+}
+
+.erp-table thead th:first-child {
+  border-left: 1px solid #e2e8f0;
 }
 
 .erp-table__th--sort {
@@ -70,18 +89,11 @@
   gap: 4px;
 }
 
-.erp-table tbody td {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-main);
-  vertical-align: middle;
+.erp-table tbody tr:hover td {
+  background: #f8fafc;
 }
 
-.erp-table tbody tr:hover {
-  background: var(--surface-elevated);
-}
-
-.erp-table__row--selected {
+.erp-table__row--selected td {
   background: var(--primary-light) !important;
 }
 
@@ -95,12 +107,65 @@
 
 .erp-table thead th:first-child {
   z-index: 3;
-  background: var(--surface-elevated);
+  background: #f8fafc;
 }
 
 .erp-table tbody tr:hover td:first-child,
 .erp-table__row--selected td:first-child {
-  background: var(--primary-light);
+  background: #f8fafc;
+}
+
+.erp-table__row--selected td:first-child {
+  background: var(--primary-light) !important;
+}
+
+/* Day-grouped bookings: sticky first column breaks colspan headers */
+.erp-table--grouped thead th:first-child,
+.erp-table--grouped tbody td:first-child {
+  position: static;
+  left: auto;
+  z-index: auto;
+  background: var(--surface);
+}
+
+.erp-table--grouped thead th:first-child {
+  background: #f8fafc;
+}
+
+.erp-table--grouped tbody tr:hover td,
+.erp-table--grouped tbody tr:hover td:first-child {
+  background: #f8fafc;
+}
+
+.erp-table--grouped .erp-table__row--selected td,
+.erp-table--grouped .erp-table__row--selected td:first-child {
+  background: var(--primary-light) !important;
+}
+
+.erp-table__group-row,
+.erp-table__group-row:hover {
+  background: transparent !important;
+}
+
+.erp-table__group-row td,
+.erp-table__group-row:hover td {
+  padding: 0 !important;
+  border-left: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  border-top: none;
+  border-bottom: 1px solid #e2e8f0;
+  background: transparent !important;
+  cursor: default;
+  vertical-align: middle;
+}
+
+.erp-table--grouped .erp-table__group-row + tr td {
+  border-top: none;
+}
+
+.erp-table--grouped tbody tr:not(.erp-table__group-row) td {
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .erp-doc-readonly {

@@ -108,6 +108,41 @@ const createBookingRefId = () => {
   return `BK-${year}-${randomNum}`;
 };
 
+/** Relative event-date label for the bookings list (no filter required). */
+const getBookingDateWhen = (rawDate) => {
+  const iso = String(rawDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const today = new Date();
+  const todayIso = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-');
+  if (iso === todayIso) {
+    return { key: 'today', label: 'Today' };
+  }
+  const [y, m] = iso.split('-').map(Number);
+  if (y === today.getFullYear() && m === today.getMonth() + 1) {
+    return { key: 'month', label: 'This month' };
+  }
+  if (iso < todayIso) {
+    return { key: 'past', label: 'Past' };
+  }
+  return { key: 'upcoming', label: 'Upcoming' };
+};
+
+const formatBookingDayHeading = (iso) => {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return 'No event date';
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
 const Bookings = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1210,7 +1245,7 @@ const Bookings = () => {
               </label>
             </div>
 
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="card bookings-table-card" style={{ padding: 0, overflow: 'hidden' }}>
               <DataTable
                 variant="erp"
                 sortable
@@ -1222,16 +1257,39 @@ const Bookings = () => {
                     ? 'No bookings on this event date. Clear the date filter or pick another day.'
                     : 'Try another search or create a new booking.'
                 }
+                renderGroupHeader={(key, rows) => {
+                  const when = key === 'undated' ? null : getBookingDateWhen(key);
+                  const tone = when?.key || 'past';
+                  return (
+                    <div className={`bookings-day-head bookings-day-head--${tone}`}>
+                      <div className="bookings-day-head__main">
+                        <p className="bookings-day-head__title">
+                          {formatBookingDayHeading(key === 'undated' ? '' : key)}
+                        </p>
+                        <p className="bookings-day-head__count">
+                          {rows.length} booking{rows.length === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      {when && (
+                        <span className={`booking-date-when booking-date-when--${when.key}`}>
+                          {when.label}
+                        </span>
+                      )}
+                    </div>
+                  );
+                }}
                 columns={[
                   { key: 'customer', label: 'Customer / Event' },
                   { key: 'hall', label: 'Hall' },
-                  { key: 'date', label: 'Date' },
-                  { key: 'status', label: 'Status', width: '110px' },
-                  { key: 'payment', label: 'Payment', width: '110px' },
-                  { key: 'due', label: 'Due', width: '110px' },
-                  { key: 'total', label: 'Total', width: '120px' },
+                  { key: 'date', label: 'Slot', width: '108px' },
+                  { key: 'status', label: 'Status', width: '118px' },
+                  { key: 'payment', label: 'Payment', width: '118px' },
+                  { key: 'due', label: 'Due', width: '118px' },
+                  { key: 'total', label: 'Total', width: '128px' },
                 ]}
                 data={filteredBookings}
+                groupBy={(booking) => bookingEventDate(booking) || 'undated'}
+                getGroupSortValue={(key) => (key === 'undated' ? '9999-12-31' : key)}
                 getSortValue={(row, key) => {
                   if (key === 'customer') return row.customer_name || row.event_name;
                   if (key === 'hall') return row.venue_name;
@@ -1252,49 +1310,89 @@ const Bookings = () => {
                 renderCell={(booking, key) => {
                   if (key === 'customer') {
                     return (
-                      <div>
-                        <p style={{ fontSize: '11px', fontWeight: '600', fontFamily: 'monospace', color: 'var(--text-muted)', marginBottom: '2px' }}>{booking.booking_id || `BK-${booking.id}`}</p>
+                      <div className="bookings-row-customer">
+                        <p className="bookings-row-customer__id">{booking.booking_id || `BK-${booking.id}`}</p>
                         {booking.customer ? (
-                          <Link to={`/customers/${booking.customer}`} onClick={(e) => e.stopPropagation()} style={{ fontWeight: 700, color: 'var(--primary)' }}>{booking.customer_name}</Link>
+                          <Link
+                            to={`/customers/${booking.customer}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bookings-row-customer__name"
+                          >
+                            {booking.customer_name}
+                          </Link>
                         ) : (
-                          <span style={{ fontWeight: 700 }}>{booking.customer_name || 'Draft — no client'}</span>
+                          <span className="bookings-row-customer__name bookings-row-customer__name--plain">
+                            {booking.customer_name || 'Draft — no client'}
+                          </span>
                         )}
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{booking.event_name || 'Draft'}</p>
+                        <p className="bookings-row-customer__event">{booking.event_name || 'Draft'}</p>
                       </div>
                     );
                   }
-                  if (key === 'hall') return booking.venue_name;
+                  if (key === 'hall') {
+                    return <span className="bookings-row-hall">{booking.venue_name || '—'}</span>;
+                  }
                   if (key === 'date') {
-                    const d = booking.event_date || booking.start_date;
+                    const slot = String(booking.slot || 'morning').toLowerCase();
+                    const slotClass = slot === 'evening'
+                      ? 'bookings-row-slot--evening'
+                      : slot === 'custom'
+                        ? 'bookings-row-slot--custom'
+                        : 'bookings-row-slot--morning';
                     return (
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
-                          <CalendarIcon size={14} color="var(--text-muted)" />
-                          {d ? new Date(d).toLocaleDateString() : 'N/A'}
-                        </div>
-                        <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: booking.slot === 'evening' ? '#6366f1' : '#92400e' }}>{booking.slot || 'Morning'}</span>
-                      </div>
+                      <span className={`bookings-row-slot ${slotClass}`}>
+                        {booking.slot || 'Morning'}
+                      </span>
                     );
                   }
                   if (key === 'status') {
                     const st = resolveBookingStatusStyle(booking);
-                    return <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: st.bg, color: st.color }}>{st.label}</span>;
+                    return (
+                      <span className="bookings-row-pill" style={{ backgroundColor: st.bg, color: st.color }}>
+                        {st.label}
+                      </span>
+                    );
                   }
                   if (key === 'payment') {
+                    const paid = booking.payment_status === 'PAID';
+                    const partial = booking.payment_status === 'PARTIAL';
                     return (
                       <span
-                        onClick={canAccessPayments ? (e) => { e.stopPropagation(); navigate('/payments', { state: { preselectedBookingId: booking.id, bookingEventName: booking.event_name, autoOpenRecord: booking.payment_status !== 'PAID' } }); } : undefined}
-                        style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: booking.payment_status === 'PAID' ? '#dcfce7' : booking.payment_status === 'PARTIAL' ? '#ffedd5' : '#fee2e2', color: booking.payment_status === 'PAID' ? '#166534' : booking.payment_status === 'PARTIAL' ? '#c2410c' : '#991b1b', cursor: canAccessPayments ? 'pointer' : 'default' }}
+                        className="bookings-row-pill"
+                        onClick={canAccessPayments ? (e) => {
+                          e.stopPropagation();
+                          navigate('/payments', {
+                            state: {
+                              preselectedBookingId: booking.id,
+                              bookingEventName: booking.event_name,
+                              autoOpenRecord: booking.payment_status !== 'PAID',
+                            },
+                          });
+                        } : undefined}
+                        style={{
+                          backgroundColor: paid ? '#dcfce7' : partial ? '#ffedd5' : '#fee2e2',
+                          color: paid ? '#166534' : partial ? '#c2410c' : '#991b1b',
+                          cursor: canAccessPayments ? 'pointer' : 'default',
+                        }}
                       >
                         {booking.payment_status}
                       </span>
                     );
                   }
                   if (key === 'due') {
-                    return <span style={{ fontWeight: 800, color: hasCollectDue(bookingCollectDue(booking)) ? '#b91c1c' : 'var(--text-dim)' }}>{formatCollectDue(bookingCollectDue(booking))}</span>;
+                    const due = hasCollectDue(bookingCollectDue(booking));
+                    return (
+                      <span className={`bookings-row-money ${due ? 'bookings-row-money--due' : 'bookings-row-money--clear'}`}>
+                        {formatCollectDue(bookingCollectDue(booking))}
+                      </span>
+                    );
                   }
                   if (key === 'total') {
-                    return <span style={{ fontWeight: 700 }}>PKR {parseFloat(booking.total_price || 0).toLocaleString()}</span>;
+                    return (
+                      <span className="bookings-row-money bookings-row-money--total">
+                        PKR {parseFloat(booking.total_price || 0).toLocaleString()}
+                      </span>
+                    );
                   }
                   return null;
                 }}

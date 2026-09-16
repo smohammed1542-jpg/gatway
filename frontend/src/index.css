@@ -266,6 +266,224 @@ textarea:focus {
   border-color: var(--text-muted);
 }
 
+.booking-date-when {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.booking-date-when--today {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.booking-date-when--month {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.booking-date-when--past {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.booking-date-when--upcoming {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.bookings-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  box-sizing: border-box;
+  border-left: 4px solid #94a3b8;
+  background: linear-gradient(90deg, #f1f5f9 0%, #f8fafc 100%);
+}
+
+.bookings-day-head--today {
+  border-left-color: #16a34a;
+  background: linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%);
+}
+
+.bookings-day-head--month {
+  border-left-color: #0284c7;
+  background: linear-gradient(90deg, #e0f2fe 0%, #f0f9ff 100%);
+}
+
+.bookings-day-head--past {
+  border-left-color: #94a3b8;
+  background: linear-gradient(90deg, #f1f5f9 0%, #f8fafc 100%);
+}
+
+.bookings-day-head--upcoming {
+  border-left-color: #ea580c;
+  background: linear-gradient(90deg, #ffedd5 0%, #fff7ed 100%);
+}
+
+.bookings-day-head__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.bookings-day-head__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.bookings-day-head__count {
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.bookings-day-head--today .bookings-day-head__title {
+  color: #166534;
+}
+
+.bookings-row-customer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bookings-row-customer__id {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.bookings-row-customer__name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+  line-height: 1.3;
+}
+
+.bookings-row-customer__name:hover {
+  text-decoration: underline;
+}
+
+.bookings-row-customer__name--plain {
+  color: #0f172a;
+}
+
+.bookings-row-customer__event {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.bookings-row-hall {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.bookings-row-slot {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bookings-row-slot--morning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.bookings-row-slot--evening {
+  background: #ecfeff;
+  color: #0e7490;
+}
+
+.bookings-row-slot--custom {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bookings-row-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bookings-row-money {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bookings-row-money--due {
+  color: #b91c1c;
+}
+
+.bookings-row-money--clear {
+  color: #94a3b8;
+}
+
+.bookings-row-money--total {
+  color: #0f172a;
+}
+
+.bookings-table-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.bookings-table-card .erp-table-wrap {
+  border: none;
+  max-height: min(72vh, 780px);
+}
+
 .customer-search-select {
   position: relative;
   width: 100%;

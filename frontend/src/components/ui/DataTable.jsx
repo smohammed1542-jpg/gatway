@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreHorizontal, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Columns3 } from 'lucide-react';
 import EmptyState from './EmptyState';
@@ -127,6 +127,7 @@ function compareValues(a, b) {
 /**
  * Shared workspace table. `variant="dash"` keeps dashboard look.
  * `variant="erp"` is the dense ERP list (sticky header, sort, column chooser).
+ * Optional `groupBy` inserts day/section header rows inside the same table.
  */
 export default function DataTable({
   columns,
@@ -142,6 +143,9 @@ export default function DataTable({
   selectedId,
   showColumnChooser = false,
   getSortValue,
+  groupBy,
+  renderGroupHeader,
+  getGroupSortValue,
 }) {
   const [page, setPage] = useState(0);
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -168,14 +172,49 @@ export default function DataTable({
     return copy;
   }, [data, sortKey, sortDir, getSortValue]);
 
-  const effectivePageSize = pageSize === 0 ? Math.max(sorted.length, 1) : pageSize;
-  const totalPages = Math.max(1, Math.ceil(sorted.length / effectivePageSize));
+  const groupedSections = useMemo(() => {
+    if (!groupBy) return null;
+    const map = new Map();
+    for (const row of sorted) {
+      const key = String(groupBy(row) ?? '');
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(row);
+    }
+    const sections = Array.from(map.entries()).map(([key, rows]) => ({ key, rows }));
+    sections.sort((a, b) => {
+      const av = getGroupSortValue ? getGroupSortValue(a.key, a.rows) : a.key;
+      const bv = getGroupSortValue ? getGroupSortValue(b.key, b.rows) : b.key;
+      return compareValues(av, bv);
+    });
+    return sections;
+  }, [sorted, groupBy, getGroupSortValue]);
+
+  const flatForPaging = groupedSections
+    ? groupedSections.flatMap((section) => section.rows)
+    : sorted;
+
+  const effectivePageSize = pageSize === 0 ? Math.max(flatForPaging.length, 1) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(flatForPaging.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
-  const slice = sorted.slice(safePage * effectivePageSize, safePage * effectivePageSize + effectivePageSize);
+  const pageStart = safePage * effectivePageSize;
+  const pageEnd = pageStart + effectivePageSize;
+  const slice = flatForPaging.slice(pageStart, pageEnd);
+
+  const visibleSections = useMemo(() => {
+    if (!groupedSections) return null;
+    if (pageSize === 0) return groupedSections;
+    const pageIds = new Set(slice.map((row) => String(row.id ?? row.key)));
+    return groupedSections
+      .map((section) => ({
+        ...section,
+        rows: section.rows.filter((row) => pageIds.has(String(row.id ?? row.key))),
+      }))
+      .filter((section) => section.rows.length > 0);
+  }, [groupedSections, slice, pageSize]);
 
   useEffect(() => {
     if (page >= totalPages) setPage(Math.max(0, totalPages - 1));
-  }, [sorted.length, page, totalPages]);
+  }, [flatForPaging.length, page, totalPages]);
 
   useEffect(() => {
     if (!chooserOpen) return undefined;
@@ -205,6 +244,34 @@ export default function DataTable({
 
   const wrapClass = variant === 'erp' ? 'erp-table-wrap' : 'dash-table-wrap';
   const tableClass = variant === 'erp' ? 'erp-table' : 'dash-table';
+  const colSpan = visibleColumns.length + (rowActions ? 1 : 0);
+
+  const renderDataRow = (row) => {
+    const rowId = row.id ?? row.key;
+    const selected = selectedId != null && String(selectedId) === String(rowId);
+    return (
+      <tr
+        key={rowId}
+        onClick={onRowClick ? () => onRowClick(row) : undefined}
+        className={selected ? 'erp-table__row--selected' : undefined}
+        style={onRowClick ? { cursor: 'pointer' } : undefined}
+      >
+        {visibleColumns.map((col) => (
+          <td key={col.key}>{renderCell(row, col.key)}</td>
+        ))}
+        {rowActions && (
+          <td onClick={(e) => e.stopPropagation()}>
+            <RowActionsCell
+              rowId={rowId}
+              openMenuId={openMenuId}
+              setOpenMenuId={setOpenMenuId}
+              items={rowActions(row)}
+            />
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   if (!data.length) {
     return (
@@ -253,7 +320,7 @@ export default function DataTable({
         </div>
       )}
       <div className={wrapClass}>
-        <table className={tableClass}>
+        <table className={`${tableClass}${groupBy ? ` ${tableClass}--grouped` : ''}`}>
           <thead>
             <tr>
               {visibleColumns.map((col) => {
@@ -278,40 +345,28 @@ export default function DataTable({
             </tr>
           </thead>
           <tbody>
-            {slice.map((row) => {
-              const rowId = row.id ?? row.key;
-              const selected = selectedId != null && String(selectedId) === String(rowId);
-              return (
-                <tr
-                  key={rowId}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={selected ? 'erp-table__row--selected' : undefined}
-                  style={onRowClick ? { cursor: 'pointer' } : undefined}
-                >
-                  {visibleColumns.map((col) => (
-                    <td key={col.key}>{renderCell(row, col.key)}</td>
-                  ))}
-                  {rowActions && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <RowActionsCell
-                        rowId={rowId}
-                        openMenuId={openMenuId}
-                        setOpenMenuId={setOpenMenuId}
-                        items={rowActions(row)}
-                      />
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
+            {visibleSections
+              ? visibleSections.map((section) => (
+                  <Fragment key={`group-${section.key || 'none'}`}>
+                    <tr className="erp-table__group-row">
+                      <td colSpan={colSpan}>
+                        {renderGroupHeader
+                          ? renderGroupHeader(section.key, section.rows)
+                          : section.key}
+                      </td>
+                    </tr>
+                    {section.rows.map((row) => renderDataRow(row))}
+                  </Fragment>
+                ))
+              : slice.map((row) => renderDataRow(row))}
           </tbody>
         </table>
       </div>
       {pageSize !== 0 && data.length > pageSize && (
         <div className="dash-pagination">
           <span className="dash-pagination__info">
-            Showing {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, sorted.length)} of{' '}
-            {sorted.length}
+            Showing {safePage * effectivePageSize + 1}–{Math.min((safePage + 1) * effectivePageSize, flatForPaging.length)} of{' '}
+            {flatForPaging.length}
           </span>
           <div className="dash-pagination__controls">
             <button

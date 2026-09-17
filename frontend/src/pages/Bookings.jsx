@@ -668,8 +668,8 @@ const Bookings = () => {
 
   const assignAvailableHall = (next, eventDate) => {
     const merged = { ...next, event_date: eventDate };
-    if (!eventDate || !isSlotReady(merged)) {
-      return { ...merged, venue: '' };
+    if (!eventDate) {
+      return merged;
     }
     const excludeId = editingId;
     const candidates = halls.filter((hall) => hall.status !== 'INACTIVE');
@@ -908,6 +908,21 @@ const Bookings = () => {
       return next;
     });
   }, [halls, bookings, formData.event_date, formData.venue, formData.slot, formData.custom_start_time, formData.custom_end_time, isFormLocked, editingId]);
+
+  useEffect(() => {
+    if (viewMode !== 'list') return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const tag = String(target?.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(target?.isContentEditable);
+      if (typing) return;
+      event.preventDefault();
+      document.getElementById('bookings-list-search')?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode]);
 
   const handleDecorationPackageSelect = (packageId) => {
     setSelectedDecorationId(packageId);
@@ -1664,39 +1679,6 @@ const Bookings = () => {
               <div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>Oversee schedule listings, revenue parameters, and confirm hall draft bookings.</p>
               </div>
-              {canManage && (
-              <button className="btn-primary" onClick={handleCreateNewClick} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '10px', fontSize: '14px', fontWeight: '600' }}>
-                <Plus size={18} /> New Reservation
-              </button>
-              )}
-            </div>
-
-            {/* Filter Search */}
-            <div className="search-toolbar bookings-list-toolbar">
-              <SearchInput
-                variant="inset"
-                placeholder="Search reservations by event name, customer first/last name, hall tag, or booking ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <label className="bookings-date-filter">
-                <span>Event date</span>
-                <input
-                  type="date"
-                  value={eventDateFilter}
-                  onChange={(e) => setEventDateFilter(e.target.value)}
-                  aria-label="Filter bookings by event date"
-                />
-                {eventDateFilter && (
-                  <button
-                    type="button"
-                    className="bookings-date-filter__clear"
-                    onClick={() => setEventDateFilter('')}
-                  >
-                    Clear
-                  </button>
-                )}
-              </label>
             </div>
 
             <div className="card bookings-table-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1704,6 +1686,41 @@ const Bookings = () => {
                 variant="erp"
                 sortable
                 showColumnChooser
+                toolbarEnd={canManage ? (
+                  <button type="button" className="btn-primary bookings-toolbar-new" onClick={handleCreateNewClick}>
+                    <Plus size={16} /> New Reservation
+                  </button>
+                ) : null}
+                toolbarStart={(
+                  <>
+                    <SearchInput
+                      id="bookings-list-search"
+                      className="bookings-table-search"
+                      placeholder="Search name, hall, or ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      aria-keyshortcuts="/"
+                    />
+                    <label className="bookings-date-filter">
+                      <span>Event date</span>
+                      <input
+                        type="date"
+                        value={eventDateFilter}
+                        onChange={(e) => setEventDateFilter(e.target.value)}
+                        aria-label="Filter bookings by event date"
+                      />
+                      {eventDateFilter && (
+                        <button
+                          type="button"
+                          className="bookings-date-filter__clear"
+                          onClick={() => setEventDateFilter('')}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </label>
+                  </>
+                )}
                 pageSize={0}
                 emptyTitle="No bookings match your criteria"
                 emptyDescription={
@@ -2077,25 +2094,20 @@ const Bookings = () => {
                     <div className="reservation-console__section-label">
                       Select Hall
                       <span className="reservation-console__step-badge">
-                        {!formData.event_date
-                          ? 'Pick event date'
-                          : !isSlotReady(formData)
-                            ? 'Pick time slot'
-                            : selectedHall
-                              ? `Capacity ${selectedHall.capacity || 0} · Available ${availableSeatsOnDate(selectedHall, formData.event_date, bookings, editingId, formData.slot, formData.custom_start_time, formData.custom_end_time)}`
-                              : 'Capacity 0'}
+                        {selectedHall
+                          ? `Capacity ${selectedHall.capacity || 0} · Available ${availableSeatsOnDate(selectedHall, formData.event_date, bookings, editingId, formData.slot, formData.custom_start_time, formData.custom_end_time)}`
+                          : 'Capacity 0'}
                       </span>
                     </div>
                     {hallsForSelect.length > 0 && hallsForSelect.length <= 2 ? (
-                      <div className={`reservation-console__hall-grid${!isFormLocked && (!formData.event_date || !isSlotReady(formData)) ? ' is-waiting' : ''}`}>
+                      <div className="reservation-console__hall-grid">
                         {hallsForSelect.map((hall) => {
                           const selected = String(formData.venue) === String(hall.id);
-                          const waiting = !formData.event_date || !isSlotReady(formData);
                           return (
                             <button
                               key={hall.id}
                               type="button"
-                              disabled={isFormLocked || waiting}
+                              disabled={isFormLocked}
                               className={selected ? 'is-selected' : ''}
                               onClick={() => setFormData({
                                 ...formData,
@@ -2112,7 +2124,7 @@ const Bookings = () => {
                       <select
                         className="reservation-console__hall-select"
                         aria-label="Select banquet hall"
-                        disabled={isFormLocked || !formData.event_date || !isSlotReady(formData)}
+                        disabled={isFormLocked}
                         value={formData.venue}
                         onChange={(event) => {
                           const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
@@ -2124,9 +2136,7 @@ const Bookings = () => {
                         }}
                       >
                         <option value="">
-                          {!formData.event_date || !isSlotReady(formData)
-                            ? 'Select time slot first'
-                            : `Select from ${hallsForSelect.length} free halls`}
+                          {`Select from ${hallsForSelect.length} halls`}
                         </option>
                         {hallsForSelect.map((hall) => (
                           <option key={hall.id} value={hall.id}>
@@ -2136,7 +2146,7 @@ const Bookings = () => {
                       </select>
                     ) : (
                       <span className="reservation-console__hall-empty">
-                        {formData.event_date && isSlotReady(formData)
+                        {formData.event_date
                           ? 'No seats left in this time slot'
                           : 'No active halls available'}
                       </span>
@@ -2331,7 +2341,7 @@ const Bookings = () => {
                                 value={candidate.id}
                                 disabled={selectedByOtherLines.has(String(candidate.id))}
                               >
-                                {candidate.name} ({Number(candidate.quantity) >= 999999 ? 'Unlimited' : `${candidate.quantity} ${candidate.unit}`})
+                                {candidate.name}
                               </option>
                             ))}
                           </select>
@@ -2426,7 +2436,7 @@ const Bookings = () => {
                           <option value="">Select item</option>
                           {availableInventoryCatalog.map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.name} — {Number(item.quantity) >= 999999 ? 'Unlimited' : `${item.quantity} ${item.unit}`}
+                              {item.name}
                             </option>
                           ))}
                           <option value="__new__">+ Create new item</option>
@@ -2488,7 +2498,7 @@ const Bookings = () => {
                 {summaryVisibility.venue && (
                   <div><span>Venue</span><b>{subtotal.toLocaleString()}</b></div>
                 )}
-                {summaryVisibility.combinedServices && (
+                {summaryVisibility.combinedServices && extraServices > 0 && (
                   <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
                 )}
                 {summaryVisibility.inventory && inventorySummaryLines.map((line) => (
@@ -3021,7 +3031,7 @@ const Bookings = () => {
                             <option value="">Select item</option>
                             {inventoryCatalog.map((item) => (
                               <option key={item.id} value={item.id}>
-                                {item.name} ({item.quantity} {item.unit} available)
+                                {item.name}
                               </option>
                             ))}
                           </select>

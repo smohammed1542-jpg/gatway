@@ -9,10 +9,20 @@
 .erp-table-toolbar {
   position: relative;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+
+.erp-table-toolbar__start {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .erp-view-fields {

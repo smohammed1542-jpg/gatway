@@ -146,6 +146,8 @@ export default function DataTable({
   groupBy,
   renderGroupHeader,
   getGroupSortValue,
+  toolbarStart = null,
+  toolbarEnd = null,
 }) {
   const [page, setPage] = useState(0);
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -274,20 +276,11 @@ export default function DataTable({
     );
   };
 
-  if (!data.length) {
-    return (
-      <EmptyState
-        icon={Inbox}
-        title={emptyTitle}
-        description={emptyDescription}
-      />
-    );
-  }
-
-  return (
-    <>
+  const toolbar = (showColumnChooser || toolbarStart || toolbarEnd) ? (
+    <div className="erp-table-toolbar" ref={chooserRef}>
+      {toolbarStart ? <div className="erp-table-toolbar__start">{toolbarStart}</div> : null}
       {showColumnChooser && (
-        <div className="erp-table-toolbar" ref={chooserRef}>
+        <>
           <button
             type="button"
             className={`erp-view-fields${chooserOpen ? ' is-open' : ''}`}
@@ -323,8 +316,28 @@ export default function DataTable({
               ))}
             </div>
           )}
-        </div>
+        </>
       )}
+      {toolbarEnd}
+    </div>
+  ) : null;
+
+  if (!data.length) {
+    return (
+      <>
+        {toolbar}
+        <EmptyState
+          icon={Inbox}
+          title={emptyTitle}
+          description={emptyDescription}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {toolbar}
       <div className={wrapClass}>
         <table className={`${tableClass}${groupBy ? ` ${tableClass}--grouped` : ''}`}>
           <thead>

@@ -9,18 +9,15 @@ import {
   Edit2,
   Trash2,
   X,
-  Calendar,
-  CreditCard,
   MapPin,
   ChevronRight,
-  Wallet,
   FileText,
 } from 'lucide-react';
 import client from '../api/client';
 import toast from 'react-hot-toast';
-import { customerDisplayName, customerInitials, buildCustomerPayload } from '../utils/customer';
+import { customerDisplayName, buildCustomerPayload } from '../utils/customer';
+import { cnicDigits } from '../utils/cnicScanner';
 import {
-  formatRs,
   formatCollectDue,
   bookingCollectDue,
   hasCollectDue,
@@ -29,14 +26,89 @@ import { usePermissions } from '../hooks/usePermissions';
 import DataTable from '../components/ui/DataTable';
 import useEscapeClose from '../hooks/useEscapeClose';
 
-const PAYMENT_STATUS_STYLE = {
-  PAID: { bg: '#dcfce7', color: '#166534', label: 'Paid' },
-  PARTIAL: { bg: '#fef3c7', color: '#92400e', label: 'Partial - balance due' },
-  UNPAID: { bg: '#fee2e2', color: '#991b1b', label: 'Unpaid - amount due' },
-};
+function phoneKey(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 10) return '';
+  return digits.slice(-10);
+}
+
+/** Same CNIC or same phone = one customer row. Minors stay separate. */
+function uniqueCustomers(list) {
+  const items = Array.isArray(list) ? list : [];
+  const parent = items.map((_, i) => i);
+  const find = (i) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const union = (a, b) => {
+    const pa = find(a);
+    const pb = find(b);
+    if (pa !== pb) parent[pb] = pa;
+  };
+
+  const byCnic = new Map();
+  const byPhone = new Map();
+  items.forEach((customer, index) => {
+    if (customer?.is_minor) return;
+    const cnic = cnicDigits(customer?.cnic);
+    const phone = phoneKey(customer?.phone);
+    if (cnic.length >= 13) {
+      if (byCnic.has(cnic)) union(byCnic.get(cnic), index);
+      else byCnic.set(cnic, index);
+    }
+    if (phone) {
+      if (byPhone.has(phone)) union(byPhone.get(phone), index);
+      else byPhone.set(phone, index);
+    }
+  });
+
+  const groups = new Map();
+  items.forEach((customer, index) => {
+    const root = find(index);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(customer);
+  });
+
+  return [...groups.values()].map((group) => {
+    const kept = group[0];
+    return {
+      ...kept,
+      outstanding_balance: group.reduce((sum, row) => sum + Number(row.outstanding_balance || 0), 0),
+      _ids: group.map((row) => row.id),
+    };
+  });
+}
+
+function mergeSummaries(results, preferredId) {
+  const bookingsById = new Map();
+  let outstanding = 0;
+  let customer = null;
+  results.forEach((data) => {
+    if (!data) return;
+    outstanding += Number(data.total_outstanding || 0);
+    if (!customer || data.customer?.id === preferredId) {
+      customer = data.customer || customer;
+    }
+    (data.bookings || []).forEach((booking) => {
+      if (booking?.id != null) bookingsById.set(booking.id, booking);
+    });
+  });
+  const bookings = [...bookingsById.values()].sort((a, b) => (
+    String(b.event_date || '').localeCompare(String(a.event_date || ''))
+  ));
+  return {
+    customer,
+    bookings,
+    bookings_count: bookings.length,
+    total_outstanding: outstanding,
+  };
+}
 
 const CustomerManagement = () => {
-  const { canManage, canAccessPayments } = usePermissions();
+  const { canManage } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const { customerId: customerIdParam } = useParams();
@@ -57,14 +129,7 @@ const CustomerManagement = () => {
     address: '',
   });
 
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [payBooking, setPayBooking] = useState(null);
-  const [payForm, setPayForm] = useState({
-    amount: '',
-    payment_method: 'CASH',
-    notes: '',
-  });
-  const [paySubmitting, setPaySubmitting] = useState(false);
+  const uniqueList = useMemo(() => uniqueCustomers(customers), [customers]);
 
   const fetchCustomers = async () => {
     setIsLoading(true);
@@ -78,12 +143,18 @@ const CustomerManagement = () => {
     }
   };
 
-  const fetchSummary = useCallback(async (customerId) => {
+  const fetchSummary = useCallback(async (customerId, groupedCustomers) => {
     if (!customerId) return;
     setSummaryLoading(true);
     try {
-      const res = await client.get(`/customers/${customerId}/summary/`);
-      setSummary(res.data);
+      const group = (groupedCustomers || []).find(
+        (row) => row.id === customerId || (row._ids || []).includes(customerId),
+      );
+      const ids = group?._ids?.length ? group._ids : [customerId];
+      const responses = await Promise.all(
+        ids.map((id) => client.get(`/customers/${id}/summary/`)),
+      );
+      setSummary(mergeSummaries(responses.map((res) => res.data), customerId));
     } catch {
       toast.error('Failed to load customer details');
       setSummary(null);
@@ -94,6 +165,20 @@ const CustomerManagement = () => {
 
   useEffect(() => {
     fetchCustomers();
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const tag = String(target?.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(target?.isContentEditable);
+      if (typing) return;
+      event.preventDefault();
+      document.getElementById('customers-list-search')?.focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   useEffect(() => {
@@ -111,14 +196,18 @@ const CustomerManagement = () => {
   }, [location.state?.openCreate, canManage, navigate, location.pathname]);
 
   useEffect(() => {
-    if (selectedId) fetchSummary(selectedId);
-    else setSummary(null);
-  }, [selectedId, fetchSummary]);
+    if (!selectedId) {
+      setSummary(null);
+      return;
+    }
+    if (isLoading) return;
+    fetchSummary(selectedId, uniqueList);
+  }, [selectedId, fetchSummary, uniqueList, isLoading]);
 
   const filteredCustomers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter((c) => {
+    if (!q) return uniqueList;
+    return uniqueList.filter((c) => {
       const name = customerDisplayName(c).toLowerCase();
       return (
         name.includes(q) ||
@@ -127,14 +216,13 @@ const CustomerManagement = () => {
         (c.cnic || '').includes(q)
       );
     });
-  }, [customers, searchQuery]);
+  }, [uniqueList, searchQuery]);
 
   const handleSelectCustomer = (customer) => {
     navigate(`/customers/${customer.id}`);
   };
 
   useEscapeClose(showFormModal, () => setShowFormModal(false));
-  useEscapeClose(showPayModal, () => setShowPayModal(false));
 
   const handleOpenFormModal = (customer = null, e) => {
     e?.stopPropagation();
@@ -164,11 +252,27 @@ const CustomerManagement = () => {
       return;
     }
     const payload = buildCustomerPayload(currentCustomer);
+    const newCnic = cnicDigits(payload.cnic);
+    const newPhone = phoneKey(payload.phone);
+    const duplicate = uniqueList.find((row) => {
+      if (isEditing && (row.id === currentCustomer.id || (row._ids || []).includes(currentCustomer.id))) {
+        return false;
+      }
+      const sameCnic = newCnic.length >= 13 && cnicDigits(row.cnic) === newCnic;
+      const samePhone = newPhone && phoneKey(row.phone) === newPhone;
+      return sameCnic || samePhone;
+    });
+    if (!isEditing && duplicate) {
+      toast.error('This customer already exists');
+      setShowFormModal(false);
+      navigate(`/customers/${duplicate.id}`);
+      return;
+    }
     try {
       if (isEditing) {
         await client.put(`/customers/${currentCustomer.id}/`, payload);
         toast.success('Customer updated');
-        if (selectedId === currentCustomer.id) fetchSummary(selectedId);
+        if (selectedId === currentCustomer.id) fetchSummary(selectedId, uniqueList);
       } else {
         const res = await client.post('/customers/', payload);
         toast.success('Customer added');
@@ -199,81 +303,21 @@ const CustomerManagement = () => {
     navigate(`/bookings/${bookingId}`);
   };
 
-  const openPayModal = (booking, e) => {
-    e?.stopPropagation();
-    const remaining = bookingCollectDue(booking);
-    setPayBooking(booking);
-    setPayForm({
-      amount: String(Math.round(remaining)),
-      payment_method: 'CASH',
-      notes: '',
-    });
-    setShowPayModal(true);
-  };
-
-  const handleRecordPayment = async (e) => {
-    e.preventDefault();
-    if (!payBooking) return;
-    const amount = parseFloat(payForm.amount);
-    if (!amount || amount <= 0) {
-      toast.error('Enter a valid amount');
-      return;
-    }
-    const remaining = bookingCollectDue(payBooking);
-    if (amount > remaining + 0.01) {
-      toast.error(`Amount cannot exceed remaining balance (${formatRs(remaining)})`);
-      return;
-    }
-
-    setPaySubmitting(true);
-    try {
-      await client.post('/finance/payments/', {
-        booking: payBooking.id,
-        amount,
-        payment_method: payForm.payment_method,
-        status: 'COMPLETED',
-        notes: payForm.notes || `Payment from customer profile - ${customerDisplayName(summary?.customer)}`,
-      });
-      toast.success('Payment recorded');
-      setShowPayModal(false);
-      setPayBooking(null);
-      fetchSummary(selectedId);
-      fetchCustomers();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to record payment');
-    } finally {
-      setPaySubmitting(false);
-    }
-  };
-
-  const selectedCustomer = summary?.customer || customers.find((c) => c.id === selectedId);
+  const selectedCustomer = summary?.customer
+    || uniqueList.find((c) => c.id === selectedId || (c._ids || []).includes(selectedId));
 
   return (
     <>
       <div className="animate-fade-in">
         <div className="page-header">
           <div>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click a customer to view bookings, balance due, and record payments.</p>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click a customer to view profile, events, and balance due.</p>
           </div>
-          {canManage && (
-          <button type="button" className="btn-primary" onClick={() => handleOpenFormModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <UserPlus size={18} /> Add Customer
-          </button>
-          )}
         </div>
 
         <div className={`split-layout ${selectedId ? 'split-layout--customers' : ''}`}>
           <div>
-            <div className="search-toolbar search-toolbar--compact">
-              <SearchInput
-                variant="inset"
-                placeholder="Search by name, phone, CNIC, email..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="card customers-table-card" style={{ padding: 0, overflow: 'hidden' }}>
               {isLoading ? (
                 <AppLoader inline message="Loading customers…" />
               ) : (
@@ -285,6 +329,21 @@ const CustomerManagement = () => {
                   selectedId={selectedId}
                   emptyTitle="No customers found"
                   emptyDescription="Try another search or add a customer."
+                  toolbarStart={(
+                    <SearchInput
+                      id="customers-list-search"
+                      className="customers-table-search"
+                      placeholder="Search name, phone, CNIC..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      aria-keyshortcuts="/"
+                    />
+                  )}
+                  toolbarEnd={canManage ? (
+                    <button type="button" className="btn-primary customers-toolbar-add" onClick={() => handleOpenFormModal()}>
+                      <UserPlus size={16} /> Add Customer
+                    </button>
+                  ) : null}
                   columns={[
                     { key: 'name', label: 'Customer' },
                     { key: 'phone', label: 'Phone', width: '130px' },
@@ -328,23 +387,11 @@ const CustomerManagement = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', gap: '12px' }}>
                     <div>
                       <h3 style={{ fontSize: '20px', fontWeight: '800' }}>{customerDisplayName(selectedCustomer)}</h3>
-                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Customer profile & bookings</p>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Customer detail</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {canManage && (
-                      <>
-                      <button type="button" onClick={(e) => handleOpenFormModal(selectedCustomer, e)} style={{ padding: '8px', color: 'var(--secondary)', background: 'transparent' }} title="Edit">
-                        <Edit2 size={18} />
-                      </button>
-                      <button type="button" onClick={(e) => handleDelete(selectedId, e)} style={{ padding: '8px', color: '#ef4444', background: 'transparent' }} title="Delete">
-                        <Trash2 size={18} />
-                      </button>
-                      </>
-                      )}
-                      <button type="button" onClick={() => navigate('/customers')} style={{ padding: '8px', color: 'var(--text-muted)', background: 'transparent' }} title="Close">
-                        <X size={18} />
-                      </button>
-                    </div>
+                    <button type="button" onClick={() => navigate('/customers')} style={{ padding: '8px', color: 'var(--text-muted)', background: 'transparent' }} title="Close">
+                      <X size={18} />
+                    </button>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px', fontSize: '14px' }}>
@@ -352,7 +399,7 @@ const CustomerManagement = () => {
                       <Phone size={16} /> {selectedCustomer.phone}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: 'var(--text-muted)' }}>
-                      <Mail size={16} /> {selectedCustomer.email || '-'}
+                      <Mail size={16} /> {selectedCustomer.email || '—'}
                     </div>
                     {selectedCustomer.cnic && (
                       <div style={{ gridColumn: 'span 2', fontFamily: 'monospace', fontSize: '13px' }}>CNIC: {selectedCustomer.cnic}</div>
@@ -362,9 +409,6 @@ const CustomerManagement = () => {
                         <MapPin size={16} style={{ flexShrink: 0, marginTop: 2 }} /> {selectedCustomer.address}
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: 'var(--text-muted)' }}>
-                      <Calendar size={16} /> Joined {new Date(selectedCustomer.created_at).toLocaleDateString()}
-                    </div>
                   </div>
 
                   <div
@@ -376,61 +420,29 @@ const CustomerManagement = () => {
                     }}
                   >
                     <div className="premium-card" style={{ padding: '16px' }}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Total bookings</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Total events</p>
                       <p style={{ fontSize: '22px', fontWeight: '800', marginTop: '4px' }}>{summary?.bookings_count ?? 0}</p>
                     </div>
                     <div className="premium-card" style={{ padding: '16px', borderColor: hasCollectDue(summary?.total_outstanding) ? '#fecaca' : undefined }}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Total balance due</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Balance due</p>
                       <p style={{ fontSize: '22px', fontWeight: '800', marginTop: '4px', color: hasCollectDue(summary?.total_outstanding) ? '#b91c1c' : 'var(--text-dim)' }}>
                         {formatCollectDue(summary?.total_outstanding)}
                       </p>
                     </div>
                   </div>
 
-                  {canManage && (
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => navigate('/bookings', { state: { openCreate: true, prefillCustomer: selectedId } })}
-                      style={{
-                        width: '100%',
-                        marginBottom: '20px',
-                        padding: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        fontWeight: '700',
-                      }}
-                    >
-                      <Calendar size={16} /> New booking
-                    </button>
-                  )}
-
                   <h4 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={16} /> Bookings
+                    <FileText size={16} /> Events
                   </h4>
 
                   {!summary?.bookings?.length ? (
                     <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
-                      <p style={{ margin: 0 }}>No bookings for this customer yet.</p>
-                      {canManage && (
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => navigate('/bookings', { state: { openCreate: true, prefillCustomer: selectedId } })}
-                          style={{ marginTop: '14px', padding: '10px 18px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                        >
-                          <Calendar size={16} /> Create first booking
-                        </button>
-                      )}
+                      <p style={{ margin: 0 }}>No events for this customer yet.</p>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '420px', overflowY: 'auto' }}>
                       {summary.bookings.map((b) => {
-                        const ps = PAYMENT_STATUS_STYLE[b.payment_status] || PAYMENT_STATUS_STYLE.UNPAID;
                         const remaining = bookingCollectDue(b);
-                        const canPay = canAccessPayments && remaining > 0;
                         return (
                           <div
                             key={b.id}
@@ -451,88 +463,14 @@ const CustomerManagement = () => {
                               width: '100%',
                               textAlign: 'left',
                               cursor: 'pointer',
-                              transition: 'border-color 0.15s, box-shadow 0.15s',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--primary)';
-                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 107, 44, 0.12)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--border)';
-                              e.currentTarget.style.boxShadow = 'none';
                             }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontWeight: '700', fontSize: '15px' }}>{b.event_name}</p>
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                  {b.venue_name} · {b.event_date || '-'} · {b.slot || '-'}
-                                </p>
-                                {b.booking_id && (
-                                  <p style={{ fontSize: '11px', color: 'var(--icon-muted)', marginTop: '2px' }}>{b.booking_id}</p>
-                                )}
-                              </div>
-                              <span
-                                style={{
-                                  padding: '4px 10px',
-                                  borderRadius: '20px',
-                                  fontSize: '11px',
-                                  fontWeight: '700',
-                                  backgroundColor: ps.bg,
-                                  color: ps.color,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {ps.label}
-                              </span>
-                              <ChevronRight size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} aria-hidden />
-                            </div>
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(3, 1fr)',
-                                gap: '8px',
-                                marginTop: '12px',
-                                fontSize: '13px',
-                              }}
-                            >
-                              <div>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Total</span>
-                                <p style={{ fontWeight: '700' }}>{formatRs(b.total_price)}</p>
-                              </div>
-                              <div>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Paid</span>
-                                <p style={{ fontWeight: '700', color: '#166534' }}>{formatRs(b.advance_paid)}</p>
-                              </div>
-                              <div>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Due</span>
-                                <p style={{ fontWeight: '700', color: hasCollectDue(remaining) ? '#b91c1c' : 'var(--text-dim)' }}>{formatCollectDue(remaining)}</p>
-                              </div>
-                            </div>
-                            {canPay && (
-                              <button
-                                type="button"
-                                className="btn-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openPayModal(b, e);
-                                }}
-                                style={{
-                                  marginTop: '12px',
-                                  width: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '8px',
-                                  padding: '10px',
-                                  fontSize: '13px',
-                                }}
-                              >
-                                <Wallet size={16} /> Record payment ({formatCollectDue(remaining)})
-                              </button>
-                            )}
-                            <p style={{ fontSize: '11px', color: 'var(--primary)', marginTop: canPay ? '8px' : '12px', fontWeight: '600' }}>
-                              Click to view booking details page →
+                            <p style={{ fontWeight: '700', fontSize: '15px' }}>{b.event_name}</p>
+                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                              {b.venue_name} · {b.event_date || '—'} · {b.slot || '—'}
+                            </p>
+                            <p style={{ fontSize: '13px', fontWeight: '700', marginTop: '8px', color: hasCollectDue(remaining) ? '#b91c1c' : 'var(--text-dim)' }}>
+                              Due {formatCollectDue(remaining)}
                             </p>
                           </div>
                         );
@@ -592,67 +530,6 @@ const CustomerManagement = () => {
               </div>
               <button type="submit" className="btn-primary" style={{ width: '100%', padding: '12px' }}>
                 {isEditing ? 'Update Customer' : 'Add Customer'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showPayModal && payBooking && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            backdropFilter: 'blur(4px)',
-            padding: '16px',
-          }}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: '440px', padding: '28px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CreditCard size={20} /> Record payment
-              </h3>
-              <button type="button" onClick={() => setShowPayModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={22} />
-              </button>
-            </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              <strong>{payBooking.event_name}</strong>
-              <br />
-              Due: <strong style={{ color: hasCollectDue(bookingCollectDue(payBooking)) ? '#b91c1c' : 'var(--text-dim)' }}>{formatCollectDue(bookingCollectDue(payBooking))}</strong>
-            </p>
-            <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="input-group">
-                <label>Amount (Rs)</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="0.01"
-                  value={payForm.amount}
-                  onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
-                />
-              </div>
-              <div className="input-group">
-                <label>Payment method</label>
-                <select value={payForm.payment_method} onChange={(e) => setPayForm({ ...payForm, payment_method: e.target.value })} style={{ width: '100%' }}>
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Card</option>
-                  <option value="BANK_TRANSFER">Bank transfer</option>
-                  <option value="ONLINE">Online</option>
-                </select>
-              </div>
-              <div className="input-group">
-                <label>Notes (optional)</label>
-                <input type="text" value={payForm.notes} onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })} placeholder="Receipt / reference" />
-              </div>
-              <button type="submit" className="btn-primary" disabled={paySubmitting} style={{ padding: '12px' }}>
-                {paySubmitting ? 'Saving…' : 'Confirm payment'}
               </button>
             </form>
           </div>

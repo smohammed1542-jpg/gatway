@@ -219,12 +219,74 @@ textarea:focus {
   min-width: 0;
 }
 
+.bookings-table-card .bookings-table-search,
+.customers-table-card .customers-table-search {
+  width: 220px;
+  max-width: 220px;
+  flex: 0 0 220px;
+}
+
+.bookings-table-card .bookings-table-search .search-field__icon,
+.customers-table-card .customers-table-search .search-field__icon {
+  left: 6px;
+}
+
+.bookings-table-card .bookings-table-search .search-field__input,
+.bookings-table-card .bookings-table-search .search-field__input:hover,
+.bookings-table-card .bookings-table-search .search-field__input:focus,
+.bookings-table-card .bookings-table-search .search-field__input:focus-visible,
+.customers-table-card .customers-table-search .search-field__input,
+.customers-table-card .customers-table-search .search-field__input:hover,
+.customers-table-card .customers-table-search .search-field__input:focus,
+.customers-table-card .customers-table-search .search-field__input:focus-visible {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px 4px 28px;
+  font-size: 13px;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent;
+  border-radius: 0;
+}
+
 .bookings-date-filter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+}
+
+.bookings-table-card .erp-table-toolbar .bookings-date-filter {
+  margin-left: auto;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  flex-wrap: nowrap;
+}
+
+.bookings-table-card .bookings-date-filter input[type="date"] {
+  min-height: 30px;
+  padding: 4px 6px;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.bookings-table-card .bookings-date-filter input[type="date"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.bookings-table-card .bookings-date-filter__clear {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
 }
 
 .bookings-date-filter > span {
@@ -243,11 +305,6 @@ textarea:focus {
   color: var(--text-main);
   font-size: 13px;
   font-weight: 600;
-}
-
-.bookings-date-filter input[type="date"]:focus {
-  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
-  outline-offset: 1px;
 }
 
 .bookings-date-filter__clear {
@@ -471,7 +528,22 @@ textarea:focus {
   color: var(--text-main);
 }
 
-.bookings-table-card {
+.bookings-table-card .bookings-toolbar-new,
+.customers-table-card .customers-toolbar-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.bookings-table-card,
+.customers-table-card {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -479,7 +551,8 @@ textarea:focus {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.bookings-table-card .erp-table-wrap {
+.bookings-table-card .erp-table-wrap,
+.customers-table-card .erp-table-wrap {
   border: none;
   max-height: min(72vh, 780px);
 }

@@ -1,21 +1,16 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Calculator,
   Calendar,
   Users,
   ChevronLeft,
   ChevronRight,
   Wallet,
-  Package,
-  Sparkles,
   CalendarDays,
-  Bell,
   Receipt,
   X,
   CalendarCheck,
   Plus,
-  BarChart3,
   BookOpen,
   ChevronDown,
 } from 'lucide-react';
@@ -34,10 +29,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     user,
     loading,
     canAccessExpenses,
-    canAccessNotifications,
     canAccessDashboard,
     canAccessPayments,
-    canAccessReports,
     isAdmin,
   } = usePermissions();
   const { isPageVisible: isGhPageVisible } = useGhPageVisibility();
@@ -50,10 +43,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     { name: 'Customers', icon: Users, path: '/customers', pageKey: HALL_PAGE_KEYS.CUSTOMERS },
     ...(canAccessPayments ? [{ name: 'Payments', icon: Wallet, path: '/payments', pageKey: HALL_PAGE_KEYS.PAYMENTS }] : []),
     ...(canAccessExpenses ? [{ name: 'Expenses', icon: Receipt, path: '/expenses', pageKey: HALL_PAGE_KEYS.EXPENSES }] : []),
-    { name: 'Inventory', icon: Package, path: '/inventory', pageKey: HALL_PAGE_KEYS.INVENTORY },
-    { name: 'Decorations', icon: Sparkles, path: '/decoration-packages', pageKey: HALL_PAGE_KEYS.DECORATIONS },
-    ...(canAccessReports ? [{ name: 'Reports', icon: BarChart3, path: '/reports', pageKey: HALL_PAGE_KEYS.REPORTS }] : []),
-    ...(canAccessNotifications ? [{ name: 'Notifications', icon: Bell, path: '/notifications', pageKey: HALL_PAGE_KEYS.NOTIFICATIONS }] : []),
   ].filter((item) => !item.pageKey || isHallPageVisible(item.pageKey));
 
   const guestHouseNavItems = [
@@ -62,12 +51,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     { name: 'Calendar', icon: CalendarDays, path: '/gh/calendar', pageKey: GH_PAGE_KEYS.CALENDAR },
     { name: 'Guests', icon: Users, path: '/gh/customers', pageKey: GH_PAGE_KEYS.CUSTOMERS },
     ...(canAccessExpenses ? [{ name: 'Expenses', icon: Wallet, path: '/gh/expenses', pageKey: GH_PAGE_KEYS.EXPENSES }] : []),
-    ...(canAccessNotifications ? [{ name: 'Notifications', icon: Bell, path: '/gh/notifications', pageKey: GH_PAGE_KEYS.NOTIFICATIONS }] : []),
   ].filter((item) => !item.pageKey || isGhPageVisible(item.pageKey));
-
-  const dashboardNavItem = isGuestHouse
-    ? { name: 'Dashboard', icon: Calculator, path: '/gh/dashboard', pageKey: GH_PAGE_KEYS.DASHBOARD }
-    : { name: 'Financials', icon: Calculator, path: '/dashboard', pageKey: HALL_PAGE_KEYS.DASHBOARD };
 
   const acctBase = isGuestHouse ? '/gh/accounting' : '/accounting';
   const journalPath = isGuestHouse ? '/gh/journal-entries' : '/journal-entries';
@@ -165,16 +149,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
           {mainNavItems.map((item) => (
             <li key={item.name} className="app-sidebar__nav-item">
               {renderNavLink(item)}
-            </li>
-          ))}
-          {canAccessDashboard && (
-            (!dashboardNavItem.pageKey
-              || (isGuestHouse
-                ? isGhPageVisible(dashboardNavItem.pageKey)
-                : isHallPageVisible(dashboardNavItem.pageKey)))
-            && (
-            <li className="app-sidebar__nav-item app-sidebar__nav-item--divider">
-              {renderNavLink(dashboardNavItem)}
             </li>
           ))}
           {canAccessDashboard && (!isCollapsed || isMobile) && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Bell, Search, User, Menu, Wallet, Settings, LogOut, BookOpen, Scale } from 'lucide-react';
+import { Bell, Search, User, Menu, Settings, LogOut } from 'lucide-react';
 import SearchInput from './SearchInput';
 import ThemeToggle from './ThemeToggle';
 import { useAuth } from '../context/AuthContext';
@@ -25,13 +25,9 @@ function DashboardHeaderTitle() {
 const DashboardLayoutContent = () => {
   const { user, logout } = useAuth();
   const { isGuestHouse } = useAppType();
-  const { canAccessPayments, canAccessSettings, canAccessDashboard } = usePermissions();
+  const { canAccessPayments, canAccessSettings } = usePermissions();
   const { isPageVisible } = useGhPageVisibility();
   const profilePath = isGuestHouse ? '/gh/profile' : '/profile';
-  const paymentsPath = isGuestHouse ? '/gh/payments' : '/payments';
-  const journalPath = isGuestHouse ? '/gh/journal-entries' : '/journal-entries';
-  const accountingPath = isGuestHouse ? '/gh/accounting' : '/accounting';
-  const trialBalancePath = isGuestHouse ? '/gh/accounting/trial-balance' : '/accounting/trial-balance';
   const settingsPath = isGuestHouse ? '/gh/settings' : '/settings';
   const navigate = useNavigate();
   const location = useLocation();
@@ -90,17 +86,11 @@ const DashboardLayoutContent = () => {
     setShowNotifications(false);
   }, [location.pathname]);
 
-  const showPaymentsMenu = canAccessPayments
-    && (!isGuestHouse || isPageVisible(GH_PAGE_KEYS.PAYMENTS));
   const showProfileMenu = !isGuestHouse || isPageVisible(GH_PAGE_KEYS.PROFILE);
   const showSettingsMenu = canAccessSettings
     && (!isGuestHouse || isPageVisible(GH_PAGE_KEYS.SETTINGS));
 
   const profileMenuItems = [
-    ...(showPaymentsMenu ? [{ label: 'Payments', icon: Wallet, path: paymentsPath }] : []),
-    ...(canAccessDashboard ? [{ label: 'Journal Entries', icon: BookOpen, path: journalPath }] : []),
-    ...(canAccessDashboard ? [{ label: 'Accounting', icon: Scale, path: accountingPath }] : []),
-    ...(canAccessDashboard ? [{ label: 'Trial Balance', icon: Scale, path: trialBalancePath }] : []),
     ...(showProfileMenu ? [{ label: 'Profile', icon: User, path: profilePath }] : []),
     ...(showSettingsMenu ? [{ label: 'Settings', icon: Settings, path: settingsPath }] : []),
   ];
@@ -121,7 +111,7 @@ const DashboardLayoutContent = () => {
   };
 
   const isProfileMenuItemActive = (path) => {
-    if (path === settingsPath || path === paymentsPath) {
+    if (path === settingsPath) {
       return location.pathname === path || location.pathname.startsWith(`${path}/`);
     }
     return location.pathname === path;

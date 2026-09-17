@@ -171,7 +171,7 @@ class BookingSerializer(serializers.ModelSerializer):
                 "Start date must be before end date."
             )
 
-        # Capacity / overlap only for non-draft bookings with a hall
+        # Remaining seats on this event date (same hall can host multiple events if seats remain)
         if not is_draft and venue and guest_count > venue.capacity:
             raise serializers.ValidationError(
                 f"Guest count ({guest_count}) exceeds the capacity of '{venue.name}' "
@@ -179,23 +179,22 @@ class BookingSerializer(serializers.ModelSerializer):
             )
 
         if not is_draft and venue and start_date and end_date:
-            overlapping_bookings = Booking.objects.filter(
+            overlapping = Booking.objects.filter(
                 venue=venue,
                 booking_status__in=['PENDING', 'CONFIRMED'],
             ).filter(
                 Q(start_date__lt=end_date, end_date__gt=start_date)
             )
-
             if self.instance:
-                overlapping_bookings = overlapping_bookings.exclude(id=self.instance.id)
-
-            if overlapping_bookings.exists():
-                conflict = overlapping_bookings.first()
-                conflict_start = conflict.start_date.strftime('%d %b %Y, %I:%M %p')
-                conflict_end = conflict.end_date.strftime('%d %b %Y, %I:%M %p')
+                overlapping = overlapping.exclude(id=self.instance.id)
+            occupied = 0
+            for other in overlapping:
+                occupied += (other.gents_count or 0) + (other.ladies_count or 0)
+            remaining = max(0, venue.capacity - occupied)
+            if guest_count > remaining:
                 raise serializers.ValidationError(
-                    f"'{venue.name}' is already booked from {conflict_start} to {conflict_end} "
-                    f"for '{conflict.event_name}'. Please choose different dates or another hall."
+                    f"Only {remaining} seats left in '{venue.name}' for this time "
+                    f"(capacity {venue.capacity}). Reduce guests or choose another hall."
                 )
 
         return data

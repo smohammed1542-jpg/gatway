@@ -1483,11 +1483,13 @@
 }
 
 .reservation-console__hall-grid button {
+  min-height: 36px;
   height: 36px;
   padding: 6px 8px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 400;
+  justify-content: center;
 }
 
 .reservation-console__hall-grid button span {
@@ -1495,8 +1497,29 @@
   font-size: 11px;
 }
 
+.reservation-console__hall-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  line-height: 1.15;
+}
+
+.reservation-console__hall-stats em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .reservation-console__hall-grid button.is-selected {
   box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.reservation-console__hall-grid.is-waiting,
+.reservation-console__hall-select:disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .reservation-console__steppers {

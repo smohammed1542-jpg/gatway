@@ -60,17 +60,34 @@ class BookingTenantAndOverlapTests(TestCase):
         items = payload.get('results', payload) if isinstance(payload, dict) else payload
         self.assertEqual(len(items), 0)
 
-    def test_overlap_same_venue_slot_rejected(self):
+    def test_same_day_second_booking_allowed_when_seats_remain(self):
         client = APIClient()
         client.force_authenticate(user=self.admin_a)
         payload = {
             'customer': self.customer_a.id,
             'venue': self.venue_a.id,
-            'event_name': 'Conflict',
+            'event_name': 'Second event',
             'event_date': self.event_date.isoformat(),
             'slot': 'evening',
             'gents_count': 50,
             'ladies_count': 50,
+            'rate_per_head': '1000',
+            'booking_status': 'CONFIRMED',
+        }
+        response = client.post('/api/bookings/', payload, format='json')
+        self.assertEqual(response.status_code, 201)
+
+    def test_same_day_rejected_when_seats_exceeded(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+        payload = {
+            'customer': self.customer_a.id,
+            'venue': self.venue_a.id,
+            'event_name': 'Over capacity',
+            'event_date': self.event_date.isoformat(),
+            'slot': 'evening',
+            'gents_count': 200,
+            'ladies_count': 200,
             'rate_per_head': '1000',
             'booking_status': 'CONFIRMED',
         }

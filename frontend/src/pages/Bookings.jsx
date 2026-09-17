@@ -74,6 +74,92 @@ const resolveBookingStatusStyle = (booking) => {
   return BOOKING_STATUS_STYLE[booking.booking_status] || BOOKING_STATUS_STYLE.PENDING;
 };
 
+const HOLDING_STATUSES = new Set(['PENDING', 'CONFIRMED']);
+
+const bookingEventDate = (booking) => {
+  if (booking?.event_date) return String(booking.event_date).slice(0, 10);
+  if (booking?.start_date) return String(booking.start_date).slice(0, 10);
+  return '';
+};
+
+const bookingHoldsHall = (booking, excludeId) => {
+  if (!booking?.venue) return false;
+  if (excludeId && String(booking.id) === String(excludeId)) return false;
+  if (booking.booking_status === 'CANCELLED') return false;
+  if (isDraftLikeBooking(booking)) return false;
+  return HOLDING_STATUSES.has(booking.booking_status);
+};
+
+const bookingGuestCount = (booking) => {
+  const gents = Number(booking?.gents_count || 0);
+  const ladies = Number(booking?.ladies_count || 0);
+  const named = gents + ladies;
+  if (named > 0) return named;
+  return Number(booking?.guest_count || 0);
+};
+
+const timeToMinutes = (value) => {
+  if (!value) return null;
+  const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
+  if (!Number.isFinite(hours)) return null;
+  return hours * 60 + (Number.isFinite(minutes) ? minutes : 0);
+};
+
+const slotTimeWindow = (slot, customStart, customEnd) => {
+  const key = String(slot || '').toLowerCase();
+  if (key === 'morning') return { start: 9 * 60, end: 15 * 60 };
+  if (key === 'evening') return { start: 18 * 60, end: 24 * 60 };
+  if (key === 'custom') {
+    const start = timeToMinutes(customStart);
+    let end = timeToMinutes(customEnd);
+    if (start == null || end == null) return null;
+    if (end <= start) end += 24 * 60;
+    return { start, end };
+  }
+  return null;
+};
+
+const bookingTimeWindow = (booking) => slotTimeWindow(
+  booking?.slot,
+  booking?.custom_start_time,
+  booking?.custom_end_time,
+);
+
+const windowsOverlap = (left, right) => (
+  left && right && left.start < right.end && right.start < left.end
+);
+
+const bookingOccupiesSelectedSlot = (booking, slot, customStart, customEnd) => {
+  const selected = slotTimeWindow(slot, customStart, customEnd);
+  const existing = bookingTimeWindow(booking);
+  if (selected && existing) return windowsOverlap(selected, existing);
+  return String(booking?.slot || '').toLowerCase() === String(slot || '').toLowerCase();
+};
+
+const availableSeatsOnDate = (hall, eventDate, bookings, excludeId, slot, customStart, customEnd) => {
+  const capacity = Number(hall?.capacity || 0);
+  if (!eventDate || !slot) return capacity;
+  const occupied = bookings.reduce((sum, booking) => {
+    if (!bookingHoldsHall(booking, excludeId)) return sum;
+    if (String(booking.venue) !== String(hall.id)) return sum;
+    if (bookingEventDate(booking) !== String(eventDate)) return sum;
+    if (!bookingOccupiesSelectedSlot(booking, slot, customStart, customEnd)) return sum;
+    return sum + bookingGuestCount(booking);
+  }, 0);
+  return Math.max(0, capacity - occupied);
+};
+
+const hallAvailableOnDate = (hall, eventDate, bookings, excludeId, slot, customStart, customEnd) => {
+  if (!hall) return false;
+  if (!eventDate || !slot) return Number(hall.capacity || 0) > 0;
+  return availableSeatsOnDate(hall, eventDate, bookings, excludeId, slot, customStart, customEnd) > 0;
+};
+
+const isSlotReady = (form) => (
+  Boolean(form?.slot)
+  && (form.slot !== 'custom' || Boolean(form.custom_start_time && form.custom_end_time))
+);
+
 const DEFAULT_EVENT_OPTIONS = [
   'Barat Ceremony',
   'Walima Reception',
@@ -565,9 +651,51 @@ const Bookings = () => {
     }
   };
 
-  const hallsForSelect = halls.filter(
-    (h) => h.status !== 'INACTIVE' || String(h.id) === String(formData.venue)
-  );
+  const hallsForSelect = halls.filter((h) => {
+    const isActive = h.status !== 'INACTIVE' || String(h.id) === String(formData.venue);
+    if (!isActive) return false;
+    if (!formData.event_date || !isSlotReady(formData)) return true;
+    return hallAvailableOnDate(
+      h,
+      formData.event_date,
+      bookings,
+      editingId,
+      formData.slot,
+      formData.custom_start_time,
+      formData.custom_end_time,
+    );
+  });
+
+  const assignAvailableHall = (next, eventDate) => {
+    const merged = { ...next, event_date: eventDate };
+    if (!eventDate || !isSlotReady(merged)) {
+      return { ...merged, venue: '' };
+    }
+    const excludeId = editingId;
+    const candidates = halls.filter((hall) => hall.status !== 'INACTIVE');
+    const freeHalls = candidates.filter((hall) => (
+      hallAvailableOnDate(
+        hall,
+        eventDate,
+        bookings,
+        excludeId,
+        merged.slot,
+        merged.custom_start_time,
+        merged.custom_end_time,
+      )
+    ));
+    const hall = freeHalls.find((item) => String(item.id) === String(merged.venue))
+      || freeHalls[0]
+      || null;
+    return {
+      ...merged,
+      venue: hall ? hall.id : '',
+      rate_per_head: hall
+        ? (hall.price_per_day || hall.price_per_head || 1200)
+        : merged.rate_per_head,
+    };
+  };
+
   const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
 
   const handleCreateManualInventory = async (event) => {
@@ -660,13 +788,18 @@ const Bookings = () => {
       toast.error('You do not have permission to create bookings.');
       return;
     }
-    resetForm({
+    const seeded = {
       ...(prefill.event_date ? { event_date: prefill.event_date } : {}),
       ...(prefill.customer ? { customer: String(prefill.customer) } : {}),
       ...(prefill.venue ? { venue: String(prefill.venue) } : {}),
       ...(prefill.slot ? { slot: prefill.slot } : {}),
       ...(prefill.rate_per_head != null ? { rate_per_head: prefill.rate_per_head } : {}),
-    });
+    };
+    resetForm(
+      prefill.event_date && !prefill.venue
+        ? assignAvailableHall(seeded, prefill.event_date)
+        : seeded
+    );
     if (prefill.customer) {
       setNewCustomerMode(false);
     }
@@ -753,6 +886,28 @@ const Bookings = () => {
     });
     navigate(location.pathname, { replace: true, state: {} });
   }, [location.state?.openCreate, location.state?.prefillCustomer, location.state?.prefillEventDate, location.state?.prefillVenue, location.state?.prefillSlot, canManage, navigate, location.pathname]);
+
+  useEffect(() => {
+    if (isFormLocked || !formData.event_date || !isSlotReady(formData) || !halls.length) return;
+    setFormData((prev) => {
+      if (!prev.event_date || !isSlotReady(prev)) return prev;
+      const selected = halls.find((h) => String(h.id) === String(prev.venue));
+      const stillFree = selected
+        && hallAvailableOnDate(
+          selected,
+          prev.event_date,
+          bookings,
+          editingId,
+          prev.slot,
+          prev.custom_start_time,
+          prev.custom_end_time,
+        );
+      if (stillFree) return prev;
+      const next = assignAvailableHall(prev, prev.event_date);
+      if (String(next.venue || '') === String(prev.venue || '')) return prev;
+      return next;
+    });
+  }, [halls, bookings, formData.event_date, formData.venue, formData.slot, formData.custom_start_time, formData.custom_end_time, isFormLocked, editingId]);
 
   const handleDecorationPackageSelect = (packageId) => {
     setSelectedDecorationId(packageId);
@@ -1068,7 +1223,24 @@ const Bookings = () => {
 
     // Select active venue
     const selectedHall = halls.find(h => String(h.id) === String(formData.venue));
-    if (selectedHall && totalAttendance > selectedHall.capacity) {
+    if (selectedHall && formData.event_date) {
+      const remaining = availableSeatsOnDate(
+        selectedHall,
+        formData.event_date,
+        bookings,
+        editingId,
+        formData.slot,
+        formData.custom_start_time,
+        formData.custom_end_time,
+      );
+      if (isSlotReady(formData) && totalAttendance > remaining) {
+        setBookingError(
+          `Only ${remaining} seats left in '${selectedHall.name}' for this time (capacity ${selectedHall.capacity}). Reduce guests or choose another hall.`
+        );
+        toast.error('Not enough seats left');
+        return;
+      }
+    } else if (selectedHall && totalAttendance > selectedHall.capacity) {
       setBookingError(
         `Total guest attendance (${totalAttendance}) exceeds '${selectedHall.name}' maximum capacity of ${selectedHall.capacity} seats. Please adjust attendees or choose a larger hall.`
       );
@@ -1703,7 +1875,14 @@ const Bookings = () => {
                   </label>
                   <label>
                     <span>Event Date *</span>
-                    <input type="date" required disabled={isFormLocked} min={formData.booking_date || new Date().toISOString().split('T')[0]} value={formData.event_date} onChange={(e) => setFormData({ ...formData, event_date: e.target.value })} />
+                    <input
+                      type="date"
+                      required
+                      disabled={isFormLocked}
+                      min={formData.booking_date || new Date().toISOString().split('T')[0]}
+                      value={formData.event_date}
+                      onChange={(e) => setFormData(assignAvailableHall(formData, e.target.value))}
+                    />
                   </label>
                   <label className="reservation-console__event-picker" ref={eventPickerRef}>
                     <span>Event Title / Occasion</span>
@@ -1874,18 +2053,25 @@ const Bookings = () => {
                     <div className="reservation-console__section-label">
                       Select Hall
                       <span className="reservation-console__step-badge">
-                        Capacity {selectedHall?.capacity || 0}
+                        {!formData.event_date
+                          ? 'Pick event date'
+                          : !isSlotReady(formData)
+                            ? 'Pick time slot'
+                            : selectedHall
+                              ? `Capacity ${selectedHall.capacity || 0} · Available ${availableSeatsOnDate(selectedHall, formData.event_date, bookings, editingId, formData.slot, formData.custom_start_time, formData.custom_end_time)}`
+                              : 'Capacity 0'}
                       </span>
                     </div>
                     {hallsForSelect.length > 0 && hallsForSelect.length <= 2 ? (
-                      <div className="reservation-console__hall-grid">
+                      <div className={`reservation-console__hall-grid${!isFormLocked && (!formData.event_date || !isSlotReady(formData)) ? ' is-waiting' : ''}`}>
                         {hallsForSelect.map((hall) => {
                           const selected = String(formData.venue) === String(hall.id);
+                          const waiting = !formData.event_date || !isSlotReady(formData);
                           return (
                             <button
                               key={hall.id}
                               type="button"
-                              disabled={isFormLocked}
+                              disabled={isFormLocked || waiting}
                               className={selected ? 'is-selected' : ''}
                               onClick={() => setFormData({
                                 ...formData,
@@ -1894,7 +2080,6 @@ const Bookings = () => {
                               })}
                             >
                               <strong>{hall.name}</strong>
-                              <span>{hall.capacity} pax</span>
                             </button>
                           );
                         })}
@@ -1903,7 +2088,7 @@ const Bookings = () => {
                       <select
                         className="reservation-console__hall-select"
                         aria-label="Select banquet hall"
-                        disabled={isFormLocked}
+                        disabled={isFormLocked || !formData.event_date || !isSlotReady(formData)}
                         value={formData.venue}
                         onChange={(event) => {
                           const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
@@ -1914,15 +2099,23 @@ const Bookings = () => {
                           });
                         }}
                       >
-                        <option value="">Select from {hallsForSelect.length} available halls</option>
+                        <option value="">
+                          {!formData.event_date || !isSlotReady(formData)
+                            ? 'Select time slot first'
+                            : `Select from ${hallsForSelect.length} free halls`}
+                        </option>
                         {hallsForSelect.map((hall) => (
                           <option key={hall.id} value={hall.id}>
-                            {hall.name} — {hall.capacity} pax
+                            {hall.name}
                           </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="reservation-console__hall-empty">No active halls available</span>
+                      <span className="reservation-console__hall-empty">
+                        {formData.event_date && isSlotReady(formData)
+                          ? 'No seats left in this time slot'
+                          : 'No active halls available'}
+                      </span>
                     )}
                   </div>
 
@@ -1957,15 +2150,15 @@ const Bookings = () => {
                   <div className="reservation-console__slot">
                     <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
                     <div className="reservation-console__slot-options">
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'morning' ? '' : 'morning', custom_start_time: '', custom_end_time: '' })}>
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'morning' ? '' : 'morning', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
                         <span>Morning</span>
                         <small>9am – 3pm</small>
                       </button>
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'evening' ? '' : 'evening', custom_start_time: '', custom_end_time: '' })}>
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'evening' ? '' : 'evening', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
                         <span>Evening</span>
                         <small>6pm – 12am</small>
                       </button>
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData({ ...formData, slot: formData.slot === 'custom' ? '' : 'custom', custom_start_time: '', custom_end_time: '' })}>
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'custom' ? '' : 'custom', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
                         <span>Manual</span>
                         <small>Custom</small>
                       </button>
@@ -1974,11 +2167,11 @@ const Bookings = () => {
                       <div className="reservation-console__manual-time">
                         <label>
                           <span>From</span>
-                          <input type="time" required disabled={isFormLocked} value={formData.custom_start_time} onChange={(event) => setFormData({ ...formData, custom_start_time: event.target.value })} />
+                          <input type="time" required disabled={isFormLocked} value={formData.custom_start_time} onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_start_time: event.target.value }, formData.event_date))} />
                         </label>
                         <label>
                           <span>To</span>
-                          <input type="time" required disabled={isFormLocked} value={formData.custom_end_time} onChange={(event) => setFormData({ ...formData, custom_end_time: event.target.value })} />
+                          <input type="time" required disabled={isFormLocked} value={formData.custom_end_time} onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_end_time: event.target.value }, formData.event_date))} />
                         </label>
                       </div>
                     )}
@@ -2432,7 +2625,7 @@ const Bookings = () => {
                     </div>
                     <div className="input-group">
                       <label>Event Date</label>
-                      <input type="date" required disabled={isEdit} value={formData.event_date} onChange={(e) => setFormData({ ...formData, event_date: e.target.value })} style={isEdit ? { backgroundColor: 'var(--surface-elevated)', color: 'var(--text-dim)', cursor: 'not-allowed' } : {}} />
+                      <input type="date" required disabled={isEdit} value={formData.event_date} onChange={(e) => setFormData(assignAvailableHall(formData, e.target.value))} style={isEdit ? { backgroundColor: 'var(--surface-elevated)', color: 'var(--text-dim)', cursor: 'not-allowed' } : {}} />
                     </div>
                     <div className="input-group">
                       <label>Event Title</label>
@@ -2599,6 +2792,9 @@ const Bookings = () => {
                         <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--toggle-track)', borderRadius: '8px', padding: '3px', flexWrap: 'wrap' }}>
                           {halls.length === 0 && (
                             <span style={{ fontSize: '12px', color: 'var(--text-dim)', padding: '8px 12px' }}>No halls available. Add a hall first.</span>
+                          )}
+                          {halls.length > 0 && hallsForSelect.length === 0 && (
+                            <span style={{ fontSize: '12px', color: 'var(--text-dim)', padding: '8px 12px' }}>No seats left in any hall on this date.</span>
                           )}
                           {hallsForSelect.map(h => {
                             const isSel = formData.venue !== '' && String(formData.venue) === String(h.id);

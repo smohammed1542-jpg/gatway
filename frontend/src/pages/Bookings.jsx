@@ -668,32 +668,23 @@ const Bookings = () => {
 
   const assignAvailableHall = (next, eventDate) => {
     const merged = { ...next, event_date: eventDate };
-    if (!eventDate) {
+    if (!eventDate || !merged.venue) {
       return merged;
     }
-    const excludeId = editingId;
-    const candidates = halls.filter((hall) => hall.status !== 'INACTIVE');
-    const freeHalls = candidates.filter((hall) => (
-      hallAvailableOnDate(
-        hall,
+    const selected = halls.find((hall) => String(hall.id) === String(merged.venue));
+    const stillFree = selected
+      && (selected.status !== 'INACTIVE' || String(selected.id) === String(merged.venue))
+      && hallAvailableOnDate(
+        selected,
         eventDate,
         bookings,
-        excludeId,
+        editingId,
         merged.slot,
         merged.custom_start_time,
         merged.custom_end_time,
-      )
-    ));
-    const hall = freeHalls.find((item) => String(item.id) === String(merged.venue))
-      || freeHalls[0]
-      || null;
-    return {
-      ...merged,
-      venue: hall ? hall.id : '',
-      rate_per_head: hall
-        ? (hall.price_per_day || hall.price_per_head || 1200)
-        : merged.rate_per_head,
-    };
+      );
+    if (stillFree) return merged;
+    return { ...merged, venue: '' };
   };
 
   const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
@@ -888,9 +879,9 @@ const Bookings = () => {
   }, [location.state?.openCreate, location.state?.prefillCustomer, location.state?.prefillEventDate, location.state?.prefillVenue, location.state?.prefillSlot, canManage, navigate, location.pathname]);
 
   useEffect(() => {
-    if (isFormLocked || !formData.event_date || !isSlotReady(formData) || !halls.length) return;
+    if (isFormLocked || !formData.event_date || !formData.venue || !halls.length) return;
     setFormData((prev) => {
-      if (!prev.event_date || !isSlotReady(prev)) return prev;
+      if (!prev.event_date || !prev.venue) return prev;
       const selected = halls.find((h) => String(h.id) === String(prev.venue));
       const stillFree = selected
         && hallAvailableOnDate(
@@ -903,9 +894,7 @@ const Bookings = () => {
           prev.custom_end_time,
         );
       if (stillFree) return prev;
-      const next = assignAvailableHall(prev, prev.event_date);
-      if (String(next.venue || '') === String(prev.venue || '')) return prev;
-      return next;
+      return { ...prev, venue: '' };
     });
   }, [halls, bookings, formData.event_date, formData.venue, formData.slot, formData.custom_start_time, formData.custom_end_time, isFormLocked, editingId]);
 
@@ -2197,7 +2186,15 @@ const Bookings = () => {
                         <span>Evening</span>
                         <small>6pm – 12am</small>
                       </button>
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'custom' ? '' : 'custom', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'custom' ? 'is-selected' : ''} onClick={() => {
+                        const turningOff = formData.slot === 'custom';
+                        setFormData(assignAvailableHall({
+                          ...formData,
+                          slot: turningOff ? '' : 'custom',
+                          custom_start_time: turningOff ? '' : formData.custom_start_time,
+                          custom_end_time: turningOff ? '' : formData.custom_end_time,
+                        }, formData.event_date));
+                      }}>
                         <span>Manual</span>
                         <small>Custom</small>
                       </button>

@@ -1542,6 +1542,30 @@ const Bookings = () => {
 
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
   const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
+  const availableGuestSeats = selectedHall
+    ? availableSeatsOnDate(
+      selectedHall,
+      formData.event_date,
+      bookings,
+      editingId,
+      formData.slot,
+      formData.custom_start_time,
+      formData.custom_end_time,
+    )
+    : null;
+
+  useEffect(() => {
+    if (availableGuestSeats == null || isFormLocked) return undefined;
+    setFormData((prev) => {
+      const total = Number(prev.gents_count || 0) + Number(prev.ladies_count || 0);
+      if (total <= availableGuestSeats) return prev;
+      return {
+        ...prev,
+        gents_count: availableGuestSeats,
+        ladies_count: prev.ladies_count === '' && prev.gents_count === '' ? '' : 0,
+      };
+    });
+  }, [availableGuestSeats, isFormLocked]);
   const clientPhoneValue = newCustomerMode
     ? (newCustomer.phone || '')
     : (selectedCustomer?.phone || '');
@@ -1596,7 +1620,7 @@ const Bookings = () => {
     !formData.slot && 'time slot',
     formData.slot === 'custom' && (!formData.custom_start_time || !formData.custom_end_time) && 'custom start/end time',
     totalAttendance <= 0 && 'guest count',
-    selectedHall && totalAttendance > selectedHall.capacity && 'reduce guests to hall capacity',
+    selectedHall && availableGuestSeats != null && totalAttendance > availableGuestSeats && 'reduce guests to available seats',
   ].filter(Boolean);
   const reservationStep = stepOneMissing.length ? 1 : stepTwoMissing.length ? 2 : 3;
   const reservationCompletedSteps = reservationStep - 1;
@@ -2126,16 +2150,21 @@ const Bookings = () => {
                         <input
                           type="number"
                           min="0"
+                          max={availableGuestSeats ?? undefined}
                           disabled={isPosted}
                           aria-label="Guest count"
                           placeholder="0"
+                          title={availableGuestSeats != null ? `Maximum ${availableGuestSeats} seats available` : undefined}
                           value={
                             formData.gents_count === '' && formData.ladies_count === ''
                               ? ''
                               : totalAttendance
                           }
                           onChange={(event) => {
-                            const guestCount = toIntField(event.target.value);
+                            let guestCount = toIntField(event.target.value);
+                            if (guestCount !== '' && availableGuestSeats != null) {
+                              guestCount = Math.min(guestCount, availableGuestSeats);
+                            }
                             setFormData({
                               ...formData,
                               gents_count: guestCount,
@@ -2869,11 +2898,39 @@ const Bookings = () => {
                       <div className="form-grid-2">
                         <div className="input-group">
                           <label>Gents Guest</label>
-                          <input type="number" min="0" placeholder="-" value={displayNumField(formData.gents_count)} onChange={(e) => setFormData({ ...formData, gents_count: toIntField(e.target.value) })} />
+                          <input
+                            type="number"
+                            min="0"
+                            max={availableGuestSeats ?? undefined}
+                            placeholder="-"
+                            value={displayNumField(formData.gents_count)}
+                            onChange={(e) => {
+                              let gents = toIntField(e.target.value);
+                              const ladies = Number(formData.ladies_count || 0);
+                              if (gents !== '' && availableGuestSeats != null) {
+                                gents = Math.min(gents, Math.max(0, availableGuestSeats - ladies));
+                              }
+                              setFormData({ ...formData, gents_count: gents });
+                            }}
+                          />
                         </div>
                         <div className="input-group">
                           <label>Ladies Guest</label>
-                          <input type="number" min="0" placeholder="-" value={displayNumField(formData.ladies_count)} onChange={(e) => setFormData({ ...formData, ladies_count: toIntField(e.target.value) })} />
+                          <input
+                            type="number"
+                            min="0"
+                            max={availableGuestSeats ?? undefined}
+                            placeholder="-"
+                            value={displayNumField(formData.ladies_count)}
+                            onChange={(e) => {
+                              let ladies = toIntField(e.target.value);
+                              const gents = Number(formData.gents_count || 0);
+                              if (ladies !== '' && availableGuestSeats != null) {
+                                ladies = Math.min(ladies, Math.max(0, availableGuestSeats - gents));
+                              }
+                              setFormData({ ...formData, ladies_count: ladies });
+                            }}
+                          />
                         </div>
                       </div>
 

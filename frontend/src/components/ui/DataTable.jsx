@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { MoreHorizontal, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Columns3 } from 'lucide-react';
+import { MoreHorizontal, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, SlidersHorizontal } from 'lucide-react';
 import EmptyState from './EmptyState';
 import { Inbox } from 'lucide-react';
 
@@ -290,15 +290,20 @@ export default function DataTable({
         <div className="erp-table-toolbar" ref={chooserRef}>
           <button
             type="button"
-            className="dash-btn dash-btn--ghost dash-btn--sm"
+            className={`erp-view-fields${chooserOpen ? ' is-open' : ''}`}
             onClick={() => setChooserOpen((o) => !o)}
             aria-expanded={chooserOpen}
-            aria-label="Choose columns"
+            aria-label="View fields"
           >
-            <Columns3 size={14} /> Columns
+            <SlidersHorizontal size={14} strokeWidth={2.2} />
+            <span>View fields</span>
+            {hidden.size > 0 && (
+              <em>{visibleColumns.length}/{columns.length}</em>
+            )}
           </button>
           {chooserOpen && (
             <div className="erp-table-chooser" role="menu">
+              <p className="erp-table-chooser__title">Show on table</p>
               {columns.map((col) => (
                 <label key={col.key} className="erp-table-chooser__item">
                   <input

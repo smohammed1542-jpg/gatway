@@ -346,7 +346,7 @@ textarea:focus {
   margin: 0;
   font-size: 13px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-main);
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
@@ -357,9 +357,9 @@ textarea:focus {
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  color: #64748b;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid #e2e8f0;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  border: 1px solid var(--border);
   white-space: nowrap;
 }
 
@@ -379,7 +379,7 @@ textarea:focus {
   font-size: 11px;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: #94a3b8;
+  color: var(--text-dim);
   letter-spacing: 0.02em;
 }
 
@@ -396,21 +396,21 @@ textarea:focus {
 }
 
 .bookings-row-customer__name--plain {
-  color: #0f172a;
+  color: var(--text-main);
 }
 
 .bookings-row-customer__event {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-muted);
   line-height: 1.3;
 }
 
 .bookings-row-hall {
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-main);
 }
 
 .bookings-row-slot {
@@ -468,11 +468,11 @@ textarea:focus {
 }
 
 .bookings-row-money--total {
-  color: #0f172a;
+  color: var(--text-main);
 }
 
 .bookings-table-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   background: var(--surface);
@@ -482,6 +482,86 @@ textarea:focus {
 .bookings-table-card .erp-table-wrap {
   border: none;
   max-height: min(72vh, 780px);
+}
+
+[data-theme='dark'] .booking-date-when--today {
+  background: rgba(22, 163, 74, 0.22);
+  color: #86efac;
+}
+
+[data-theme='dark'] .booking-date-when--month {
+  background: rgba(2, 132, 199, 0.24);
+  color: #7dd3fc;
+}
+
+[data-theme='dark'] .booking-date-when--past {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] .booking-date-when--upcoming {
+  background: rgba(234, 88, 12, 0.22);
+  color: #fdba74;
+}
+
+[data-theme='dark'] .bookings-day-head {
+  background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+  border-left-color: #64748b;
+}
+
+[data-theme='dark'] .bookings-day-head--today {
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.22) 0%, #1e293b 100%);
+  border-left-color: #4ade80;
+}
+
+[data-theme='dark'] .bookings-day-head--today .bookings-day-head__title {
+  color: #86efac;
+}
+
+[data-theme='dark'] .bookings-day-head--month {
+  background: linear-gradient(90deg, rgba(2, 132, 199, 0.24) 0%, #1e293b 100%);
+  border-left-color: #38bdf8;
+}
+
+[data-theme='dark'] .bookings-day-head--month .bookings-day-head__title {
+  color: #7dd3fc;
+}
+
+[data-theme='dark'] .bookings-day-head--past {
+  background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+  border-left-color: #64748b;
+}
+
+[data-theme='dark'] .bookings-day-head--upcoming {
+  background: linear-gradient(90deg, rgba(234, 88, 12, 0.22) 0%, #1e293b 100%);
+  border-left-color: #fb923c;
+}
+
+[data-theme='dark'] .bookings-day-head--upcoming .bookings-day-head__title {
+  color: #fdba74;
+}
+
+[data-theme='dark'] .bookings-row-slot--morning {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+[data-theme='dark'] .bookings-row-slot--evening {
+  background: rgba(6, 182, 212, 0.18);
+  color: #67e8f9;
+}
+
+[data-theme='dark'] .bookings-row-slot--custom {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] .bookings-row-money--due {
+  color: #f87171;
+}
+
+[data-theme='dark'] .bookings-table-card {
+  box-shadow: none;
 }
 
 .customer-search-select {

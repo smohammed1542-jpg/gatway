@@ -20,9 +20,7 @@ const venueRequestConfig = (payload, imageFile) => {
 };
 
 export const getVenues = async (params = {}) => {
-  const response = await client.get('/venues/', {
-    params: { ...params, _t: Date.now() },
-  });
+  const response = await client.get('/venues/', { params });
   return unwrap(response.data);
 };
 

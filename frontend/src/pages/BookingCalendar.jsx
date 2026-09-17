@@ -105,24 +105,14 @@ const BookingCalendar = () => {
     fetchData();
   }, []);
 
-  const handleOpenModal = (date = null) => {
-    setBookingError('');
+  const handleCreateFromCalendar = (date = null) => {
     const eventDate = date ? format(date, 'yyyy-MM-dd') : format(selectedDate, 'yyyy-MM-dd');
-    setFormData({
-      customer: '',
-      venue: '',
-      event_name: '',
-      event_date: eventDate,
-      slot: 'evening',
-      gents_count: '',
-      ladies_count: '',
-      rate_per_head: '1200',
-      advance_paid: '0',
-      booking_status: 'CONFIRMED',
-      decoration_charge: '0',
+    navigate('/bookings', {
+      state: {
+        openCreate: true,
+        prefillEventDate: eventDate,
+      },
     });
-    setSelectedDecorationId('');
-    setShowModal(true);
   };
 
   const handleSubmit = async (e) => {
@@ -338,7 +328,7 @@ const BookingCalendar = () => {
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
                 <p>No bookings for this day.</p>
                 {canOperate && (
-                <button type="button" onClick={() => handleOpenModal(selectedDate)} style={{ color: 'var(--primary)', fontWeight: '600', marginTop: '12px', backgroundColor: 'transparent' }}>+ Create One</button>
+                <button type="button" onClick={() => handleCreateFromCalendar(selectedDate)} style={{ color: 'var(--primary)', fontWeight: '600', marginTop: '12px', backgroundColor: 'transparent' }}>+ Create One</button>
                 )}
               </div>
             )}

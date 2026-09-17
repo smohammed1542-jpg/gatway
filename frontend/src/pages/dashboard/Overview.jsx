@@ -43,7 +43,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 
 /** Realtime refresh interval while dashboard tab is visible */
-const DASHBOARD_POLL_MS = 5_000;
+const DASHBOARD_POLL_MS = 30_000;
 
 const EMPTY_STATS = {
   total_revenue: 0,

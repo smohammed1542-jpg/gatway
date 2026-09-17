@@ -192,6 +192,9 @@ class TenantDetailView(APIView):
         serializer = TenantSerializer(tenant, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        if any(key.startswith('show_summary_') for key in serializer.validated_data):
+            from bookings.page_visibility import sync_tenant_book_summary
+            sync_tenant_book_summary(tenant)
         return Response(serializer.data)
 
 

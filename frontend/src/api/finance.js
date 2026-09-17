@@ -1,9 +1,7 @@
 import client from './client';
 
 export const getPayments = async (params = {}) => {
-  const response = await client.get('/finance/payments/', {
-    params: { ...params, _t: Date.now() },
-  });
+  const response = await client.get('/finance/payments/', { params });
   return response.data;
 };
 

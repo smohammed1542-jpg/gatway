@@ -11,8 +11,7 @@ import { globalSearch } from '../api/core';
 import { guestHouseSearch } from '../api/guesthouse';
 import { useAppType } from '../hooks/useAppType';
 import { usePermissions } from '../hooks/usePermissions';
-import { GhPageVisibilityProvider, useGhPageVisibility } from '../context/GhPageVisibilityContext';
-import { HallPageVisibilityProvider } from '../context/HallPageVisibilityContext';
+import { useGhPageVisibility } from '../context/GhPageVisibilityContext';
 import { PageTitleProvider, usePageTitleContext } from '../context/PageTitleContext';
 import { GH_PAGE_KEYS } from '../constants/ghPages';
 import { resolveMediaUrl } from '../utils/media';
@@ -48,12 +47,17 @@ const DashboardLayoutContent = () => {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
   const notificationMenuRef = useRef(null);
-  const { notifications, unreadCount, markAllRead, dismissNotifications } = useNotifications();
+  const { notifications, unreadCount, dismissNotifications } = useNotifications();
 
   const closeNotifications = useCallback(() => {
-    dismissNotifications(notifications.map((notification) => notification.id));
     setShowNotifications(false);
-  }, [dismissNotifications, notifications]);
+  }, []);
+
+  const handleMarkAllRead = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissNotifications(notifications.map((notification) => notification.id));
+  };
 
   useEffect(() => {
     const q = searchQuery.trim();
@@ -164,7 +168,6 @@ const DashboardLayoutContent = () => {
       closeNotifications();
     } else {
       setShowNotifications(true);
-      markAllRead();
     }
   };
 
@@ -187,7 +190,8 @@ const DashboardLayoutContent = () => {
   );
 
   const handleNotificationClick = (n) => {
-    closeNotifications();
+    dismissNotifications([n.id]);
+    setShowNotifications(false);
     if (n.route) {
       navigate(n.route, n.routeState ? { state: n.routeState } : undefined);
       return;
@@ -436,8 +440,26 @@ const DashboardLayoutContent = () => {
                   boxShadow: 'var(--shadow-lg)',
                   border: '1px solid var(--border)', zIndex: 9999, overflow: 'hidden'
                 }}>
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ padding: '14px 16px 14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: '700' }}>Notifications</h4>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--primary)',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          padding: '4px 2px',
+                          flexShrink: 0,
+                        }}
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
                     {notifications.length === 0 ? (
@@ -548,15 +570,6 @@ const DashboardLayoutContent = () => {
   );
 };
 
-const DashboardLayout = () => {
-  const { isGuestHouse } = useAppType();
-  return (
-    <GhPageVisibilityProvider enabled={isGuestHouse}>
-      <HallPageVisibilityProvider enabled={!isGuestHouse}>
-        <DashboardLayoutContent />
-      </HallPageVisibilityProvider>
-    </GhPageVisibilityProvider>
-  );
-};
+const DashboardLayout = () => <DashboardLayoutContent />;
 
 export default DashboardLayout;

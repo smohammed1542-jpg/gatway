@@ -9,5 +9,4 @@ export const updateUserSettings = (data) => client.patch('/dashboard/settings/',
 export const globalSearch = (q) =>
   client.get('/dashboard/search/', { params: { q } }).then((r) => r.data);
 
-export const getAlerts = () =>
-  client.get('/dashboard/alerts/', { params: { _t: Date.now() } }).then((r) => r.data);
+export const getAlerts = () => client.get('/dashboard/alerts/').then((r) => r.data);

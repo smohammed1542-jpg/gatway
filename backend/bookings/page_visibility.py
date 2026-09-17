@@ -24,6 +24,7 @@ DEFAULT_HALL_MODULES = (
     ('summary_food_venue', 'Venue', 3),
     ('summary_combined_services', 'Combined Services', 4),
     ('summary_tax', 'Tax (5% GST)', 5),
+    ('summary_inventory', 'Inventory items', 6),
 )
 
 HALL_MODULE_KEYS = frozenset(key for key, _label, _order in DEFAULT_HALL_MODULES)
@@ -36,6 +37,21 @@ _TENANT_SUMMARY_FIELD_BY_MODULE = {
     'summary_combined_services': 'show_summary_combined_services',
     'summary_tax': 'show_summary_tax',
 }
+
+
+def sync_tenant_book_summary(tenant):
+    """Keep Book Summary rows in sync with tenant.show_summary_* flags."""
+    from .models import MarriageHallPageVisibility
+
+    if not tenant:
+        return
+    ensure_tenant_hall_pages(tenant)
+    for page_key, field in _TENANT_SUMMARY_FIELD_BY_MODULE.items():
+        visible = bool(getattr(tenant, field, True))
+        MarriageHallPageVisibility.objects.filter(
+            tenant=tenant,
+            page_key=page_key,
+        ).update(is_visible=visible)
 
 
 def ensure_tenant_hall_pages(tenant):

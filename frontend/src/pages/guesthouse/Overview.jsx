@@ -36,7 +36,7 @@ import toast from 'react-hot-toast';
 import { useGhPageVisibility } from '../../context/GhPageVisibilityContext';
 import { GH_PAGE_KEYS } from '../../constants/ghPages';
 
-const DASHBOARD_POLL_MS = 5000;
+const DASHBOARD_POLL_MS = 30_000;
 
 const EMPTY_STATS = {
   total_rooms: 0,

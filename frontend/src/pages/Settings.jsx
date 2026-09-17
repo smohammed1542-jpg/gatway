@@ -18,6 +18,7 @@ import {
   AtSign,
   Lock,
   Snowflake,
+  Receipt,
 } from 'lucide-react';
 import client from '../api/client';
 import { changePassword, updateMe, uploadAvatar } from '../api/auth';
@@ -37,7 +38,8 @@ import AllRecords from './guesthouse/AllRecords';
 import { useGhPageVisibility } from '../context/GhPageVisibilityContext';
 import { useHallPageVisibility } from '../context/HallPageVisibilityContext';
 import { GH_PAGE_KEYS } from '../constants/ghPages';
-import { HALL_PAGE_KEYS } from '../constants/hallPages';
+import { HALL_PAGE_KEYS, HALL_SUMMARY_LINES } from '../constants/hallPages';
+import { getHallPageVisibility, updateHallPageVisibility } from '../api/bookings';
 import { resolveMediaUrl } from '../utils/media';
 import { ghStayTimesFromTenant } from '../utils/ghStay';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -77,6 +79,10 @@ const TAB_HEADINGS = {
     title: 'Venue information',
     subtitle: 'Official name, contact details, and default guest stay times.',
   },
+  'Booking Summary': {
+    title: 'Booking summary',
+    subtitle: 'Choose which lines appear on the booking bill panel.',
+  },
   Notifications: { title: 'Notifications', subtitle: 'In-app alerts and customer SMS / WhatsApp preferences.' },
   Security: { title: 'Security', subtitle: 'Password, last login, and account status.' },
   System: { title: 'System', subtitle: 'Theme, language, and timezone preferences.' },
@@ -101,6 +107,7 @@ const TAB_FROM_PARAM = {
   records: 'All Records',
   profile: 'Profile',
   venue: 'Venue Info',
+  summary: 'Booking Summary',
   notifications: 'Notifications',
   security: 'Security',
   system: 'System',
@@ -115,7 +122,7 @@ const Settings = () => {
   const navRef = useRef(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const { isPageVisible: isGhPageVisible } = useGhPageVisibility();
-  const { isPageVisible: isHallPageVisible } = useHallPageVisibility();
+  const { isPageVisible: isHallPageVisible, reload: reloadHallVisibility } = useHallPageVisibility();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialTab = TAB_FROM_PARAM[tabParam] || 'Profile';
@@ -142,6 +149,7 @@ const Settings = () => {
     tax_rate: 0.05,
     overtime_rate_per_hour: 5000,
   });
+  const [summaryModules, setSummaryModules] = useState([]);
   const [notifSettings, setNotifSettings] = useState({
     notify_new_bookings: true,
     notify_payments: true,
@@ -158,10 +166,11 @@ const Settings = () => {
 
   const loadSettings = async () => {
     try {
-      const [userRes, tenantRes, prefsRes] = await Promise.all([
+      const [userRes, tenantRes, prefsRes, hallVisRes] = await Promise.all([
         client.get('/auth/me/'),
         getTenant().catch(() => null),
         getUserSettings().catch(() => null),
+        isMarriageHall ? getHallPageVisibility().catch(() => null) : Promise.resolve(null),
       ]);
       setUserData(userRes.data);
       setProfileForm({
@@ -181,6 +190,13 @@ const Settings = () => {
           overtime_rate_per_hour: tenantRes.overtime_rate_per_hour ?? 5000,
         });
       }
+      setSummaryModules(
+        (hallVisRes?.modules || []).map((mod) => ({
+          key: mod.key,
+          label: mod.label,
+          is_visible: mod.is_visible !== false,
+        }))
+      );
       if (prefsRes) {
         setNotifSettings({
           notify_new_bookings: prefsRes.notify_new_bookings ?? true,
@@ -220,6 +236,7 @@ const Settings = () => {
     if (isMarriageHall) {
       if (tabName === 'Halls') return isHallPageVisible(HALL_PAGE_KEYS.HALLS);
       if (tabName === 'Staff') return isAdmin && isHallPageVisible(HALL_PAGE_KEYS.STAFF);
+      if (tabName === 'Booking Summary') return isAdmin;
     }
     return true;
   };
@@ -339,6 +356,35 @@ const Settings = () => {
     }
   };
 
+  const handleSaveBookingSummary = async () => {
+    if (!isAdmin) {
+      toast.error('Only admins can change booking summary lines.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const data = await updateHallPageVisibility({
+        modules: summaryModules.map((mod) => ({
+          key: mod.key,
+          is_visible: Boolean(mod.is_visible),
+        })),
+      });
+      setSummaryModules(
+        (data?.modules || []).map((mod) => ({
+          key: mod.key,
+          label: mod.label,
+          is_visible: mod.is_visible !== false,
+        }))
+      );
+      reloadHallVisibility();
+      toast.success('Booking summary lines updated.');
+    } catch (err) {
+      toast.error(parseApiError(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveNotifications = async () => {
     setIsSaving(true);
     try {
@@ -367,11 +413,12 @@ const Settings = () => {
     if (activeTab === 'Security') handleChangePassword();
     else if (activeTab === 'Profile') handleSaveProfile();
     else if (activeTab === 'Venue Info') handleSaveVenue();
+    else if (activeTab === 'Booking Summary') handleSaveBookingSummary();
     else if (activeTab === 'Notifications') handleSaveNotifications();
     else if (activeTab === 'System') handleSaveSystem();
   };
 
-  const showSaveButton = ['Profile', 'Venue Info', 'Notifications', 'Security', 'System'].includes(activeTab);
+  const showSaveButton = ['Profile', 'Venue Info', 'Booking Summary', 'Notifications', 'Security', 'System'].includes(activeTab);
   const saveLabel =
     activeTab === 'Security' ? (isSaving ? 'Updating…' : 'Update Password') : (isSaving ? 'Saving…' : 'Save Changes');
 
@@ -386,6 +433,7 @@ const Settings = () => {
       || (isMarriageHall && isHallPageVisible(HALL_PAGE_KEYS.STAFF))
     ) ? [{ name: 'Staff', icon: BadgeCheck }] : []),
     { name: 'Venue Info', icon: Building2 },
+    ...(isMarriageHall && isAdmin ? [{ name: 'Booking Summary', icon: Receipt }] : []),
     { name: 'Notifications', icon: Bell },
     { name: 'Security', icon: Shield },
     { name: 'System', icon: Globe },
@@ -696,6 +744,48 @@ const Settings = () => {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'Booking Summary' && isMarriageHall && isAdmin && (
+              <div className="animate-fade-in">
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  Every bill line on the booking summary appears here. Hidden lines stay off the panel; totals still calculate in the background.
+                </p>
+                {summaryModules.length === 0 && (
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No bill lines found yet. Refresh after opening Bookings once.</p>
+                )}
+                {summaryModules.map((item) => {
+                  const known = HALL_SUMMARY_LINES.find((line) => line.module === item.key);
+                  return (
+                    <div
+                      key={item.key}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '16px 0',
+                        borderBottom: '1px solid var(--border)',
+                        gap: '16px',
+                      }}
+                    >
+                      <div>
+                        <p style={{ fontSize: '14px', fontWeight: '600' }}>{item.label || known?.title || item.key}</p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          {known?.desc || 'Show this line on the booking bill summary.'}
+                        </p>
+                      </div>
+                      <Toggle
+                        active={Boolean(item.is_visible)}
+                        onClick={() => setSummaryModules((current) => (
+                          current.map((mod) => (
+                            mod.key === item.key ? { ...mod, is_visible: !mod.is_visible } : mod
+                          ))
+                        ))}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
 

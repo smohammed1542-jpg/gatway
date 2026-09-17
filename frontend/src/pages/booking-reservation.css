@@ -132,6 +132,12 @@
   font-weight: 750;
 }
 
+.reservation-console__req {
+  color: #dc2626;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .reservation-console input,
 .reservation-console select,
 .reservation-console__readout,
@@ -153,9 +159,11 @@
 }
 
 .reservation-console input:focus,
-.reservation-console select:focus {
-  border-color: var(--rc-green);
-  box-shadow: 0 0 0 2px rgb(0 122 98 / 10%);
+.reservation-console input:focus-visible,
+.reservation-console select:focus,
+.reservation-console select:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .reservation-console__event-picker {
@@ -589,15 +597,24 @@
   min-width: 0;
   height: 27px;
   padding: 4px 6px !important;
-  border: 1px solid transparent;
+  border: 1px solid var(--border) !important;
+  outline: none !important;
+  box-shadow: none !important;
   border-radius: 5px;
-  outline: 0;
   background: var(--rc-blue);
   text-align: center;
   font-size: 10px;
   font-weight: 800;
   appearance: textfield;
   -moz-appearance: textfield;
+}
+
+.reservation-console__steppers input:focus,
+.reservation-console__steppers input:focus-visible,
+.reservation-console__steppers input:hover {
+  border: 1px solid var(--border) !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .reservation-console__steppers input::-webkit-inner-spin-button,
@@ -1494,6 +1511,9 @@
 
 .reservation-console__steppers input {
   height: 36px;
+  border: 1px solid var(--border) !important;
+  outline: none !important;
+  box-shadow: none !important;
   border-radius: 8px;
   font-size: 15px;
   line-height: 24px;
@@ -2325,6 +2345,14 @@
   border-color: var(--border);
 }
 
+.reservation-console__guests .reservation-console__steppers input,
+.reservation-console__guests .reservation-console__steppers input:focus,
+.reservation-console__guests .reservation-console__steppers input:focus-visible {
+  border: 1px solid var(--border) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .reservation-console input,
 .reservation-console select,
 .reservation-console__addon-grid input,
@@ -2333,6 +2361,22 @@
 .reservation-console__inventory-line input[type="number"] {
   color: var(--text-main);
   background: var(--input-bg, var(--surface));
+}
+
+.reservation-console input:focus,
+.reservation-console input:focus-visible,
+.reservation-console select:focus,
+.reservation-console select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+[data-theme='dark'] .reservation-console input:focus,
+[data-theme='dark'] .reservation-console input:focus-visible,
+[data-theme='dark'] .reservation-console select:focus,
+[data-theme='dark'] .reservation-console select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .reservation-console__new-client {

@@ -65,6 +65,7 @@ import { GhPageRoute } from './components/GhPageRoute';
 import { HallPageRoute } from './components/HallPageRoute';
 import { GH_PAGE_KEYS } from './constants/ghPages';
 import { HALL_PAGE_KEYS } from './constants/hallPages';
+import ShellProviders from './components/ShellProviders';
 
 const ghPage = (pageKey, element) => (
   <GhPageRoute pageKey={pageKey}>{element}</GhPageRoute>
@@ -77,6 +78,7 @@ const hallPage = (pageKey, element) => (
 function App() {
   return (
     <Router>
+      <ShellProviders>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
@@ -267,6 +269,7 @@ function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </ShellProviders>
     </Router>
   );
 }

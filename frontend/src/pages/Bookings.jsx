@@ -44,7 +44,7 @@ import { HALL_MODULE_KEYS } from '../constants/hallPages';
 import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 import { resolveMediaUrl } from '../utils/media';
 import { validatePakPhone, formatPakPhone, PAK_PHONE_INPUT_MAX_LENGTH, PAK_PHONE_PLACEHOLDER } from '../utils/phone';
-import { formatCnic, formatCnicInput, cnicDigits, CNIC_PLACEHOLDER, CNIC_INPUT_MAX_LENGTH } from '../utils/cnicScanner';
+import { formatCnic, formatCnicInput, cnicDigits, validateCnic, CNIC_PLACEHOLDER, CNIC_INPUT_MAX_LENGTH } from '../utils/cnicScanner';
 import './booking-reservation.css';
 
 const BOOKING_STATUS_STYLE = {
@@ -239,6 +239,7 @@ const Bookings = () => {
     venue: isModuleVisible(HALL_MODULE_KEYS.SUMMARY_FOOD_VENUE),
     combinedServices: isModuleVisible(HALL_MODULE_KEYS.SUMMARY_COMBINED_SERVICES),
     tax: isModuleVisible(HALL_MODULE_KEYS.SUMMARY_TAX),
+    inventory: isModuleVisible(HALL_MODULE_KEYS.SUMMARY_INVENTORY),
   };
 
   const fetchData = async () => {
@@ -327,7 +328,7 @@ const Bookings = () => {
   const remainingBalance = remainingBeforeCollect - invoiceCollectAmount;
   const isPosted = isPostedBooking(formData.booking_status);
 
-  const resetForm = () => {
+  const resetForm = (overrides = {}) => {
     setFormData({
       booking_id: createBookingRefId(),
       event_name: '',
@@ -348,7 +349,8 @@ const Bookings = () => {
       generator_charge: '',
       cnic: '',
       advance_paid: '',
-      booking_status: 'CONFIRMED'
+      booking_status: 'CONFIRMED',
+      ...overrides,
     });
     setNewCustomer({
       full_name: '',
@@ -653,12 +655,21 @@ const Bookings = () => {
     }
   };
 
-  const handleCreateNewClick = () => {
+  const handleCreateNewClick = (prefill = {}) => {
     if (!canManage) {
       toast.error('You do not have permission to create bookings.');
       return;
     }
-    resetForm();
+    resetForm({
+      ...(prefill.event_date ? { event_date: prefill.event_date } : {}),
+      ...(prefill.customer ? { customer: String(prefill.customer) } : {}),
+      ...(prefill.venue ? { venue: String(prefill.venue) } : {}),
+      ...(prefill.slot ? { slot: prefill.slot } : {}),
+      ...(prefill.rate_per_head != null ? { rate_per_head: prefill.rate_per_head } : {}),
+    });
+    if (prefill.customer) {
+      setNewCustomerMode(false);
+    }
     setViewMode('create');
   };
 
@@ -731,13 +742,17 @@ const Bookings = () => {
   useEffect(() => {
     if (!location.state?.openCreate || !canManage) return;
     const prefillCustomer = location.state?.prefillCustomer;
-    handleCreateNewClick();
-    if (prefillCustomer) {
-      setFormData((prev) => ({ ...prev, customer: String(prefillCustomer) }));
-      setNewCustomerMode(false);
-    }
+    const prefillEventDate = location.state?.prefillEventDate;
+    const prefillVenue = location.state?.prefillVenue;
+    const prefillSlot = location.state?.prefillSlot;
+    handleCreateNewClick({
+      customer: prefillCustomer,
+      event_date: prefillEventDate,
+      venue: prefillVenue,
+      slot: prefillSlot,
+    });
     navigate(location.pathname, { replace: true, state: {} });
-  }, [location.state?.openCreate, location.state?.prefillCustomer, canManage, navigate, location.pathname]);
+  }, [location.state?.openCreate, location.state?.prefillCustomer, location.state?.prefillEventDate, location.state?.prefillVenue, location.state?.prefillSlot, canManage, navigate, location.pathname]);
 
   const handleDecorationPackageSelect = (packageId) => {
     setSelectedDecorationId(packageId);
@@ -756,6 +771,8 @@ const Bookings = () => {
     if (!newCustomer.full_name?.trim()) errors.full_name = 'Full name is required.';
     const phoneError = validatePakPhone(newCustomer.phone);
     if (phoneError) errors.phone = phoneError;
+    const cnicError = validateCnic(newCustomer.cnic || formData.cnic);
+    if (cnicError) errors.cnic = cnicError;
     setNewCustomerErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -778,34 +795,28 @@ const Bookings = () => {
     if (overrides.full_name != null) setClientNameQuery(overrides.full_name);
   };
 
+  const clearClientIdentityKeepCnic = (formattedCnic) => {
+    setFormData((prev) => ({ ...prev, customer: '', cnic: formattedCnic }));
+    setNewCustomer({
+      full_name: '',
+      cnic: formattedCnic,
+      email: '',
+      phone: '',
+      address: '',
+    });
+    setClientNameQuery('');
+    setClientNameSuggestionsOpen(false);
+    setNewCustomerMode(false);
+    setCnicLookupStatus('');
+    setNewCustomerErrors({});
+  };
+
   const handleClientCnicChange = (rawValue) => {
     const formatted = formatCnicInput(rawValue);
     const digits = cnicDigits(formatted);
-    setFormData((prev) => ({ ...prev, cnic: formatted }));
 
     if (digits.length < 13) {
-      setCnicLookupStatus('');
-      if (formData.customer && !newCustomerMode) {
-        const selected = customers.find((c) => String(c.id) === String(formData.customer));
-        if (cnicDigits(selected?.cnic) !== digits) {
-          beginNewClientDraft({
-            cnic: formatted,
-            full_name: clientNameQuery || customerDisplayName(selected),
-            phone: selected?.phone || newCustomer.phone || '',
-            address: selected?.address || newCustomer.address || '',
-          });
-        }
-      } else if (newCustomerMode || !formData.customer) {
-        updateNewCustomerField('cnic', formatted);
-        if (!newCustomerMode && digits.length > 0) {
-          beginNewClientDraft({
-            cnic: formatted,
-            full_name: clientNameQuery,
-            phone: newCustomer.phone,
-            address: newCustomer.address || '',
-          });
-        }
-      }
+      clearClientIdentityKeepCnic(formatted);
       return;
     }
 
@@ -818,10 +829,11 @@ const Bookings = () => {
 
     beginNewClientDraft({
       cnic: formatted,
-      full_name: clientNameQuery,
-      phone: newCustomer.phone || '',
-      address: newCustomer.address || '',
+      full_name: '',
+      phone: '',
+      address: '',
     });
+    setClientNameQuery('');
     setCnicLookupStatus('new');
     toast('CNIC not registered — enter name & phone, then press Enter', {
       id: 'booking-cnic-lookup',
@@ -954,6 +966,8 @@ const Bookings = () => {
     if (!draft.full_name?.trim()) errors.full_name = 'Full name is required.';
     const phoneError = validatePakPhone(draft.phone);
     if (phoneError) errors.phone = phoneError;
+    const cnicError = validateCnic(draft.cnic || formData.cnic);
+    if (cnicError) errors.cnic = cnicError;
     setNewCustomerErrors(errors);
     if (Object.keys(errors).length > 0) {
       setBookingError('Please complete the highlighted client fields.');
@@ -1401,9 +1415,9 @@ const Bookings = () => {
     !formData.booking_date && 'booking date',
     !formData.event_date && 'event date',
     !formData.event_name?.trim() && 'event title',
-    !(newCustomerMode
-      ? newCustomer.full_name?.trim() && newCustomer.phone?.trim()
-      : formData.customer) && 'client',
+    cnicDigits(clientCnicValue).length !== 13 && 'CNIC',
+    !clientPhoneValue?.trim() && 'phone',
+    !clientNameValue?.trim() && 'client name',
   ].filter(Boolean);
   const stepTwoMissing = [
     !formData.venue && 'hall',
@@ -1421,6 +1435,7 @@ const Bookings = () => {
   const reservationStepDetails = reservationStep === 3
     ? 'Event, client, hall, slot and attendance are complete. Review billing and save.'
     : `${reservationCompletedSteps} of 3 steps complete. Remaining: ${reservationStepMissing.join(', ')}.`;
+  const showBalanceDue = isInvoice || isEdit || (reservationStep === 3 && grandTotal > 0);
   const eventOptions = Array.from(new Set([
     ...DEFAULT_EVENT_OPTIONS,
     ...bookings.map((booking) => booking.event_name).filter(Boolean),
@@ -1738,8 +1753,35 @@ const Bookings = () => {
                 </div>
 
                 <div className="reservation-console__client-grid">
+                  <label className={newCustomerErrors.cnic ? 'has-error' : ''}>
+                    <span>CNIC Identity <em className="reservation-console__req">*</em></span>
+                    <input
+                      type="text"
+                      className="reservation-console__mono"
+                      required
+                      disabled={isFormLocked}
+                      maxLength={CNIC_INPUT_MAX_LENGTH}
+                      placeholder={CNIC_PLACEHOLDER}
+                      value={clientCnicValue ? formatCnicInput(clientCnicValue) : ''}
+                      onChange={(e) => handleClientCnicChange(e.target.value)}
+                    />
+                    {newCustomerErrors.cnic && <small>{newCustomerErrors.cnic}</small>}
+                  </label>
+                  <label className={newCustomerErrors.phone ? 'has-error' : ''}>
+                    <span>Phone Contact <em className="reservation-console__req">*</em></span>
+                    <input
+                      type="tel"
+                      required
+                      disabled={isFormLocked}
+                      maxLength={PAK_PHONE_INPUT_MAX_LENGTH}
+                      placeholder={PAK_PHONE_PLACEHOLDER}
+                      value={clientPhoneValue}
+                      onChange={(e) => handleClientPhoneChange(e.target.value)}
+                    />
+                    {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
+                  </label>
                   <label className={`reservation-console__client-select${newCustomerErrors.full_name ? ' has-error' : ''}`}>
-                    <span>Client Name</span>
+                    <span>Client Name <em className="reservation-console__req">*</em></span>
                     <div className="reservation-console__client-name-wrap">
                       <div className="reservation-console__client-name-field">
                         <input
@@ -1799,30 +1841,6 @@ const Bookings = () => {
                       )}
                     </div>
                     {newCustomerErrors.full_name && <small>{newCustomerErrors.full_name}</small>}
-                  </label>
-                  <label className={newCustomerErrors.phone ? 'has-error' : ''}>
-                    <span>Phone Contact</span>
-                    <input
-                      type="tel"
-                      disabled={isFormLocked}
-                      maxLength={PAK_PHONE_INPUT_MAX_LENGTH}
-                      placeholder={PAK_PHONE_PLACEHOLDER}
-                      value={clientPhoneValue}
-                      onChange={(e) => handleClientPhoneChange(e.target.value)}
-                    />
-                    {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
-                  </label>
-                  <label>
-                    <span>CNIC Identity</span>
-                    <input
-                      type="text"
-                      className="reservation-console__mono"
-                      disabled={isFormLocked}
-                      maxLength={CNIC_INPUT_MAX_LENGTH}
-                      placeholder={CNIC_PLACEHOLDER}
-                      value={clientCnicValue ? formatCnicInput(clientCnicValue) : ''}
-                      onChange={(e) => handleClientCnicChange(e.target.value)}
-                    />
                   </label>
                   {newCustomerMode && !isFormLocked && (
                     <label className="reservation-console__client-address-field">
@@ -2237,7 +2255,6 @@ const Bookings = () => {
             <aside className="reservation-console__summary">
               <header>
                 <div><h2>Booking Summary</h2><p>REF: {formData.booking_id || createBookingRefId()}</p></div>
-                <span>● Live</span>
               </header>
               <div className="reservation-console__summary-lines">
                 {summaryVisibility.guests && (
@@ -2252,7 +2269,7 @@ const Bookings = () => {
                 {summaryVisibility.combinedServices && (
                   <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
                 )}
-                {inventorySummaryLines.map((line) => (
+                {summaryVisibility.inventory && inventorySummaryLines.map((line) => (
                   <div key={line.key} className="reservation-console__summary-inventory">
                     <span>{line.name}</span>
                     <b>{line.total.toLocaleString()}</b>
@@ -2301,15 +2318,17 @@ const Bookings = () => {
                   </div>
                 </label>
               )}
-              <div className="reservation-console__balance">
-                <span>Balance Due</span>
-                <strong>{formatCollectDuePKR(remainingBalance)}</strong>
-                <small>
-                  {isInvoice && invoiceCollectAmount > 0
-                    ? `After collecting PKR ${invoiceCollectAmount.toLocaleString()}`
-                    : 'Pending at execution'}
-                </small>
-              </div>
+              {showBalanceDue && (
+                <div className="reservation-console__balance">
+                  <span>Balance Due</span>
+                  <strong>{formatCollectDuePKR(remainingBalance)}</strong>
+                  <small>
+                    {isInvoice && invoiceCollectAmount > 0
+                      ? `After collecting PKR ${invoiceCollectAmount.toLocaleString()}`
+                      : 'Pending at execution'}
+                  </small>
+                </div>
+              )}
               {bookingError && <div className="reservation-console__error">{bookingError}</div>}
               {!isPosted && (
                 <button className="reservation-console__confirm" type="submit" disabled={isSubmitting || inventoryLoading}>

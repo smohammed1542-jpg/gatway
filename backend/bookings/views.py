@@ -59,15 +59,11 @@ class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewS
 
 
 class MarriageHallPageVisibilityView(APIView):
-    """Return per-tenant Marriage Hall page maintenance flags for the frontend."""
+    """Return / update per-tenant Marriage Hall page and Book Summary flags."""
 
     permission_classes = [IsAuthenticated, IsMarriageHallApp]
 
-    def get(self, request):
-        tenant = request.user.tenant
-        if not tenant:
-            return Response({'detail': 'No tenant.'}, status=status.HTTP_400_BAD_REQUEST)
-
+    def _payload(self, tenant):
         ensure_tenant_hall_pages(tenant)
         rows = MarriageHallPageVisibility.objects.filter(tenant=tenant).order_by('sort_order', 'page_key')
         pages = []
@@ -84,7 +80,41 @@ class MarriageHallPageVisibilityView(APIView):
                 modules.append(item)
             elif row.page_key in HALL_PAGE_KEYS:
                 pages.append(item)
-        return Response({'pages': pages, 'modules': modules})
+        return {'pages': pages, 'modules': modules}
+
+    def get(self, request):
+        tenant = request.user.tenant
+        if not tenant:
+            return Response({'detail': 'No tenant.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self._payload(tenant))
+
+    def patch(self, request):
+        if getattr(request.user, 'role', None) != 'ADMIN' and not request.user.is_superuser:
+            return Response({'detail': 'Only admins can update booking summary lines.'}, status=status.HTTP_403_FORBIDDEN)
+        tenant = request.user.tenant
+        if not tenant:
+            return Response({'detail': 'No tenant.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ensure_tenant_hall_pages(tenant)
+        incoming = request.data.get('modules')
+        if not isinstance(incoming, list):
+            return Response({'detail': 'Send modules as a list of { key, is_visible }.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tenant_fields = []
+        from .page_visibility import _TENANT_SUMMARY_FIELD_BY_MODULE
+        for item in incoming:
+            key = (item or {}).get('key')
+            if key not in HALL_MODULE_KEYS:
+                continue
+            visible = bool((item or {}).get('is_visible'))
+            MarriageHallPageVisibility.objects.filter(tenant=tenant, page_key=key).update(is_visible=visible)
+            field = _TENANT_SUMMARY_FIELD_BY_MODULE.get(key)
+            if field:
+                setattr(tenant, field, visible)
+                tenant_fields.append(field)
+        if tenant_fields:
+            tenant.save(update_fields=list(dict.fromkeys(tenant_fields)))
+        return Response(self._payload(tenant))
 
 
 class MarriageHallReportsView(APIView):

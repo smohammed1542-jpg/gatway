@@ -130,8 +130,18 @@
   border-color: var(--border);
 }
 
-[data-theme='dark'] .profile-field-card {
+[data-theme='dark'] .profile-card__banner {
+  background: linear-gradient(135deg, #0d1a0a 0%, #1d3f14 48%, #3d8c22 100%);
+}
+
+[data-theme='dark'] .profile-field-card,
+[data-theme='dark'] .profile-meta__item,
+[data-theme='dark'] .profile-security {
   background: var(--surface-elevated);
+}
+
+[data-theme='dark'] .profile-security:hover {
+  background: rgba(91, 213, 30, 0.1);
 }
 
 [data-theme='dark'] .profile-form__input {

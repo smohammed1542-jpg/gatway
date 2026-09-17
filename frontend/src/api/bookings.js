@@ -35,3 +35,6 @@ export const getHallReports = (params) =>
 
 export const getHallPageVisibility = () =>
   client.get('/bookings/page-visibility/').then((r) => r.data);
+
+export const updateHallPageVisibility = (data) =>
+  client.patch('/bookings/page-visibility/', data).then((r) => r.data);

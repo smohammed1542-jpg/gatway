@@ -14,6 +14,8 @@ import {
   ChevronRight as ChevronRightIcon,
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, eachDayOfInterval, parseISO } from 'date-fns';
+import { formatHijriDayMonth, formatHijriLong, formatHijriMonthRange } from '../utils/hijri';
+import { useShowHijriCalendar } from '../hooks/useShowHijriCalendar';
 import client from '../api/client';
 import { formatRs, formatCollectDue, bookingCollectDue, hasCollectDue } from '../utils/currency';
 import toast from 'react-hot-toast';
@@ -38,6 +40,7 @@ const isDraftLikeBooking = (booking) => {
 const BookingCalendar = () => {
   const navigate = useNavigate();
   const { canAccessPayments, canManage, canOperate } = usePermissions();
+  const [showHijri] = useShowHijriCalendar();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -218,7 +221,12 @@ const BookingCalendar = () => {
       <div className="calendar-layout">
         <div className="card booking-calendar-card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
           <div className="booking-calendar-card__header" style={{ borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{format(currentDate, 'MMMM yyyy')}</h3>
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{format(currentDate, 'MMMM yyyy')}</h3>
+              {showHijri && (
+                <p className="calendar-hijri-month" lang="ar" dir="rtl">{formatHijriMonthRange(monthStart, monthEnd)}</p>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="btn-secondary" style={{ padding: '8px' }}><ChevronLeft size={20} /></button>
               <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="btn-secondary" style={{ padding: '8px' }}><ChevronRight size={20} /></button>
@@ -239,7 +247,12 @@ const BookingCalendar = () => {
 
               return (
                 <div key={idx} onClick={() => setSelectedDate(day)} className="calendar-day-cell" style={{ backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--surface)', opacity: isCurrentMonth ? 1 : 0.4 }}>
-                  <div style={{ fontSize: '14px', fontWeight: isSelected ? '700' : '500', color: isSelected ? 'var(--primary)' : 'var(--text-main)', marginBottom: '8px' }}>{format(day, 'd')}</div>
+                  <div className="calendar-day-nums">
+                    <span style={{ fontSize: '14px', fontWeight: isSelected ? '700' : '500', color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>{format(day, 'd')}</span>
+                    {showHijri && (
+                      <span lang="ar" dir="rtl" className={`calendar-day-hijri${isSelected ? ' calendar-day-hijri--selected' : ''}`}>{formatHijriDayMonth(day)}</span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {dayBookings.map(b => (
                       <button
@@ -283,9 +296,12 @@ const BookingCalendar = () => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="premium-card">
-            <h3 style={{ fontSize: '18px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <CalendarIcon size={20} color="var(--primary)" /> {format(selectedDate, 'PPP')}
             </h3>
+            {showHijri && (
+              <p className="calendar-hijri-selected" lang="ar" dir="rtl">{formatHijriLong(selectedDate)}</p>
+            )}
             {getBookingsForDay(selectedDate).length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {getBookingsForDay(selectedDate).map(booking => (

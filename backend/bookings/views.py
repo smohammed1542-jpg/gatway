@@ -31,7 +31,7 @@ class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewS
     ordering = ['-created_at', '-id']
 
     def get_queryset(self):
-        return super().get_queryset().select_related('customer', 'venue', 'decoration_package')
+        return super().get_queryset().select_related('customer', 'venue', 'decoration_package').prefetch_related('additional_venues')
 
     @transaction.atomic
     def perform_create(self, serializer):

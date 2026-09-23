@@ -22,7 +22,6 @@ import {
   Timer,
   UtensilsCrossed,
   Zap,
-  ShieldCheck,
   Download,
   ChevronDown,
   UserPlus
@@ -41,6 +40,7 @@ import DataTable from '../components/ui/DataTable';
 import { getTenant } from '../api/core';
 import { useHallPageVisibility } from '../context/HallPageVisibilityContext';
 import { HALL_MODULE_KEYS } from '../constants/hallPages';
+import { displayBookingId, nextEventBookingId } from '../utils/bookingId';
 import { isPostedBooking, taxRateFromTenant, overtimeRateFromTenant } from '../utils/erp';
 import { resolveMediaUrl } from '../utils/media';
 import { validatePakPhone, formatPakPhone, PAK_PHONE_INPUT_MAX_LENGTH, PAK_PHONE_PLACEHOLDER } from '../utils/phone';
@@ -83,11 +83,31 @@ const bookingEventDate = (booking) => {
 };
 
 const bookingHoldsHall = (booking, excludeId) => {
-  if (!booking?.venue) return false;
   if (excludeId && String(booking.id) === String(excludeId)) return false;
   if (booking.booking_status === 'CANCELLED') return false;
   if (isDraftLikeBooking(booking)) return false;
-  return HOLDING_STATUSES.has(booking.booking_status);
+  if (!HOLDING_STATUSES.has(booking.booking_status)) return false;
+  return bookingVenueIds(booking).length > 0;
+};
+
+const bookingVenueIds = (booking) => {
+  if (!booking) return [];
+  if (Array.isArray(booking.venue_ids) && booking.venue_ids.length) {
+    return [...new Set(booking.venue_ids.map(String))];
+  }
+  return booking.venue ? [String(booking.venue)] : [];
+};
+
+const formVenueIds = (form) => {
+  if (Array.isArray(form?.venues) && form.venues.length) {
+    return [...new Set(form.venues.map(String))];
+  }
+  return form?.venue ? [String(form.venue)] : [];
+};
+
+const withVenues = (form, ids) => {
+  const venues = [...new Set((ids || []).map(String).filter(Boolean))];
+  return { ...form, venues, venue: venues[0] || '' };
 };
 
 const bookingGuestCount = (booking) => {
@@ -141,7 +161,7 @@ const availableSeatsOnDate = (hall, eventDate, bookings, excludeId, slot, custom
   if (!eventDate || !slot) return capacity;
   const occupied = bookings.reduce((sum, booking) => {
     if (!bookingHoldsHall(booking, excludeId)) return sum;
-    if (String(booking.venue) !== String(hall.id)) return sum;
+    if (!bookingVenueIds(booking).includes(String(hall.id))) return sum;
     if (bookingEventDate(booking) !== String(eventDate)) return sum;
     if (!bookingOccupiesSelectedSlot(booking, slot, customStart, customEnd)) return sum;
     return sum + bookingGuestCount(booking);
@@ -188,11 +208,7 @@ const toFloatField = (raw) => {
 
 const numFromApi = (v) => (v === 0 || v === '0' || v == null ? '' : v);
 
-const createBookingRefId = () => {
-  const year = new Date().getFullYear();
-  const randomNum = Math.floor(1000 + Math.random() * 9000);
-  return `BK-${year}-${randomNum}`;
-};
+const createBookingRefId = (existing = [], fromDate) => nextEventBookingId(existing, fromDate);
 
 /** Relative event-date label for the bookings list (no filter required). */
 const getBookingDateWhen = (rawDate) => {
@@ -246,7 +262,6 @@ const Bookings = () => {
   const [savingManualInventory, setSavingManualInventory] = useState(false);
   const [manualInventory, setManualInventory] = useState({
     name: '',
-    price_per_unit: '',
     isNew: false,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -267,6 +282,7 @@ const Bookings = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [eventDateFilter, setEventDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [invoiceCollectNow, setInvoiceCollectNow] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   
@@ -276,6 +292,7 @@ const Bookings = () => {
     event_name: '',
     customer: '',
     venue: '',
+    venues: [],
     booking_date: new Date().toISOString().split('T')[0],
     event_date: '',
     slot: '',
@@ -305,7 +322,6 @@ const Bookings = () => {
   });
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
   const [clientNameQuery, setClientNameQuery] = useState('');
-  const [clientNameSuggestionsOpen, setClientNameSuggestionsOpen] = useState(false);
   const [cnicLookupStatus, setCnicLookupStatus] = useState(''); // '', 'found', 'new'
 
   const [bookingError, setBookingError] = useState('');
@@ -316,6 +332,123 @@ const Bookings = () => {
   const savingClientRef = useRef(false);
   const eventPickerRef = useRef(null);
   const [eventOptionsOpen, setEventOptionsOpen] = useState(false);
+  const [eventHighlightIndex, setEventHighlightIndex] = useState(0);
+  const reservationFormRef = useRef(null);
+
+  const focusReservationHall = () => {
+    window.setTimeout(() => {
+      const hallBtn = document.querySelector('.reservation-console__hall-grid button');
+      const hallSelect = document.querySelector('.reservation-console__hall-select');
+      (hallBtn || hallSelect)?.focus();
+    }, 30);
+  };
+  const focusReservationSlot = () => {
+    window.setTimeout(() => {
+      document.querySelector('.reservation-console__slot-options button')?.focus();
+    }, 30);
+  };
+  const focusReservationGuests = () => {
+    window.setTimeout(() => {
+      document.getElementById('reservation-guest-count')?.focus();
+    }, 30);
+  };
+  const focusReservationInventory = () => {
+    window.setTimeout(() => {
+      const itemSelect = document.querySelector('.reservation-console__inventory-field--item select');
+      const addBtn = document.getElementById('reservation-add-inventory');
+      (itemSelect || addBtn)?.focus();
+    }, 40);
+  };
+  const reservationStepOrder = [
+    'booking-date',
+    'event-date',
+    'event-name',
+    'cnic',
+    'phone',
+    'client-name',
+    'address',
+    'hall',
+    'slot',
+    'guests',
+    'inventory',
+    'advance',
+    'confirm',
+  ];
+  const advanceReservationStep = (fromStep, filled = {}) => {
+    const venueIds = filled.venues !== undefined ? filled.venues : formVenueIds(formData);
+    const venue = filled.venue !== undefined ? filled.venue : (venueIds[0] || formData.venue);
+    const slot = filled.slot !== undefined ? filled.slot : formData.slot;
+    const eventName = filled.event_name !== undefined ? filled.event_name : formData.event_name;
+    const customerId = filled.customer !== undefined ? filled.customer : formData.customer;
+    const selected = customers.find((c) => String(c.id) === String(customerId));
+    const cnicValue = newCustomerMode ? (newCustomer.cnic || formData.cnic) : (formData.cnic || selected?.cnic || '');
+    const phoneValue = newCustomerMode ? (newCustomer.phone || '') : (selected?.phone || '');
+    const clientName = newCustomerMode
+      ? (newCustomer.full_name || clientNameQuery || '')
+      : (selected ? customerDisplayName(selected) : (clientNameQuery || ''));
+    const guests = Number(formData.gents_count || 0) + Number(formData.ladies_count || 0);
+
+    let incomplete = '';
+    if (fromStep === 'booking-date' && !formData.booking_date) incomplete = 'Booking date required';
+    else if (fromStep === 'event-date' && !formData.event_date) incomplete = 'Event date required';
+    else if (fromStep === 'event-name' && !String(eventName || '').trim()) incomplete = 'Event title required';
+    else if (fromStep === 'cnic') {
+      const cnicError = validateCnic(cnicValue, { required: true });
+      if (cnicError) incomplete = cnicError;
+    } else if (fromStep === 'phone') {
+      const phoneError = validatePakPhone(phoneValue);
+      if (phoneError) incomplete = phoneError;
+    } else if (fromStep === 'client-name' && !customerId && !String(clientName || '').trim()) {
+      incomplete = 'Select or enter client name';
+    } else if (fromStep === 'hall' && !(formVenueIds({ venues: venueIds, venue }).length)) incomplete = 'Select a hall';
+    else if (fromStep === 'slot') {
+      if (!slot) incomplete = 'Select a time slot';
+      else if (slot === 'custom' && (!formData.custom_start_time || !formData.custom_end_time)) {
+        incomplete = 'Enter custom start and end time';
+      }
+    } else if (fromStep === 'guests' && guests <= 0) incomplete = 'Enter guest count';
+
+    if (incomplete) {
+      toast.error(incomplete, { id: 'reservation-step-incomplete' });
+      return;
+    }
+
+    const form = reservationFormRef.current;
+    const present = reservationStepOrder.filter((step) => {
+      if (step === 'hall') {
+        return Boolean(form?.querySelector('.reservation-console__hall-grid button, .reservation-console__hall-select'));
+      }
+      if (step === 'slot') {
+        return Boolean(form?.querySelector('.reservation-console__slot-options button'));
+      }
+      if (step === 'inventory') {
+        return Boolean(form?.querySelector('#reservation-add-inventory, .reservation-console__inventory-field--item select'));
+      }
+      return Boolean(form?.querySelector(`[data-rs-step="${step}"]`));
+    });
+    const index = present.indexOf(fromStep);
+    const next = present[index + 1];
+    if (!next) return;
+    if (next === 'hall') {
+      focusReservationHall();
+      return;
+    }
+    if (next === 'slot') {
+      focusReservationSlot();
+      return;
+    }
+    if (next === 'inventory') {
+      if (!document.querySelector('.reservation-console__inventory-field--item select')) {
+        document.getElementById('reservation-add-inventory')?.click();
+      }
+      focusReservationInventory();
+      return;
+    }
+    window.setTimeout(() => {
+      form?.querySelector(`[data-rs-step="${next}"]`)?.focus();
+    }, 20);
+  };
+
   const [taxRate, setTaxRate] = useState(0.05);
   const [overtimeRate, setOvertimeRate] = useState(5000);
   const { isModuleVisible } = useHallPageVisibility();
@@ -391,7 +524,11 @@ const Bookings = () => {
           : null);
       if (!item) return null;
       const quantity = Number(line.quantity_used || 0);
-      const unitPrice = Number(item.price_per_unit || 0);
+      const unitPrice = Number(
+        line.unit_price !== '' && line.unit_price != null
+          ? line.unit_price
+          : (item.price_per_unit ?? line.item_price ?? 0)
+      );
       if (!Number.isFinite(unitPrice) || unitPrice < 0) return null;
       if (!Number.isFinite(quantity) || quantity <= 0) return null;
       return {
@@ -416,10 +553,11 @@ const Bookings = () => {
 
   const resetForm = (overrides = {}) => {
     setFormData({
-      booking_id: createBookingRefId(),
+      booking_id: createBookingRefId(bookings),
       event_name: '',
       customer: '',
       venue: '',
+      venues: [],
       booking_date: new Date().toISOString().split('T')[0],
       event_date: '',
       slot: '',
@@ -448,7 +586,6 @@ const Bookings = () => {
     setNewCustomerMode(false);
     setNewCustomerErrors({});
     setClientNameQuery('');
-    setClientNameSuggestionsOpen(false);
     setCnicLookupStatus('');
     setBookingError('');
     setEditingId(null);
@@ -460,7 +597,6 @@ const Bookings = () => {
     setSavingManualInventory(false);
     setManualInventory({
       name: '',
-      price_per_unit: '',
       isNew: false,
     });
     setScannedClient(null);
@@ -489,7 +625,6 @@ const Bookings = () => {
       address: '',
     });
     setClientNameQuery(customerDisplayName(customer));
-    setClientNameSuggestionsOpen(false);
     setCnicLookupStatus(customer.cnic ? 'found' : '');
     toast.success(`Client selected: ${customerDisplayName(customer)}`, { id: 'booking-id-scan' });
   };
@@ -585,6 +720,7 @@ const Bookings = () => {
         include_in_bill: Boolean(r.include_in_bill),
         item_name: r.item_name || '',
         item_price: r.item_price,
+        unit_price: r.unit_price ?? r.item_price ?? '',
         item_unit: r.item_unit || 'units',
       }));
       setInventoryLines(mapped);
@@ -631,6 +767,7 @@ const Bookings = () => {
       await client.patch(`/inventory/booking-items/${line.id}/`, {
         quantity_used: qty,
         include_in_bill: Boolean(line.include_in_bill),
+        unit_price: Number(line.unit_price || 0),
       });
     }
     await Promise.all(
@@ -647,13 +784,16 @@ const Bookings = () => {
         inventory_item: itemId,
         quantity_used: qty,
         include_in_bill: Boolean(line.include_in_bill),
+        unit_price: Number(line.unit_price || 0),
       });
     }
   };
 
   const hallsForSelect = halls.filter((h) => {
-    const isActive = h.status !== 'INACTIVE' || String(h.id) === String(formData.venue);
+    const selectedIds = new Set(formVenueIds(formData));
+    const isActive = h.status !== 'INACTIVE' || selectedIds.has(String(h.id));
     if (!isActive) return false;
+    if (selectedIds.has(String(h.id))) return true;
     if (!formData.event_date || !isSlotReady(formData)) return true;
     return hallAvailableOnDate(
       h,
@@ -668,23 +808,39 @@ const Bookings = () => {
 
   const assignAvailableHall = (next, eventDate) => {
     const merged = { ...next, event_date: eventDate };
-    if (!eventDate || !merged.venue) {
-      return merged;
+    const ids = formVenueIds(merged);
+    if (!eventDate || !ids.length) {
+      return withVenues(merged, ids);
     }
-    const selected = halls.find((hall) => String(hall.id) === String(merged.venue));
-    const stillFree = selected
-      && (selected.status !== 'INACTIVE' || String(selected.id) === String(merged.venue))
-      && hallAvailableOnDate(
-        selected,
-        eventDate,
-        bookings,
-        editingId,
-        merged.slot,
-        merged.custom_start_time,
-        merged.custom_end_time,
-      );
-    if (stillFree) return merged;
-    return { ...merged, venue: '' };
+    const kept = ids.filter((id) => {
+      const selected = halls.find((hall) => String(hall.id) === id);
+      return selected
+        && (selected.status !== 'INACTIVE' || ids.includes(String(selected.id)))
+        && hallAvailableOnDate(
+          selected,
+          eventDate,
+          bookings,
+          editingId,
+          merged.slot,
+          merged.custom_start_time,
+          merged.custom_end_time,
+        );
+    });
+    return withVenues(merged, kept);
+  };
+
+  const toggleHallSelection = (hall) => {
+    const current = formVenueIds(formData);
+    const id = String(hall.id);
+    const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    const first = halls.find((item) => String(item.id) === next[0]);
+    setFormData(withVenues({
+      ...formData,
+      rate_per_head: first ? (first.price_per_day || first.price_per_head || 1200) : 1200,
+    }, next));
+    if (!current.includes(id) && next.length === 1 && hallsForSelect.length <= 1) {
+      advanceReservationStep('hall', { venue: next[0], venues: next });
+    }
   };
 
   const availableInventoryCatalog = inventoryCatalog.filter((item) => item.status !== 'INACTIVE');
@@ -695,16 +851,11 @@ const Bookings = () => {
 
     const name = manualInventory.name.trim();
     const unit = 'units';
-    const pricePerUnit = Number(manualInventory.price_per_unit || 0);
     const unlimitedStock = 999999;
     const bookingQuantity = 1;
 
     if (!name) {
       toast.error('Item name is required.');
-      return;
-    }
-    if (!Number.isFinite(pricePerUnit) || pricePerUnit < 0) {
-      toast.error('Unit price cannot be negative.');
       return;
     }
 
@@ -722,6 +873,7 @@ const Bookings = () => {
             inventory_item: String(duplicate.id),
             quantity_used: bookingQuantity,
             include_in_bill: false,
+            unit_price: '',
           },
         ]);
         setShowManualInventory(false);
@@ -739,24 +891,24 @@ const Bookings = () => {
         category: 'OTHER',
         quantity: unlimitedStock,
         unit,
-        price_per_unit: pricePerUnit,
+        price_per_unit: 0,
         status: 'IN_STOCK',
         last_restocked: new Date().toISOString().split('T')[0],
-        description: 'Created from booking reservation (unlimited stock)',
+        description: '',
       });
       const createdItem = response.data;
       setInventoryCatalog((current) => [...current, createdItem]);
       setInventoryLines((current) => [
         ...current,
-        {
-          inventory_item: String(createdItem.id),
-          quantity_used: bookingQuantity,
-          include_in_bill: false,
-        },
+          {
+            inventory_item: String(createdItem.id),
+            quantity_used: bookingQuantity,
+            include_in_bill: false,
+            unit_price: '',
+          },
       ]);
       setManualInventory({
         name: '',
-        price_per_unit: '',
         isNew: false,
       });
       setShowManualInventory(false);
@@ -782,7 +934,7 @@ const Bookings = () => {
     const seeded = {
       ...(prefill.event_date ? { event_date: prefill.event_date } : {}),
       ...(prefill.customer ? { customer: String(prefill.customer) } : {}),
-      ...(prefill.venue ? { venue: String(prefill.venue) } : {}),
+      ...(prefill.venue ? { venue: String(prefill.venue), venues: [String(prefill.venue)] } : {}),
       ...(prefill.slot ? { slot: prefill.slot } : {}),
       ...(prefill.rate_per_head != null ? { rate_per_head: prefill.rate_per_head } : {}),
     };
@@ -800,10 +952,11 @@ const Bookings = () => {
   const populateBookingForm = async (booking) => {
     setEditingId(booking.id);
     setFormData({
-      booking_id: booking.booking_id || `BK-${booking.id}`,
+      booking_id: booking.booking_id || displayBookingId(booking),
       event_name: booking.event_name,
       customer: booking.customer,
-      venue: booking.venue,
+      venue: bookingVenueIds(booking)[0] || booking.venue || '',
+      venues: bookingVenueIds(booking),
       booking_date: booking.booking_date || new Date().toISOString().split('T')[0],
       event_date: booking.event_date || (booking.start_date ? booking.start_date.split('T')[0] : ''),
       slot: booking.slot || '',
@@ -824,7 +977,6 @@ const Bookings = () => {
     setNewCustomerMode(false);
     setBookingError('');
     setClientNameQuery(booking.customer_name || '');
-    setClientNameSuggestionsOpen(false);
     setCnicLookupStatus(booking.cnic ? 'found' : '');
     setSelectedDecorationId(booking.decoration_package ? String(booking.decoration_package) : '');
     setInvoiceCollectNow('');
@@ -879,12 +1031,13 @@ const Bookings = () => {
   }, [location.state?.openCreate, location.state?.prefillCustomer, location.state?.prefillEventDate, location.state?.prefillVenue, location.state?.prefillSlot, canManage, navigate, location.pathname]);
 
   useEffect(() => {
-    if (isFormLocked || !formData.event_date || !formData.venue || !halls.length) return;
+    if (isFormLocked || !formData.event_date || !formVenueIds(formData).length || !halls.length) return;
     setFormData((prev) => {
-      if (!prev.event_date || !prev.venue) return prev;
-      const selected = halls.find((h) => String(h.id) === String(prev.venue));
-      const stillFree = selected
-        && hallAvailableOnDate(
+      const ids = formVenueIds(prev);
+      if (!prev.event_date || !ids.length) return prev;
+      const kept = ids.filter((id) => {
+        const selected = halls.find((h) => String(h.id) === id);
+        return selected && hallAvailableOnDate(
           selected,
           prev.event_date,
           bookings,
@@ -893,25 +1046,33 @@ const Bookings = () => {
           prev.custom_start_time,
           prev.custom_end_time,
         );
-      if (stillFree) return prev;
-      return { ...prev, venue: '' };
+      });
+      if (kept.length === ids.length) return prev;
+      return withVenues(prev, kept);
     });
-  }, [halls, bookings, formData.event_date, formData.venue, formData.slot, formData.custom_start_time, formData.custom_end_time, isFormLocked, editingId]);
+  }, [halls, bookings, formData.event_date, formData.venue, formData.venues, formData.slot, formData.custom_start_time, formData.custom_end_time, isFormLocked, editingId]);
 
   useEffect(() => {
     if (viewMode !== 'list') return undefined;
     const onKeyDown = (event) => {
-      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
       const tag = String(target?.tagName || '').toLowerCase();
       const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(target?.isContentEditable);
       if (typing) return;
-      event.preventDefault();
-      document.getElementById('bookings-list-search')?.focus();
+      if (event.key === '/') {
+        event.preventDefault();
+        document.getElementById('bookings-list-search')?.focus();
+        return;
+      }
+      if (canManage && (event.key === 'n' || event.key === 'N')) {
+        event.preventDefault();
+        handleCreateNewClick();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [viewMode]);
+  }, [viewMode, canManage]);
 
   const handleDecorationPackageSelect = (packageId) => {
     setSelectedDecorationId(packageId);
@@ -964,7 +1125,6 @@ const Bookings = () => {
       address: '',
     });
     setClientNameQuery('');
-    setClientNameSuggestionsOpen(false);
     setNewCustomerMode(false);
     setCnicLookupStatus('');
     setNewCustomerErrors({});
@@ -1051,7 +1211,6 @@ const Bookings = () => {
 
   const handleClientNameChange = (value) => {
     setClientNameQuery(value);
-    setClientNameSuggestionsOpen(true);
     if (formData.customer && !newCustomerMode) {
       const selected = customers.find((c) => String(c.id) === String(formData.customer));
       const selectedName = customerDisplayName(selected);
@@ -1078,14 +1237,14 @@ const Bookings = () => {
     updateNewCustomerField('full_name', value);
   };
 
-  const handleSelectRegisteredClient = (customer) => {
-    selectClientFromScan(customer);
-  };
-
   const handleClientNameKeyDown = async (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
     const name = clientNameQuery.trim();
+    if (!name && formData.customer) {
+      advanceReservationStep('client-name', { customer: formData.customer });
+      return;
+    }
     if (!name) return;
 
     const exact = customers.find(
@@ -1093,6 +1252,12 @@ const Bookings = () => {
     );
     if (exact) {
       selectClientFromScan(exact);
+      advanceReservationStep('client-name', { customer: exact.id });
+      return;
+    }
+
+    if (formData.customer) {
+      advanceReservationStep('client-name', { customer: formData.customer });
       return;
     }
 
@@ -1156,10 +1321,10 @@ const Bookings = () => {
       });
       setNewCustomerErrors({});
       setClientNameQuery(customerDisplayName(savedCust));
-      setClientNameSuggestionsOpen(false);
       setCnicLookupStatus(savedCust.cnic ? 'found' : '');
 
       toast.success(`Client saved and selected: ${customerDisplayName(savedCust)}`);
+      advanceReservationStep('client-name', { customer: savedCust.id });
     } catch (err) {
       const errData = err.response?.data;
       const msg = errData?.non_field_errors?.[0]
@@ -1192,7 +1357,7 @@ const Bookings = () => {
     if (!customerId) {
       customerId = await ensureLegacyDraftCustomer();
     }
-    let venueId = base.venue;
+    let venueId = base.venue || formVenueIds(base)[0];
     if (!venueId) {
       const hall = hallsForSelect[0] || halls.find((h) => h.status !== 'INACTIVE') || halls[0];
       if (!hall) {
@@ -1200,12 +1365,14 @@ const Bookings = () => {
       }
       venueId = hall.id;
     }
+    const venueIds = formVenueIds({ ...base, venue: venueId, venues: base.venues?.length ? base.venues : [venueId] });
     const slot = base.slot || 'morning';
     return {
       ...base,
       booking_status: 'PENDING',
       customer: Number(customerId),
       venue: Number(venueId),
+      venue_ids: venueIds.map((id) => Number(id)),
       event_date: base.event_date || base.booking_date || today,
       slot,
       event_name: base.event_name?.trim() || 'Draft',
@@ -1225,28 +1392,33 @@ const Bookings = () => {
     setBookingError('');
     const isDraft = viewMode === 'create' && statusOverride === 'DRAFT';
 
-    // Select active venue
-    const selectedHall = halls.find(h => String(h.id) === String(formData.venue));
-    if (selectedHall && formData.event_date) {
-      const remaining = availableSeatsOnDate(
-        selectedHall,
+    const selectedVenueIds = formVenueIds(formData);
+    const selectedHalls = halls.filter((h) => selectedVenueIds.includes(String(h.id)));
+    const selectedHall = selectedHalls[0];
+    const combinedCapacity = selectedHalls.reduce((sum, hall) => sum + Number(hall.capacity || 0), 0);
+    const remaining = selectedHalls.reduce((sum, hall) => (
+      sum + availableSeatsOnDate(
+        hall,
         formData.event_date,
         bookings,
         editingId,
         formData.slot,
         formData.custom_start_time,
         formData.custom_end_time,
-      );
+      )
+    ), 0);
+    const hallNames = selectedHalls.map((hall) => hall.name).join(' + ');
+    if (selectedHalls.length && formData.event_date) {
       if (isSlotReady(formData) && totalAttendance > remaining) {
         setBookingError(
-          `Only ${remaining} seats left in '${selectedHall.name}' for this time (capacity ${selectedHall.capacity}). Reduce guests or choose another hall.`
+          `Only ${remaining} seats left in '${hallNames}' for this time (capacity ${combinedCapacity}). Reduce guests or choose another hall.`
         );
         toast.error('Not enough seats left');
         return;
       }
-    } else if (selectedHall && totalAttendance > selectedHall.capacity) {
+    } else if (selectedHalls.length && totalAttendance > combinedCapacity) {
       setBookingError(
-        `Total guest attendance (${totalAttendance}) exceeds '${selectedHall.name}' maximum capacity of ${selectedHall.capacity} seats. Please adjust attendees or choose a larger hall.`
+        `Total guest attendance (${totalAttendance}) exceeds '${hallNames}' maximum capacity of ${combinedCapacity} seats. Please adjust attendees or choose a larger hall.`
       );
       toast.error('Capacity exceeded');
       return;
@@ -1352,7 +1524,7 @@ const Bookings = () => {
           setIsSubmitting(false);
           return;
         }
-        if (!formData.venue) {
+        if (!formVenueIds(formData).length) {
           setBookingError('Please select a venue hall.');
           toast.error('Venue required');
           setIsSubmitting(false);
@@ -1378,7 +1550,9 @@ const Bookings = () => {
         ? (newCustomer.cnic || '')
         : (selectedCustomer?.cnic || '');
       const payload = {
-        booking_id: formData.booking_id || undefined,
+        booking_id: (viewMode === 'edit' || viewMode === 'invoice')
+          ? (formData.booking_id || undefined)
+          : undefined,
         booking_status: statusOverride || formData.booking_status,
         event_name: formData.event_name?.trim() || (isDraft ? 'Draft' : formData.event_name),
         booking_date: formData.booking_date || new Date().toISOString().split('T')[0],
@@ -1386,7 +1560,8 @@ const Bookings = () => {
         slot: formData.slot || null,
         cnic: bookingCnic || '',
         customer: finalCustomerId ? parseInt(finalCustomerId, 10) : null,
-        venue: formData.venue ? parseInt(formData.venue, 10) : null,
+        venue: formVenueIds(formData)[0] ? parseInt(formVenueIds(formData)[0], 10) : null,
+        venue_ids: formVenueIds(formData).map((id) => parseInt(id, 10)),
         custom_start_time: formData.slot === 'custom' ? (formData.custom_start_time || null) : null,
         custom_end_time: formData.slot === 'custom' ? (formData.custom_end_time || null) : null,
         gents_count: parseInt(formData.gents_count || 0, 10) || 0,
@@ -1524,9 +1699,16 @@ const Bookings = () => {
         || (b.customer_name || '').toLowerCase().includes(q)
         || (b.venue_name || '').toLowerCase().includes(q)
         || (b.booking_id || '').toLowerCase().includes(q)
+        || displayBookingId(b).toLowerCase().includes(q)
       );
       const matchesDate = !eventDateFilter || bookingEventDate(b) === eventDateFilter;
-      return matchesSearch && matchesDate;
+      const status = b.booking_status;
+      const matchesStatus = statusFilter === 'cancelled'
+        ? status === 'CANCELLED'
+        : statusFilter === 'all'
+          ? true
+          : status !== 'CANCELLED';
+      return matchesSearch && matchesDate && matchesStatus;
     })
     .sort((a, b) => {
       // Newest created booking always on top (any event day)
@@ -1545,17 +1727,22 @@ const Bookings = () => {
   };
 
   const selectedCustomer = customers.find((c) => String(c.id) === String(formData.customer));
-  const selectedHall = halls.find((h) => String(h.id) === String(formData.venue));
-  const availableGuestSeats = selectedHall
-    ? availableSeatsOnDate(
-      selectedHall,
-      formData.event_date,
-      bookings,
-      editingId,
-      formData.slot,
-      formData.custom_start_time,
-      formData.custom_end_time,
-    )
+  const selectedVenueIds = formVenueIds(formData);
+  const selectedHalls = halls.filter((h) => selectedVenueIds.includes(String(h.id)));
+  const selectedHall = selectedHalls[0];
+  const combinedHallCapacity = selectedHalls.reduce((sum, hall) => sum + Number(hall.capacity || 0), 0);
+  const availableGuestSeats = selectedHalls.length
+    ? selectedHalls.reduce((sum, hall) => (
+      sum + availableSeatsOnDate(
+        hall,
+        formData.event_date,
+        bookings,
+        editingId,
+        formData.slot,
+        formData.custom_start_time,
+        formData.custom_end_time,
+      )
+    ), 0)
     : null;
 
   useEffect(() => {
@@ -1582,26 +1769,6 @@ const Bookings = () => {
   const clientAddressValue = newCustomerMode
     ? (newCustomer.address || '')
     : (selectedCustomer?.address || '');
-  const clientNameSuggestions = (() => {
-    if (!clientNameSuggestionsOpen || isFormLocked) return [];
-    const q = clientNameQuery.trim().toLowerCase();
-    const selectedName = selectedCustomer
-      ? customerDisplayName(selectedCustomer).toLowerCase()
-      : '';
-    // On open with selected/empty name show full list; filter only while typing a search
-    const shouldFilter = Boolean(q) && q !== selectedName;
-    const list = shouldFilter
-      ? customers.filter((c) => {
-        const name = customerDisplayName(c).toLowerCase();
-        const phone = String(c.phone || '').toLowerCase();
-        const cnic = cnicDigits(c.cnic);
-        return name.includes(q) || phone.includes(q) || (cnic && cnic.includes(cnicDigits(q)));
-      })
-      : customers;
-    return [...list]
-      .sort((a, b) => customerDisplayName(a).localeCompare(customerDisplayName(b)))
-      .slice(0, 60);
-  })();
   const manualInventoryExistingItem = !manualInventory.isNew
     ? inventoryCatalog.find(
       (item) => item.name?.trim().toLowerCase() === manualInventory.name.trim().toLowerCase()
@@ -1610,7 +1777,6 @@ const Bookings = () => {
   const manualInventorySelectValue = manualInventoryExistingItem
     ? String(manualInventoryExistingItem.id)
     : (manualInventory.isNew ? '__new__' : '');
-  const isClientKycVerified = Boolean(selectedCustomer?.cnic || (newCustomerMode && newCustomer.cnic));
   const stepOneMissing = [
     !formData.booking_date && 'booking date',
     !formData.event_date && 'event date',
@@ -1620,21 +1786,13 @@ const Bookings = () => {
     !clientNameValue?.trim() && 'client name',
   ].filter(Boolean);
   const stepTwoMissing = [
-    !formData.venue && 'hall',
+    !selectedVenueIds.length && 'hall',
     !formData.slot && 'time slot',
     formData.slot === 'custom' && (!formData.custom_start_time || !formData.custom_end_time) && 'custom start/end time',
     totalAttendance <= 0 && 'guest count',
     selectedHall && availableGuestSeats != null && totalAttendance > availableGuestSeats && 'reduce guests to available seats',
   ].filter(Boolean);
   const reservationStep = stepOneMissing.length ? 1 : stepTwoMissing.length ? 2 : 3;
-  const reservationCompletedSteps = reservationStep - 1;
-  const reservationStepMissing = reservationStep === 1 ? stepOneMissing : stepTwoMissing;
-  const reservationStepText = reservationStep === 3
-    ? 'Step 3/3 · Review & Save'
-    : `Step ${reservationStep}/3 · ${reservationStepMissing[0]}${reservationStepMissing.length > 1 ? ` +${reservationStepMissing.length - 1}` : ''} left`;
-  const reservationStepDetails = reservationStep === 3
-    ? 'Event, client, hall, slot and attendance are complete. Review billing and save.'
-    : `${reservationCompletedSteps} of 3 steps complete. Remaining: ${reservationStepMissing.join(', ')}.`;
   const showBalanceDue = isInvoice || isEdit || (reservationStep === 3 && grandTotal > 0);
   const eventOptions = Array.from(new Set([
     ...DEFAULT_EVENT_OPTIONS,
@@ -1643,11 +1801,22 @@ const Bookings = () => {
   const filteredEventOptions = eventOptions.filter((name) => (
     name.toLowerCase().includes(formData.event_name.trim().toLowerCase())
   ));
+  const safeEventHighlight = Math.min(
+    eventHighlightIndex,
+    Math.max(0, filteredEventOptions.length - 1),
+  );
+
+  useEffect(() => {
+    if (!eventOptionsOpen) return undefined;
+    const el = document.getElementById(`reservation-event-option-${safeEventHighlight}`);
+    el?.scrollIntoView({ block: 'nearest' });
+    return undefined;
+  }, [eventOptionsOpen, safeEventHighlight, filteredEventOptions.length]);
   const galleryHalls = hallsForSelect
     .filter((hall) => hall.status === 'ACTIVE' && hall.image)
     .sort((a, b) => {
-      if (String(a.id) === String(formData.venue)) return -1;
-      if (String(b.id) === String(formData.venue)) return 1;
+      if (selectedVenueIds.includes(String(a.id)) && !selectedVenueIds.includes(String(b.id))) return -1;
+      if (selectedVenueIds.includes(String(b.id)) && !selectedVenueIds.includes(String(a.id))) return 1;
       return 0;
     })
     .slice(0, 3);
@@ -1664,19 +1833,17 @@ const Bookings = () => {
         {/* LIST VIEW MODE */}
         {viewMode === 'list' && (
           <>
-            <div className="page-header">
-              <div>
-                <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>Oversee schedule listings, revenue parameters, and confirm hall draft bookings.</p>
-              </div>
-            </div>
-
             <div className="card bookings-table-card" style={{ padding: 0, overflow: 'hidden' }}>
               <DataTable
                 variant="erp"
                 sortable
                 showColumnChooser
+                persistColumnsKey="bookings-list"
+                getRowClassName={(booking) => (
+                  booking.booking_status === 'CANCELLED' ? 'erp-table__row--cancelled' : ''
+                )}
                 toolbarEnd={canManage ? (
-                  <button type="button" className="btn-primary bookings-toolbar-new" onClick={handleCreateNewClick}>
+                  <button type="button" className="btn-primary bookings-toolbar-new" onClick={handleCreateNewClick} title="New reservation (N)">
                     <Plus size={16} /> New Reservation
                   </button>
                 ) : null}
@@ -1690,6 +1857,7 @@ const Bookings = () => {
                       onChange={(e) => setSearchQuery(e.target.value)}
                       aria-keyshortcuts="/"
                     />
+                    <div className="bookings-list-filters">
                     <label className="bookings-date-filter">
                       <span>Event date</span>
                       <input
@@ -1708,16 +1876,31 @@ const Bookings = () => {
                         </button>
                       )}
                     </label>
+                    <label className="bookings-date-filter bookings-status-filter">
+                      <span>Status</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        aria-label="Filter bookings by status"
+                      >
+                        <option value="active">Active</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="all">All</option>
+                      </select>
+                    </label>
+                    </div>
                   </>
                 )}
                 pageSize={0}
                 emptyTitle="No bookings match your criteria"
                 emptyDescription={
-                  eventDateFilter
+                  statusFilter === 'cancelled'
+                    ? 'No cancelled bookings match this search or date.'
+                    : eventDateFilter
                     ? 'No bookings on this event date. Clear the date filter or pick another day.'
                     : 'Try another search or create a new booking.'
                 }
-                renderGroupHeader={(key, rows) => {
+                renderGroupHeader={(key, rows = []) => {
                   const when = key === 'undated' ? null : getBookingDateWhen(key);
                   const tone = when?.key || 'past';
                   return (
@@ -1739,7 +1922,9 @@ const Bookings = () => {
                   );
                 }}
                 columns={[
-                  { key: 'customer', label: 'Customer / Event' },
+                  { key: 'booking_id', label: 'Booking ID', width: '128px' },
+                  { key: 'customer', label: 'Customer Name' },
+                  { key: 'event_name', label: 'Event Type' },
                   { key: 'hall', label: 'Hall' },
                   { key: 'date', label: 'Slot', width: '108px' },
                   { key: 'status', label: 'Status', width: '118px' },
@@ -1759,7 +1944,9 @@ const Bookings = () => {
                   return newest || (key === 'undated' ? '' : key);
                 }}
                 getSortValue={(row, key) => {
-                  if (key === 'customer') return row.customer_name || row.event_name;
+                  if (key === 'booking_id') return displayBookingId(row);
+                  if (key === 'customer') return row.customer_name || '';
+                  if (key === 'event_name') return row.event_name || '';
                   if (key === 'hall') return row.venue_name;
                   if (key === 'date') return bookingRecencyValue(row);
                   if (key === 'status') return row.booking_status;
@@ -1776,26 +1963,26 @@ const Bookings = () => {
                   ...(canManage && !isPostedBooking(booking.booking_status) ? [{ label: 'Cancel', icon: <XCircle size={14} />, danger: true, onClick: () => setCancelTarget(booking) }] : []),
                 ]}
                 renderCell={(booking, key) => {
+                  if (key === 'booking_id') {
+                    return <span className="bookings-row-id">{displayBookingId(booking)}</span>;
+                  }
                   if (key === 'customer') {
-                    return (
-                      <div className="bookings-row-customer">
-                        <p className="bookings-row-customer__id">{booking.booking_id || `BK-${booking.id}`}</p>
-                        {booking.customer ? (
-                          <Link
-                            to={`/customers/${booking.customer}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="bookings-row-customer__name"
-                          >
-                            {booking.customer_name}
-                          </Link>
-                        ) : (
-                          <span className="bookings-row-customer__name bookings-row-customer__name--plain">
-                            {booking.customer_name || 'Draft — no client'}
-                          </span>
-                        )}
-                        <p className="bookings-row-customer__event">{booking.event_name || 'Draft'}</p>
-                      </div>
+                    return booking.customer ? (
+                      <Link
+                        to={`/customers/${booking.customer}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bookings-row-customer__name"
+                      >
+                        {booking.customer_name}
+                      </Link>
+                    ) : (
+                      <span className="bookings-row-customer__name bookings-row-customer__name--plain">
+                        {booking.customer_name || 'Draft — no client'}
+                      </span>
                     );
+                  }
+                  if (key === 'event_name') {
+                    return <span className="bookings-row-event">{booking.event_name || 'Draft'}</span>;
                   }
                   if (key === 'hall') {
                     return <span className="bookings-row-hall">{booking.venue_name || '—'}</span>;
@@ -1871,41 +2058,49 @@ const Bookings = () => {
 
         {/* Compact reservation workspace */}
         {(viewMode === 'create' || viewMode === 'edit' || viewMode === 'invoice') && (
-          <form className={`reservation-console${isInvoice ? ' reservation-console--invoice' : ''}`} onSubmit={handleSubmit}>
+          <form
+            ref={reservationFormRef}
+            className={`reservation-console${isInvoice ? ' reservation-console--invoice' : ''}`}
+            onSubmit={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey || event.defaultPrevented) return;
+              const target = event.target;
+              if (!(target instanceof HTMLElement)) return;
+              if (target.closest('.reservation-console__event-options')) return;
+              if (target.closest('.reservation-console__hall-grid, .reservation-console__slot-options, .reservation-console__inventory-actions')) return;
+              if (target.matches('.reservation-console__confirm, .reservation-console__hold, .reservation-console__receipt')) return;
+              const step = target.getAttribute('data-rs-step')
+                || target.closest('[data-rs-step]')?.getAttribute('data-rs-step');
+              if (!step || step === 'event-name' || step === 'client-name') return;
+              event.preventDefault();
+              advanceReservationStep(step);
+            }}
+          >
             <div className="reservation-console__main">
               <section className="reservation-console__card reservation-console__identity">
                 <div className="reservation-console__heading">
                   <h2>
                     <CalendarIcon size={13} />
                     Event &amp; Client Details
-                    <span
-                      className={`reservation-console__step-badge reservation-console__step-badge--${reservationStep}`}
-                      title={reservationStepDetails}
-                      aria-live="polite"
-                    >
-                      {reservationStepText}
-                    </span>
                   </h2>
-                  <div className={isClientKycVerified ? 'is-verified' : 'is-pending'}>
-                    <ShieldCheck size={11} /> Client KYC {isClientKycVerified ? 'Verified' : 'Pending'}
-                  </div>
                 </div>
 
                 <div className="reservation-console__event-grid">
                   <label>
-                    <span>Booking Identifier</span>
+                    <span>Booking ID</span>
                     <div className="reservation-console__auto-field">
-                      <strong>{formData.booking_id || '—'}</strong>
+                      <strong>{displayBookingId({ ...formData, id: editingId })}</strong>
                       <em>Auto</em>
                     </div>
                   </label>
                   <label>
                     <span>Booking Date</span>
-                    <input type="date" required disabled={isFormLocked} max={formData.event_date || undefined} value={formData.booking_date} onChange={(e) => setFormData({ ...formData, booking_date: e.target.value })} />
+                    <input data-rs-step="booking-date" type="date" required disabled={isFormLocked} max={formData.event_date || undefined} value={formData.booking_date} onChange={(e) => setFormData({ ...formData, booking_date: e.target.value })} />
                   </label>
                   <label>
                     <span>Event Date *</span>
                     <input
+                      data-rs-step="event-date"
                       type="date"
                       required
                       disabled={isFormLocked}
@@ -1918,6 +2113,7 @@ const Bookings = () => {
                     <span>Event Title / Occasion</span>
                     <div className="reservation-console__event-input">
                       <input
+                        data-rs-step="event-name"
                         type="text"
                         required
                         disabled={isFormLocked}
@@ -1926,15 +2122,66 @@ const Bookings = () => {
                         aria-expanded={eventOptionsOpen}
                         aria-controls="reservation-event-options"
                         aria-autocomplete="list"
+                        aria-activedescendant={
+                          eventOptionsOpen && filteredEventOptions[safeEventHighlight]
+                            ? `reservation-event-option-${safeEventHighlight}`
+                            : undefined
+                        }
                         placeholder="Select or type an event"
                         value={formData.event_name}
-                        onFocus={() => setEventOptionsOpen(true)}
+                        onFocus={() => {
+                          const match = filteredEventOptions.findIndex((name) => name === formData.event_name);
+                          setEventHighlightIndex(match >= 0 ? match : 0);
+                          setEventOptionsOpen(true);
+                        }}
                         onKeyDown={(event) => {
-                          if (event.key === 'Escape') setEventOptionsOpen(false);
-                          if (event.key === 'ArrowDown') setEventOptionsOpen(true);
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setEventOptionsOpen(false);
+                            return;
+                          }
+                          if (event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            if (!eventOptionsOpen) {
+                              setEventOptionsOpen(true);
+                              return;
+                            }
+                            setEventHighlightIndex((index) => (
+                              Math.min(index + 1, Math.max(0, filteredEventOptions.length - 1))
+                            ));
+                            return;
+                          }
+                          if (event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            setEventOptionsOpen(true);
+                            setEventHighlightIndex((index) => Math.max(index - 1, 0));
+                            return;
+                          }
+                          if (event.key === 'Home' && eventOptionsOpen) {
+                            event.preventDefault();
+                            setEventHighlightIndex(0);
+                            return;
+                          }
+                          if (event.key === 'End' && eventOptionsOpen) {
+                            event.preventDefault();
+                            setEventHighlightIndex(Math.max(0, filteredEventOptions.length - 1));
+                            return;
+                          }
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            if (eventOptionsOpen && filteredEventOptions[safeEventHighlight]) {
+                              setFormData({ ...formData, event_name: filteredEventOptions[safeEventHighlight] });
+                              setEventOptionsOpen(false);
+                              advanceReservationStep('event-name', { event_name: filteredEventOptions[safeEventHighlight] });
+                              return;
+                            }
+                            setEventOptionsOpen(false);
+                            advanceReservationStep('event-name');
+                          }
                         }}
                         onChange={(event) => {
                           setFormData({ ...formData, event_name: event.target.value });
+                          setEventHighlightIndex(0);
                           setEventOptionsOpen(true);
                         }}
                       />
@@ -1942,15 +2189,19 @@ const Bookings = () => {
                     </div>
                     {eventOptionsOpen && !isFormLocked && filteredEventOptions.length > 0 && (
                       <div className="reservation-console__event-options" id="reservation-event-options" role="listbox">
-                        {filteredEventOptions.map((name) => (
+                        {filteredEventOptions.map((name, index) => (
                           <button
                             key={name}
+                            id={`reservation-event-option-${index}`}
                             type="button"
+                            tabIndex={-1}
                             role="option"
-                            aria-selected={formData.event_name === name}
+                            aria-selected={index === safeEventHighlight}
+                            onMouseEnter={() => setEventHighlightIndex(index)}
                             onClick={() => {
                               setFormData({ ...formData, event_name: name });
                               setEventOptionsOpen(false);
+                              advanceReservationStep('event-name', { event_name: name });
                             }}
                           >
                             {name}
@@ -1963,8 +2214,9 @@ const Bookings = () => {
 
                 <div className="reservation-console__client-grid">
                   <label className={newCustomerErrors.cnic ? 'has-error' : ''}>
-                    <span>CNIC Identity <em className="reservation-console__req">*</em></span>
+                    <span>CNIC/NICOP/POC <em className="reservation-console__req">*</em></span>
                     <input
+                      data-rs-step="cnic"
                       type="text"
                       className="reservation-console__mono"
                       required
@@ -1977,8 +2229,9 @@ const Bookings = () => {
                     {newCustomerErrors.cnic && <small>{newCustomerErrors.cnic}</small>}
                   </label>
                   <label className={newCustomerErrors.phone ? 'has-error' : ''}>
-                    <span>Phone Contact <em className="reservation-console__req">*</em></span>
+                    <span>Contact <em className="reservation-console__req">*</em></span>
                     <input
+                      data-rs-step="phone"
                       type="tel"
                       required
                       disabled={isFormLocked}
@@ -1989,72 +2242,26 @@ const Bookings = () => {
                     />
                     {newCustomerErrors.phone && <small>{newCustomerErrors.phone}</small>}
                   </label>
-                  <label className={`reservation-console__client-select${newCustomerErrors.full_name ? ' has-error' : ''}`}>
+                  <label className={newCustomerErrors.full_name ? 'has-error' : ''}>
                     <span>Client Name <em className="reservation-console__req">*</em></span>
-                    <div className="reservation-console__client-name-wrap">
-                      <div className="reservation-console__client-name-field">
-                        <input
-                          type="text"
-                          required
-                          disabled={isFormLocked}
-                          placeholder="Select or type client name"
-                          value={clientNameValue}
-                          onChange={(e) => handleClientNameChange(e.target.value)}
-                          onFocus={() => setClientNameSuggestionsOpen(true)}
-                          onBlur={() => setTimeout(() => setClientNameSuggestionsOpen(false), 180)}
-                          onKeyDown={handleClientNameKeyDown}
-                          autoComplete="off"
-                          aria-expanded={clientNameSuggestionsOpen}
-                          aria-controls="reservation-client-options"
-                        />
-                        <button
-                          type="button"
-                          className="reservation-console__client-name-toggle"
-                          disabled={isFormLocked}
-                          aria-label={clientNameSuggestionsOpen ? 'Close client list' : 'Open client list'}
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => setClientNameSuggestionsOpen((open) => !open)}
-                        >
-                          <ChevronDown size={14} />
-                        </button>
-                      </div>
-                      {clientNameSuggestionsOpen && !isFormLocked && (
-                        <div className="reservation-console__client-suggestions" id="reservation-client-options" role="listbox">
-                          {clientNameSuggestions.length === 0 ? (
-                            <div className="reservation-console__client-suggestions-empty">
-                              No registered clients found
-                            </div>
-                          ) : (
-                            clientNameSuggestions.map((customer) => {
-                              const selected = String(formData.customer) === String(customer.id);
-                              return (
-                                <button
-                                  key={customer.id}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={selected}
-                                  className={selected ? 'is-selected' : ''}
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => handleSelectRegisteredClient(customer)}
-                                >
-                                  <strong>{customerDisplayName(customer)}</strong>
-                                  <span>
-                                    {customer.phone || 'No phone'}
-                                    {customer.cnic ? ` · ${formatCnic(customer.cnic)}` : ''}
-                                  </span>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <input
+                      data-rs-step="client-name"
+                      type="text"
+                      required
+                      disabled={isFormLocked}
+                      placeholder="Client name"
+                      value={clientNameValue}
+                      onChange={(e) => handleClientNameChange(e.target.value)}
+                      onKeyDown={handleClientNameKeyDown}
+                      autoComplete="off"
+                    />
                     {newCustomerErrors.full_name && <small>{newCustomerErrors.full_name}</small>}
                   </label>
                   {newCustomerMode && !isFormLocked && (
                     <label className="reservation-console__client-address-field">
                       <span>Address</span>
                       <input
+                        data-rs-step="address"
                         type="text"
                         placeholder="Street, area, city"
                         value={clientAddressValue}
@@ -2081,58 +2288,44 @@ const Bookings = () => {
                 <div className="reservation-console__venue-body">
                   <div className="reservation-console__venue-selector">
                     <div className="reservation-console__section-label">
-                      Select Hall
+                      Select Hall(s)
                       <span className="reservation-console__step-badge">
-                        {selectedHall
-                          ? `Capacity ${selectedHall.capacity || 0} · Available ${availableSeatsOnDate(selectedHall, formData.event_date, bookings, editingId, formData.slot, formData.custom_start_time, formData.custom_end_time)}`
+                        {selectedHalls.length
+                          ? `Capacity ${combinedHallCapacity || 0} · Available ${availableGuestSeats ?? 0}`
                           : 'Capacity 0'}
                       </span>
                     </div>
-                    {hallsForSelect.length > 0 && hallsForSelect.length <= 2 ? (
-                      <div className="reservation-console__hall-grid">
+                    {hallsForSelect.length > 0 ? (
+                      <div
+                        className="reservation-console__hall-grid"
+                        onKeyDown={(event) => {
+                          const buttons = [...event.currentTarget.querySelectorAll('button')];
+                          const current = buttons.indexOf(document.activeElement);
+                          if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            buttons[(current + 1) % buttons.length]?.focus();
+                          }
+                          if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            buttons[(current - 1 + buttons.length) % buttons.length]?.focus();
+                          }
+                        }}
+                      >
                         {hallsForSelect.map((hall) => {
-                          const selected = String(formData.venue) === String(hall.id);
+                          const selected = selectedVenueIds.includes(String(hall.id));
                           return (
                             <button
                               key={hall.id}
                               type="button"
                               disabled={isFormLocked}
                               className={selected ? 'is-selected' : ''}
-                              onClick={() => setFormData({
-                                ...formData,
-                                venue: selected ? '' : hall.id,
-                                rate_per_head: selected ? 1200 : (hall.price_per_day || hall.price_per_head || 1200),
-                              })}
+                              onClick={() => toggleHallSelection(hall)}
                             >
                               <strong>{hall.name}</strong>
                             </button>
                           );
                         })}
                       </div>
-                    ) : hallsForSelect.length > 2 ? (
-                      <select
-                        className="reservation-console__hall-select"
-                        aria-label="Select banquet hall"
-                        disabled={isFormLocked}
-                        value={formData.venue}
-                        onChange={(event) => {
-                          const hall = hallsForSelect.find((item) => String(item.id) === event.target.value);
-                          setFormData({
-                            ...formData,
-                            venue: event.target.value,
-                            rate_per_head: hall?.price_per_day || hall?.price_per_head || 1200,
-                          });
-                        }}
-                      >
-                        <option value="">
-                          {`Select from ${hallsForSelect.length} halls`}
-                        </option>
-                        {hallsForSelect.map((hall) => (
-                          <option key={hall.id} value={hall.id}>
-                            {hall.name}
-                          </option>
-                        ))}
-                      </select>
                     ) : (
                       <span className="reservation-console__hall-empty">
                         {formData.event_date
@@ -2148,6 +2341,8 @@ const Bookings = () => {
                       <label>
                         <input
                           type="number"
+                          id="reservation-guest-count"
+                          data-rs-step="guests"
                           min="0"
                           max={availableGuestSeats ?? undefined}
                           disabled={isPosted}
@@ -2159,6 +2354,11 @@ const Bookings = () => {
                               ? ''
                               : totalAttendance
                           }
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter') return;
+                            event.preventDefault();
+                            advanceReservationStep('guests');
+                          }}
                           onChange={(event) => {
                             let guestCount = toIntField(event.target.value);
                             if (guestCount !== '' && availableGuestSeats != null) {
@@ -2177,12 +2377,34 @@ const Bookings = () => {
 
                   <div className="reservation-console__slot">
                     <div className="reservation-console__section-label"><Timer size={12} /> Time Slot</div>
-                    <div className="reservation-console__slot-options">
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'morning' ? '' : 'morning', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
+                    <div
+                      className="reservation-console__slot-options"
+                      onKeyDown={(event) => {
+                        const buttons = [...event.currentTarget.querySelectorAll('button')];
+                        const current = buttons.indexOf(document.activeElement);
+                        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          buttons[(current + 1) % buttons.length]?.focus();
+                        }
+                        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                          event.preventDefault();
+                          buttons[(current - 1 + buttons.length) % buttons.length]?.focus();
+                        }
+                      }}
+                    >
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'morning' ? 'is-selected' : ''} onClick={() => {
+                        const turningOff = formData.slot === 'morning';
+                        setFormData(assignAvailableHall({ ...formData, slot: turningOff ? '' : 'morning', custom_start_time: '', custom_end_time: '' }, formData.event_date));
+                        if (!turningOff) advanceReservationStep('slot', { slot: 'morning' });
+                      }}>
                         <span>Morning</span>
                         <small>9am – 3pm</small>
                       </button>
-                      <button type="button" disabled={isFormLocked} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => setFormData(assignAvailableHall({ ...formData, slot: formData.slot === 'evening' ? '' : 'evening', custom_start_time: '', custom_end_time: '' }, formData.event_date))}>
+                      <button type="button" disabled={isFormLocked} className={formData.slot === 'evening' ? 'is-selected' : ''} onClick={() => {
+                        const turningOff = formData.slot === 'evening';
+                        setFormData(assignAvailableHall({ ...formData, slot: turningOff ? '' : 'evening', custom_start_time: '', custom_end_time: '' }, formData.event_date));
+                        if (!turningOff) advanceReservationStep('slot', { slot: 'evening' });
+                      }}>
                         <span>Evening</span>
                         <small>6pm – 12am</small>
                       </button>
@@ -2194,6 +2416,11 @@ const Bookings = () => {
                           custom_start_time: turningOff ? '' : formData.custom_start_time,
                           custom_end_time: turningOff ? '' : formData.custom_end_time,
                         }, formData.event_date));
+                        if (!turningOff) {
+                          window.setTimeout(() => {
+                            document.querySelector('.reservation-console__manual-time input')?.focus();
+                          }, 40);
+                        }
                       }}>
                         <span>Manual</span>
                         <small>Custom</small>
@@ -2203,11 +2430,37 @@ const Bookings = () => {
                       <div className="reservation-console__manual-time">
                         <label>
                           <span>From</span>
-                          <input type="time" required disabled={isFormLocked} value={formData.custom_start_time} onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_start_time: event.target.value }, formData.event_date))} />
+                          <input
+                            type="time"
+                            required
+                            disabled={isFormLocked}
+                            value={formData.custom_start_time}
+                            onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_start_time: event.target.value }, formData.event_date))}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              if (!formData.custom_start_time) {
+                                toast.error('Enter start time', { id: 'reservation-step-incomplete' });
+                                return;
+                              }
+                              event.currentTarget.closest('.reservation-console__manual-time')?.querySelector('input[type="time"]:last-of-type')?.focus();
+                            }}
+                          />
                         </label>
                         <label>
                           <span>To</span>
-                          <input type="time" required disabled={isFormLocked} value={formData.custom_end_time} onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_end_time: event.target.value }, formData.event_date))} />
+                          <input
+                            type="time"
+                            required
+                            disabled={isFormLocked}
+                            value={formData.custom_end_time}
+                            onChange={(event) => setFormData(assignAvailableHall({ ...formData, custom_end_time: event.target.value }, formData.event_date))}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              advanceReservationStep('slot', { slot: 'custom' });
+                            }}
+                          />
                         </label>
                       </div>
                     )}
@@ -2226,13 +2479,19 @@ const Bookings = () => {
                   </h2>
                 </div>
                 <div className="reservation-console__inventory-toolbar">
-                  <small>Allocate stock items. Tick Bill to add that item’s unit price to the booking total.</small>
                   <div className="reservation-console__inventory-actions">
                     <button
                       type="button"
+                      id="reservation-add-inventory"
                       className="reservation-console__add-inventory"
                       disabled={availableInventoryCatalog.length === 0}
-                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false }])}
+                      onClick={() => {
+                        setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false, unit_price: '' }]);
+                        window.setTimeout(() => {
+                          const selects = document.querySelectorAll('.reservation-console__inventory-field--item select');
+                          selects[selects.length - 1]?.focus();
+                        }, 40);
+                      }}
                     >
                       <Plus size={14} /> Add Item
                     </button>
@@ -2281,7 +2540,12 @@ const Bookings = () => {
                             status: 'IN_STOCK',
                           }
                         : null);
-                    const unitPrice = item ? Number(item.price_per_unit || 0) : 0;
+                    const catalogPrice = item ? Number(item.price_per_unit || 0) : 0;
+                    const unitPrice = Number(
+                      line.unit_price !== '' && line.unit_price != null
+                        ? line.unit_price
+                        : catalogPrice
+                    );
                     const quantity = Number(line.quantity_used || 0);
                     const billAmount = item && Number.isFinite(quantity) && quantity > 0
                       ? unitPrice * quantity
@@ -2321,14 +2585,26 @@ const Bookings = () => {
                             disabled={Boolean(line.id)}
                             value={line.inventory_item}
                             onChange={(e) => {
+                              const selectedItem = availableInventoryCatalog.find(
+                                (candidate) => String(candidate.id) === String(e.target.value)
+                              );
                               const next = [...inventoryLines];
                               next[index] = {
                                 ...next[index],
                                 inventory_item: e.target.value,
                                 quantity_used: 1,
                                 include_in_bill: false,
+                                unit_price: selectedItem?.price_per_unit ?? '',
                               };
                               setInventoryLines(next);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              event.currentTarget
+                                .closest('.reservation-console__inventory-line')
+                                ?.querySelector('.reservation-console__inventory-field--price input')
+                                ?.focus();
                             }}
                           >
                             <option value="">Select item</option>
@@ -2344,12 +2620,36 @@ const Bookings = () => {
                           </select>
                         </label>
 
-                        <div className="reservation-console__inventory-field">
+                        <label className="reservation-console__inventory-field reservation-console__inventory-field--price">
                           <span>Unit Price</span>
-                          <div className="reservation-console__inventory-readout">
-                            {item ? `PKR ${unitPrice.toLocaleString()}` : '—'}
-                          </div>
-                        </div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            disabled={!item}
+                            placeholder="0"
+                            aria-label={`Unit price for ${item?.name || 'inventory item'}`}
+                            value={displayNumField(line.unit_price !== '' && line.unit_price != null ? line.unit_price : (item ? catalogPrice : ''))}
+                            onChange={(e) => {
+                              const next = [...inventoryLines];
+                              next[index] = { ...next[index], unit_price: toFloatField(e.target.value) };
+                              setInventoryLines(next);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                                event.preventDefault();
+                                return;
+                              }
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              event.currentTarget
+                                .closest('.reservation-console__inventory-line')
+                                ?.querySelector('.reservation-console__inventory-field--qty input')
+                                ?.focus();
+                            }}
+                            onWheel={(e) => e.currentTarget.blur()}
+                          />
+                        </label>
 
                         <label className="reservation-console__inventory-field reservation-console__inventory-field--qty">
                           <span>Qty</span>
@@ -2364,11 +2664,16 @@ const Bookings = () => {
                               next[index] = { ...next[index], quantity_used: e.target.value };
                               setInventoryLines(next);
                             }}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              document.getElementById('reservation-add-inventory')?.focus();
+                            }}
                           />
                         </label>
 
                         <div className="reservation-console__inventory-field reservation-console__inventory-field--amount">
-                          <span>Bill Amount</span>
+                          <span>Total</span>
                           <div className="reservation-console__inventory-readout reservation-console__inventory-readout--amount">
                             {item ? `PKR ${billAmount.toLocaleString()}` : '—'}
                           </div>
@@ -2391,7 +2696,6 @@ const Bookings = () => {
                     <div className="reservation-console__manual-inventory-head">
                       <div>
                         <strong>Create Inventory Item</strong>
-                        <small>Saved with unlimited stock. Set Qty on the booking line after adding.</small>
                       </div>
                       <button type="button" aria-label="Close manual inventory form" onClick={() => setShowManualInventory(false)}>×</button>
                     </div>
@@ -2407,7 +2711,6 @@ const Bookings = () => {
                               setManualInventory({
                                 ...manualInventory,
                                 name: '',
-                                price_per_unit: '',
                                 isNew: true,
                               });
                               return;
@@ -2416,7 +2719,6 @@ const Bookings = () => {
                               setManualInventory({
                                 ...manualInventory,
                                 name: '',
-                                price_per_unit: '',
                                 isNew: false,
                               });
                               return;
@@ -2425,7 +2727,6 @@ const Bookings = () => {
                             setManualInventory({
                               ...manualInventory,
                               name: existing?.name || '',
-                              price_per_unit: existing ? String(existing.price_per_unit || 0) : '',
                               isNew: false,
                             });
                           }}
@@ -2450,10 +2751,6 @@ const Bookings = () => {
                           />
                         </label>
                       )}
-                      <label>
-                        <span>Price</span>
-                        <input type="number" min="0" step="0.01" readOnly={Boolean(manualInventoryExistingItem)} placeholder="0.00" value={manualInventory.price_per_unit} onChange={(event) => setManualInventory({ ...manualInventory, price_per_unit: event.target.value })} />
-                      </label>
                       <button type="button" disabled={savingManualInventory} onClick={handleCreateManualInventory}>
                         {savingManualInventory
                           ? 'Adding…'
@@ -2469,7 +2766,7 @@ const Bookings = () => {
               {galleryHalls.length > 0 && (
                 <div className="reservation-console__gallery" aria-label="Available hall photos">
                   {galleryHalls.map((hall) => (
-                  <figure key={hall.id} className={String(hall.id) === String(formData.venue) ? 'is-selected' : ''}>
+                  <figure key={hall.id} className={selectedVenueIds.includes(String(hall.id)) ? 'is-selected' : ''}>
                     <img src={resolveMediaUrl(hall.image)} alt={`${hall.name} hall`} />
                     <figcaption>
                       <strong>{hall.name}</strong>
@@ -2483,14 +2780,14 @@ const Bookings = () => {
 
             <aside className="reservation-console__summary">
               <header>
-                <div><h2>Booking Summary</h2><p>REF: {formData.booking_id || createBookingRefId()}</p></div>
+                <div><h2>Booking Summary</h2></div>
               </header>
               <div className="reservation-console__summary-lines">
                 {summaryVisibility.guests && (
                   <div><span>Guaranteed Guests</span><b>{totalAttendance} PAX</b></div>
                 )}
-                {summaryVisibility.ratePerHead && selectedHall && (
-                  <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isFormLocked} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} /></label></div>
+                {summaryVisibility.ratePerHead && selectedHalls.length > 0 && (
+                  <div><span>Rate / Head</span><label><input type="number" min="0" disabled={isFormLocked} value={displayNumField(formData.rate_per_head)} onChange={(e) => setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) })} onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }} onWheel={(e) => e.currentTarget.blur()} /></label></div>
                 )}
                 {summaryVisibility.venue && (
                   <div><span>Venue</span><b>{subtotal.toLocaleString()}</b></div>
@@ -2521,13 +2818,15 @@ const Bookings = () => {
                 </label>
               )}
               <div className="reservation-console__grand-total">
-                <div><span>Grand Total</span><em>Net Payable</em></div>
-                <strong>PKR {grandTotal.toLocaleString()}</strong>
+                <div>
+                  <span>Grand Total</span>
+                  <strong>PKR {grandTotal.toLocaleString()}</strong>
+                </div>
                 <small>Inclusive Taxes</small>
               </div>
               <label className="reservation-console__advance">
                 <span>{isInvoice ? 'Already Received' : 'Advance Amount Received'}</span>
-                <div>PKR <input type="number" min="0" max={grandTotal || undefined} disabled={isFormLocked} value={displayNumField(formData.advance_paid)} onChange={(e) => setFormData({ ...formData, advance_paid: toFloatField(e.target.value) })} /></div>
+                <div>PKR <input data-rs-step="advance" type="number" min="0" max={grandTotal || undefined} disabled={isFormLocked} value={displayNumField(formData.advance_paid)} onChange={(e) => setFormData({ ...formData, advance_paid: toFloatField(e.target.value) })} onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }} onWheel={(e) => e.currentTarget.blur()} /></div>
               </label>
               {isInvoice && !isPosted && (
                 <label className="reservation-console__advance reservation-console__advance--collect">
@@ -2560,7 +2859,7 @@ const Bookings = () => {
               )}
               {bookingError && <div className="reservation-console__error">{bookingError}</div>}
               {!isPosted && (
-                <button className="reservation-console__confirm" type="submit" disabled={isSubmitting || inventoryLoading}>
+                <button className="reservation-console__confirm" type="button" data-rs-step="confirm" disabled={isSubmitting || inventoryLoading} onClick={handleSubmit}>
                   {isSubmitting ? 'Saving…' : inventoryLoading ? 'Loading inventory…' : isInvoice ? 'Confirm Invoice' : 'Confirm Booking'}
                 </button>
               )}
@@ -2653,7 +2952,7 @@ const Bookings = () => {
                   <div className="premium-card form-grid-2 form-grid-2--gap-24 reservation-essentials-grid" style={{ padding: '28px' }}>
                     <div className="input-group">
                       <label>Booking ID</label>
-                      <input type="text" readOnly value={formData.booking_id || 'BK-2026-AUTO'} style={{ backgroundColor: 'var(--surface-muted)', color: 'var(--text-dim)', fontWeight: 'bold', fontFamily: 'monospace' }} />
+                      <input type="text" readOnly value={displayBookingId({ ...formData, id: editingId }) || 'Evnt-YY••••'} style={{ backgroundColor: 'var(--surface-muted)', color: 'var(--text-dim)', fontWeight: 'bold', fontFamily: 'monospace' }} />
                     </div>
                     <div className="input-group">
                       <label>Booking Date</label>
@@ -2833,19 +3132,13 @@ const Bookings = () => {
                             <span style={{ fontSize: '12px', color: 'var(--text-dim)', padding: '8px 12px' }}>No seats left in any hall on this date.</span>
                           )}
                           {hallsForSelect.map(h => {
-                            const isSel = formData.venue !== '' && String(formData.venue) === String(h.id);
+                            const isSel = selectedVenueIds.includes(String(h.id));
                             return (
                               <button
                                 key={h.id}
                                 type="button"
                                 disabled={isEdit}
-                                onClick={() => {
-                                  if (isSel) {
-                                    setFormData({ ...formData, venue: '', rate_per_head: 1200 });
-                                  } else {
-                                    setFormData({ ...formData, venue: h.id, rate_per_head: h.price_per_day || h.price_per_head || 1200 });
-                                  }
-                                }}
+                                onClick={() => toggleHallSelection(h)}
                                 style={{
                                   flex: 1,
                                   fontSize: '12px',
@@ -2945,10 +3238,9 @@ const Bookings = () => {
                         <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', tracking: '0.05em', color: 'var(--text-muted)' }}>Total Attendance</span>
                         <div style={{ textAlign: 'right' }}>
                           <span style={{ fontSize: '24px', fontWeight: '900', color: 'var(--primary)' }}>{totalAttendance}</span>
-                          {(() => {
-                            const sel = halls.find(h => String(h.id) === String(formData.venue));
-                            return sel ? <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: '500' }}>(Max Limit: {sel.capacity})</p> : null;
-                          })()}
+                          {selectedHalls.length > 0 ? (
+                            <p style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: '500' }}>(Max Limit: {combinedHallCapacity})</p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -3060,7 +3352,7 @@ const Bookings = () => {
                     <button
                       type="button"
                       className="btn-secondary"
-                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false }])}
+                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false, unit_price: '' }])}
                       style={{ alignSelf: 'flex-start' }}
                     >
                       + Add inventory item

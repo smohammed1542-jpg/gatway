@@ -59,7 +59,7 @@ class TenantAdmin(AdminOnlyAdminMixin, admin.ModelAdmin):
 @admin.register(UserSettings)
 class UserSettingsAdmin(AdminOnlyAdminMixin, admin.ModelAdmin):
     list_display = (
-        'user', 'theme', 'language', 'timezone',
+        'user', 'theme', 'language', 'timezone', 'show_hijri_calendar',
         'notify_new_bookings', 'notify_payments', 'sms_to_customers',
     )
     list_filter = ('theme', 'language', 'notify_new_bookings', 'notify_payments')

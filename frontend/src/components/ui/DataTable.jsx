@@ -148,14 +148,35 @@ export default function DataTable({
   getGroupSortValue,
   toolbarStart = null,
   toolbarEnd = null,
+  persistColumnsKey = '',
+  isRowHidden,
+  getRowClassName,
 }) {
   const [page, setPage] = useState(0);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
-  const [hidden, setHidden] = useState(() => new Set());
+  const [hidden, setHidden] = useState(() => {
+    if (!persistColumnsKey || typeof window === 'undefined') return new Set();
+    try {
+      const saved = JSON.parse(localStorage.getItem(`gateway-ui:table-cols:${persistColumnsKey}`) || '[]');
+      return new Set(Array.isArray(saved) ? saved : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [chooserOpen, setChooserOpen] = useState(false);
   const chooserRef = useRef(null);
+
+  useEffect(() => {
+    if (!persistColumnsKey) return undefined;
+    try {
+      localStorage.setItem(`gateway-ui:table-cols:${persistColumnsKey}`, JSON.stringify([...hidden]));
+    } catch {
+      // Column visibility still works for this session.
+    }
+    return undefined;
+  }, [persistColumnsKey, hidden]);
 
   const visibleColumns = useMemo(
     () => columns.filter((col) => !hidden.has(col.key)),
@@ -182,19 +203,23 @@ export default function DataTable({
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(row);
     }
-    const sections = Array.from(map.entries()).map(([key, rows]) => ({ key, rows }));
+    const sections = Array.from(map.entries()).map(([key, rows]) => ({
+      key,
+      allRows: rows,
+      rows: rows.filter((row) => !isRowHidden?.(row)),
+    }));
     sections.sort((a, b) => {
-      const av = getGroupSortValue ? getGroupSortValue(a.key, a.rows) : a.key;
-      const bv = getGroupSortValue ? getGroupSortValue(b.key, b.rows) : b.key;
+      const av = getGroupSortValue ? getGroupSortValue(a.key, a.allRows) : a.key;
+      const bv = getGroupSortValue ? getGroupSortValue(b.key, b.allRows) : b.key;
       // Newest group keys first (e.g. latest booking day on top)
       return compareValues(bv, av);
     });
     return sections;
-  }, [sorted, groupBy, getGroupSortValue]);
+  }, [sorted, groupBy, getGroupSortValue, isRowHidden]);
 
   const flatForPaging = groupedSections
     ? groupedSections.flatMap((section) => section.rows)
-    : sorted;
+    : sorted.filter((row) => !isRowHidden?.(row));
 
   const effectivePageSize = pageSize === 0 ? Math.max(flatForPaging.length, 1) : pageSize;
   const totalPages = Math.max(1, Math.ceil(flatForPaging.length / effectivePageSize));
@@ -212,7 +237,7 @@ export default function DataTable({
         ...section,
         rows: section.rows.filter((row) => pageIds.has(String(row.id ?? row.key))),
       }))
-      .filter((section) => section.rows.length > 0);
+      .filter((section) => (section.allRows || section.rows).length > 0);
   }, [groupedSections, slice, pageSize]);
 
   useEffect(() => {
@@ -252,12 +277,23 @@ export default function DataTable({
   const renderDataRow = (row) => {
     const rowId = row.id ?? row.key;
     const selected = selectedId != null && String(selectedId) === String(rowId);
+    const openRow = onRowClick ? () => onRowClick(row) : undefined;
     return (
       <tr
         key={rowId}
-        onClick={onRowClick ? () => onRowClick(row) : undefined}
-        className={selected ? 'erp-table__row--selected' : undefined}
-        style={onRowClick ? { cursor: 'pointer' } : undefined}
+        tabIndex={openRow ? 0 : undefined}
+        onClick={openRow}
+        onKeyDown={openRow ? (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openRow();
+          }
+        } : undefined}
+        className={[
+          selected ? 'erp-table__row--selected' : '',
+          getRowClassName?.(row) || '',
+        ].filter(Boolean).join(' ') || undefined}
+        style={openRow ? { cursor: 'pointer' } : undefined}
       >
         {visibleColumns.map((col) => (
           <td key={col.key}>{renderCell(row, col.key)}</td>
@@ -350,7 +386,14 @@ export default function DataTable({
                     key={col.key}
                     style={col.width ? { width: col.width } : undefined}
                     className={canSort ? 'erp-table__th--sort' : undefined}
+                    tabIndex={canSort ? 0 : undefined}
                     onClick={() => toggleSort(col.key, col.sortable)}
+                    onKeyDown={canSort ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleSort(col.key, col.sortable);
+                      }
+                    } : undefined}
                     aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
                     <span className="erp-table__th-label">
@@ -370,7 +413,7 @@ export default function DataTable({
                     <tr className="erp-table__group-row">
                       <td colSpan={colSpan}>
                         {renderGroupHeader
-                          ? renderGroupHeader(section.key, section.rows)
+                          ? renderGroupHeader(section.key, section.allRows || section.rows, section.rows)
                           : section.key}
                       </td>
                     </tr>

@@ -20,13 +20,18 @@ class CustomerViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelView
     serializer_class = CustomerSerializer
     permission_classes = [IsCustomerWritable, IsTenantOwner]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['full_name', 'first_name', 'last_name', 'cnic', 'email', 'phone']
+    search_fields = ['full_name', 'first_name', 'last_name', 'cnic', 'email', 'phone', 'customer_code']
     ordering_fields = ['created_at', 'last_name']
 
     def get_queryset(self):
         qs = super().get_queryset()
         if self.action != 'list':
             return qs
+        include_archived = (self.request.query_params.get('include_archived') or '').lower() in (
+            '1', 'true', 'yes',
+        )
+        if not include_archived:
+            qs = qs.filter(is_archived=False)
         list_status = (self.request.query_params.get('list_status') or '').strip().upper()
         if list_status in {'NORMAL', 'WHITELISTED', 'BLOCKLISTED'}:
             qs = qs.filter(list_status=list_status)
@@ -204,6 +209,7 @@ class CustomerViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelView
             'bookings': bookings_data,
             'bookings_count': len(bookings_data),
             'total_outstanding': float(outstanding),
+            'has_monetary_transactions': customer.has_monetary_transactions(),
         })
 
     @action(detail=True, methods=['post'], url_path='set-list-status')
@@ -229,4 +235,21 @@ class CustomerViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelView
             'list_status', 'list_status_note',
             'list_status_updated_at', 'list_status_updated_by',
         ])
+        return Response(CustomerSerializer(customer, context={'request': request}).data)
+
+    def destroy(self, request, *args, **kwargs):
+        customer = self.get_object()
+        if customer.has_monetary_transactions():
+            return Response(
+                {'detail': 'Cannot delete a customer with monetary transactions. Archive instead.'},
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'], url_path='archive')
+    def archive(self, request, pk=None):
+        customer = self.get_object()
+        if not customer.is_archived:
+            customer.is_archived = True
+            customer.save(update_fields=['is_archived', 'updated_at'])
         return Response(CustomerSerializer(customer, context={'request': request}).data)

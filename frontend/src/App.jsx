@@ -18,7 +18,6 @@ import InventoryDetail from './pages/InventoryDetail';
 import DecorationPackages from './pages/DecorationPackages';
 import DecorationPackageDetail from './pages/DecorationPackageDetail';
 import Reports from './pages/Reports';
-import JournalEntries from './pages/JournalEntries';
 import AccountingDashboard from './pages/accounting/AccountingDashboard';
 import ChartOfAccounts from './pages/accounting/ChartOfAccounts';
 import AccountingReportsHub from './pages/accounting/AccountingReportsHub';
@@ -127,7 +126,6 @@ function App() {
           <Route path="/customers" element={hallPage(HALL_PAGE_KEYS.CUSTOMERS, <CustomerManagement />)} />
           <Route path="/customers/:customerId" element={hallPage(HALL_PAGE_KEYS.CUSTOMERS, <CustomerManagement />)} />
           <Route path="/payments" element={hallPage(HALL_PAGE_KEYS.PAYMENTS, <ManagerRoute><Payments /></ManagerRoute>)} />
-          <Route path="/journal-entries" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><JournalEntries /></ManagerRoute>)} />
           <Route path="/trial-balance" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><Navigate to="/accounting/trial-balance" replace /></ManagerRoute>)} />
           <Route path="/accounting" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><AccountingDashboard /></ManagerRoute>)} />
           <Route path="/accounting/accounts" element={hallPage(HALL_PAGE_KEYS.DASHBOARD, <ManagerRoute><ChartOfAccounts /></ManagerRoute>)} />
@@ -191,7 +189,6 @@ function App() {
           <Route path="/gh/payments/new" element={ghPage(GH_PAGE_KEYS.PAYMENTS, <ManagerRoute><PaymentFormPage /></ManagerRoute>)} />
           <Route path="/gh/payments/:paymentId/edit" element={ghPage(GH_PAGE_KEYS.PAYMENTS, <ManagerRoute><PaymentFormPage /></ManagerRoute>)} />
           <Route path="/gh/payments" element={ghPage(GH_PAGE_KEYS.PAYMENTS, <ManagerRoute><GuestHousePayments /></ManagerRoute>)} />
-          <Route path="/gh/journal-entries" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><JournalEntries /></ManagerRoute>)} />
           <Route path="/gh/trial-balance" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><Navigate to="/gh/accounting/trial-balance" replace /></ManagerRoute>)} />
           <Route path="/gh/accounting" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><AccountingDashboard /></ManagerRoute>)} />
           <Route path="/gh/accounting/accounts" element={ghPage(GH_PAGE_KEYS.DASHBOARD, <ManagerRoute><ChartOfAccounts /></ManagerRoute>)} />

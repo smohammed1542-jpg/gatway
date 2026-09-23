@@ -5,7 +5,7 @@ from venues.models import Venue
 from django.conf import settings
 from django.utils import timezone
 import datetime
-import random
+from .codes import allocate_event_booking_id
 
 class Booking(models.Model):
     STATUS_CHOICES = (
@@ -43,6 +43,11 @@ class Booking(models.Model):
         related_name='bookings',
         null=True,
         blank=True,
+    )
+    additional_venues = models.ManyToManyField(
+        Venue,
+        blank=True,
+        related_name='extra_bookings',
     )
 
     event_name = models.CharField(max_length=255, blank=True, default='Draft')
@@ -131,11 +136,8 @@ class Booking(models.Model):
     def save(self, *args, **kwargs):
         from .pricing import apply_booking_totals
 
-        # Auto generate booking_id if not present
         if not self.booking_id:
-            today_str = datetime.date.today().strftime('%Y')
-            random_num = random.randint(1000, 9999)
-            self.booking_id = f"BK-{today_str}-{random_num}"
+            self.booking_id = allocate_event_booking_id()
 
         apply_booking_totals(self)
 
@@ -177,6 +179,22 @@ class Booking(models.Model):
         self.end_date = self._aware_datetime(self.end_date)
 
         super().save(*args, **kwargs)
+
+    def hall_list(self):
+        halls = []
+        seen = set()
+        if self.venue_id:
+            halls.append(self.venue)
+            seen.add(self.venue_id)
+        if self.pk:
+            for hall in self.additional_venues.all():
+                if hall.id not in seen:
+                    halls.append(hall)
+                    seen.add(hall.id)
+        return halls
+
+    def hall_ids(self):
+        return [hall.id for hall in self.hall_list()]
 
     def __str__(self):
         if self.customer_id:

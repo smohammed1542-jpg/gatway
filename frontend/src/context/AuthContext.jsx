@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getMe, login as loginApi, updateMe } from '../api/auth';
 import { getUserSettings } from '../api/core';
+import { setShowHijriCalendar } from '../hooks/useShowHijriCalendar';
 import {
   clearAuthSession,
   getAccessToken,
@@ -15,6 +16,9 @@ const syncThemeFromServer = async () => {
     if (prefs?.theme === 'dark' || prefs?.theme === 'light') {
       localStorage.setItem('theme', prefs.theme);
       window.dispatchEvent(new CustomEvent('hallora-theme', { detail: prefs.theme }));
+    }
+    if (typeof prefs?.show_hijri_calendar === 'boolean') {
+      setShowHijriCalendar(prefs.show_hijri_calendar);
     }
   } catch {
     /* settings optional */

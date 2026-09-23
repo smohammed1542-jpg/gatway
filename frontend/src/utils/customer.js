@@ -31,6 +31,12 @@ export const customerDisplayName = (customer) => {
   return `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
 };
 
+export const customerCode = (customer) => {
+  const raw = customer?.customer_code
+    || (customer?.id ? String(customer.id).padStart(5, '0') : '');
+  return String(raw).replace(/^cust-/i, '');
+};
+
 export const customerInitials = (customer) => {
   const name = customerDisplayName(customer);
   const parts = name.split(/\s+/).filter(Boolean);

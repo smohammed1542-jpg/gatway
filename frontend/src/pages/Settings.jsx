@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import { getTenant, updateTenant, getUserSettings, updateUserSettings } from '../api/core';
 import toast from 'react-hot-toast';
 import { useTheme } from '../context/ThemeContext';
+import { useShowHijriCalendar } from '../hooks/useShowHijriCalendar';
 import ThemeToggle from '../components/ThemeToggle';
 import { useAppType } from '../hooks/useAppType';
 import { usePermissions } from '../hooks/usePermissions';
@@ -115,6 +116,7 @@ const TAB_FROM_PARAM = {
 
 const Settings = () => {
   const { theme, setThemeMode } = useTheme();
+  const [, setShowHijriCalendarPref] = useShowHijriCalendar();
   const { refreshUser: syncAuthUser } = useAuth();
   const { isMarriageHall, isGuestHouse } = useAppType();
   const { isAdmin } = usePermissions();
@@ -162,6 +164,7 @@ const Settings = () => {
     timezone: 'Asia/Karachi',
     language: 'en',
     theme: 'light',
+    show_hijri_calendar: true,
   });
 
   const loadSettings = async () => {
@@ -207,12 +210,15 @@ const Settings = () => {
           whatsapp_to_customers: prefsRes.whatsapp_to_customers ?? false,
         });
         const savedTheme = prefsRes.theme || 'light';
+        const showHijri = prefsRes.show_hijri_calendar !== false;
         setSystemSettings({
           timezone: prefsRes.timezone || 'Asia/Karachi',
           language: prefsRes.language || 'en',
           theme: savedTheme,
+          show_hijri_calendar: showHijri,
         });
         setThemeMode(savedTheme);
+        setShowHijriCalendarPref(showHijri);
       }
     } catch (err) {
       console.error('Failed to fetch settings data:', err);
@@ -401,6 +407,7 @@ const Settings = () => {
     setIsSaving(true);
     try {
       await updateUserSettings({ ...systemSettings, theme });
+      setShowHijriCalendarPref(systemSettings.show_hijri_calendar !== false);
       toast.success('System preferences saved.');
     } catch (err) {
       toast.error(parseApiError(err));
@@ -990,6 +997,24 @@ const Settings = () => {
                       <option value="light">Light theme</option>
                       <option value="dark">Dark theme</option>
                     </select>
+                  </div>
+                </InputGroup>
+                <InputGroup
+                  label="Arabic calendar"
+                  description="Show Hijri dates next to Gregorian dates on booking calendars."
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                    <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+                      {systemSettings.show_hijri_calendar !== false ? 'Visible on calendars' : 'Hidden on calendars'}
+                    </span>
+                    <Toggle
+                      active={systemSettings.show_hijri_calendar !== false}
+                      onClick={() => {
+                        const next = systemSettings.show_hijri_calendar === false;
+                        setSystemSettings((s) => ({ ...s, show_hijri_calendar: next }));
+                        setShowHijriCalendarPref(next);
+                      }}
+                    />
                   </div>
                 </InputGroup>
                 <InputGroup label="Interface Language">

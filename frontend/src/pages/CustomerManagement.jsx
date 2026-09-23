@@ -7,20 +7,23 @@ import {
   Mail,
   Phone,
   Edit2,
+  Archive,
   Trash2,
   X,
   MapPin,
-  ChevronRight,
   FileText,
+  ChevronLeft,
 } from 'lucide-react';
 import client from '../api/client';
 import toast from 'react-hot-toast';
-import { customerDisplayName, buildCustomerPayload } from '../utils/customer';
+import { customerDisplayName, customerCode, buildCustomerPayload } from '../utils/customer';
 import { cnicDigits } from '../utils/cnicScanner';
 import {
   formatCollectDue,
+  formatRs,
   bookingCollectDue,
   hasCollectDue,
+  parseAmount,
 } from '../utils/currency';
 import { usePermissions } from '../hooks/usePermissions';
 import DataTable from '../components/ui/DataTable';
@@ -82,6 +85,47 @@ function uniqueCustomers(list) {
   });
 }
 
+function customerRecordIds(customer, fallbackId) {
+  if (customer?._ids?.length) return customer._ids;
+  if (customer?.id) return [customer.id];
+  return fallbackId ? [fallbackId] : [];
+}
+
+function formatClock(value) {
+  const raw = String(value || '').slice(0, 8);
+  if (!raw) return '';
+  const [hStr, mStr] = raw.split(':');
+  const hour = Number(hStr);
+  const minute = Number(mStr || 0);
+  if (!Number.isFinite(hour)) return raw;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = ((hour + 11) % 12) + 1;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+}
+
+function bookingTimeLabel(booking) {
+  const slot = String(booking.slot || '').toLowerCase();
+  if (slot === 'morning') return '9am – 3pm';
+  if (slot === 'evening') return '6pm – 12am';
+  if (slot === 'custom') {
+    const start = formatClock(booking.custom_start_time);
+    const end = formatClock(booking.custom_end_time);
+    if (start && end) return `${start} – ${end}`;
+    return 'Custom';
+  }
+  return booking.slot || '—';
+}
+
+function bookingEventId(booking) {
+  return booking.booking_id || (booking.id != null ? `BK-${booking.id}` : '—');
+}
+
+function bookingHasMoney(booking) {
+  return parseAmount(booking.advance_paid) > 0
+    || parseAmount(booking.total_price) > 0
+    || parseAmount(booking.remaining_balance) > 0;
+}
+
 function mergeSummaries(results, preferredId) {
   const bookingsById = new Map();
   let outstanding = 0;
@@ -99,11 +143,14 @@ function mergeSummaries(results, preferredId) {
   const bookings = [...bookingsById.values()].sort((a, b) => (
     String(b.event_date || '').localeCompare(String(a.event_date || ''))
   ));
+  const hasMoney = results.some((data) => data?.has_monetary_transactions)
+    || bookings.some(bookingHasMoney);
   return {
     customer,
     bookings,
     bookings_count: bookings.length,
     total_outstanding: outstanding,
+    has_monetary_transactions: hasMoney,
   };
 }
 
@@ -118,6 +165,11 @@ const CustomerManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [eventDateFrom, setEventDateFrom] = useState('');
+  const [eventDateTo, setEventDateTo] = useState('');
+  const [eventType, setEventType] = useState('');
+  const [eventVenue, setEventVenue] = useState('');
+  const [eventBill, setEventBill] = useState('all');
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -129,7 +181,10 @@ const CustomerManagement = () => {
     address: '',
   });
 
-  const uniqueList = useMemo(() => uniqueCustomers(customers), [customers]);
+  const uniqueList = useMemo(
+    () => uniqueCustomers(customers).filter((row) => !row.is_archived),
+    [customers],
+  );
 
   const fetchCustomers = async () => {
     setIsLoading(true);
@@ -204,6 +259,14 @@ const CustomerManagement = () => {
     fetchSummary(selectedId, uniqueList);
   }, [selectedId, fetchSummary, uniqueList, isLoading]);
 
+  useEffect(() => {
+    setEventDateFrom('');
+    setEventDateTo('');
+    setEventType('');
+    setEventVenue('');
+    setEventBill('all');
+  }, [selectedId]);
+
   const filteredCustomers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return uniqueList;
@@ -211,6 +274,8 @@ const CustomerManagement = () => {
       const name = customerDisplayName(c).toLowerCase();
       return (
         name.includes(q) ||
+        customerCode(c).toLowerCase().includes(q) ||
+        String(c.customer_code || '').toLowerCase().includes(q) ||
         (c.phone || '').includes(q) ||
         (c.email || '').toLowerCase().includes(q) ||
         (c.cnic || '').includes(q)
@@ -223,6 +288,7 @@ const CustomerManagement = () => {
   };
 
   useEscapeClose(showFormModal, () => setShowFormModal(false));
+  useEscapeClose(Boolean(selectedId) && !showFormModal, () => navigate('/customers'));
 
   const handleOpenFormModal = (customer = null, e) => {
     e?.stopPropagation();
@@ -285,17 +351,31 @@ const CustomerManagement = () => {
     }
   };
 
-  const handleDelete = async (id, e) => {
-    e?.stopPropagation();
+  const handleArchive = async (customer) => {
     if (!canManage) return;
-    if (!window.confirm('Delete this customer?')) return;
+    if (!window.confirm('Archive this customer? They will be hidden from the list.')) return;
+    const ids = customerRecordIds(customer, selectedId);
     try {
-      await client.delete(`/customers/${id}/`);
-      toast.success('Customer deleted');
-      if (selectedId === id) navigate('/customers');
+      await Promise.all(ids.map((id) => client.post(`/customers/${id}/archive/`)));
+      toast.success('Customer archived');
+      navigate('/customers');
       fetchCustomers();
     } catch {
-      toast.error('Failed to delete');
+      toast.error('Failed to archive customer');
+    }
+  };
+
+  const handleDelete = async (customer) => {
+    if (!canManage) return;
+    if (!window.confirm('Delete this customer permanently? This cannot be undone.')) return;
+    const ids = customerRecordIds(customer, selectedId);
+    try {
+      await Promise.all(ids.map((id) => client.delete(`/customers/${id}/`)));
+      toast.success('Customer deleted');
+      navigate('/customers');
+      fetchCustomers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete customer');
     }
   };
 
@@ -306,182 +386,274 @@ const CustomerManagement = () => {
   const selectedCustomer = summary?.customer
     || uniqueList.find((c) => c.id === selectedId || (c._ids || []).includes(selectedId));
 
+  const hasMonetaryTransactions = Boolean(summary?.has_monetary_transactions)
+    || (summary?.bookings || []).some(bookingHasMoney);
+
+  const eventTypeOptions = useMemo(() => {
+    const names = new Set();
+    (summary?.bookings || []).forEach((booking) => {
+      const name = String(booking.event_name || '').trim();
+      if (name) names.add(name);
+    });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [summary?.bookings]);
+
+  const eventVenueOptions = useMemo(() => {
+    const names = new Set();
+    (summary?.bookings || []).forEach((booking) => {
+      const name = String(booking.venue_name || '').trim();
+      if (name && name !== '—') names.add(name);
+    });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [summary?.bookings]);
+
+  const filteredEvents = useMemo(() => {
+    return (summary?.bookings || []).filter((booking) => {
+      const date = String(booking.event_date || '');
+      if (eventDateFrom && date && date < eventDateFrom) return false;
+      if (eventDateTo && date && date > eventDateTo) return false;
+      if (eventDateFrom && !date) return false;
+      if (eventType && String(booking.event_name || '').trim() !== eventType) return false;
+      if (eventVenue && String(booking.venue_name || '').trim() !== eventVenue) return false;
+      const due = bookingCollectDue(booking);
+      const settled = parseAmount(booking.advance_paid);
+      if (eventBill === 'due' && due <= 0) return false;
+      if (eventBill === 'settled' && (due > 0 || settled <= 0)) return false;
+      return true;
+    });
+  }, [summary?.bookings, eventDateFrom, eventDateTo, eventType, eventVenue, eventBill]);
+
   return (
     <>
       <div className="animate-fade-in">
-        <div className="page-header">
-          <div>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click a customer to view profile, events, and balance due.</p>
-          </div>
-        </div>
-
-        <div className={`split-layout ${selectedId ? 'split-layout--customers' : ''}`}>
-          <div>
-            <div className="card customers-table-card" style={{ padding: 0, overflow: 'hidden' }}>
-              {isLoading ? (
-                <AppLoader inline message="Loading customers…" />
-              ) : (
-                <DataTable
-                  variant="erp"
-                  sortable
-                  showColumnChooser
-                  pageSize={25}
-                  selectedId={selectedId}
-                  emptyTitle="No customers found"
-                  emptyDescription="Try another search or add a customer."
-                  toolbarStart={(
-                    <SearchInput
-                      id="customers-list-search"
-                      className="customers-table-search"
-                      placeholder="Search name, phone, CNIC..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      aria-keyshortcuts="/"
-                    />
-                  )}
-                  toolbarEnd={canManage ? (
-                    <button type="button" className="btn-primary customers-toolbar-add" onClick={() => handleOpenFormModal()}>
-                      <UserPlus size={16} /> Add Customer
-                    </button>
-                  ) : null}
-                  columns={[
-                    { key: 'name', label: 'Customer' },
-                    { key: 'phone', label: 'Phone', width: '130px' },
-                    { key: 'cnic', label: 'CNIC', width: '140px' },
-                    { key: 'outstanding_balance', label: 'Due', width: '110px' },
-                  ]}
-                  data={filteredCustomers}
-                  onRowClick={handleSelectCustomer}
-                  getSortValue={(row, key) => {
-                    if (key === 'name') return customerDisplayName(row);
-                    if (key === 'outstanding_balance') return Number(row.outstanding_balance || 0);
-                    return row[key];
-                  }}
-                  rowActions={(customer) => [
-                    { label: 'Open', icon: <ChevronRight size={14} />, onClick: () => handleSelectCustomer(customer) },
-                    ...(canManage ? [{ label: 'Edit', icon: <Edit2 size={14} />, onClick: () => handleOpenFormModal(customer) }] : []),
-                    ...(canManage ? [{ label: 'Remove', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDelete(customer.id) }] : []),
-                  ]}
-                  renderCell={(customer, key) => {
-                    if (key === 'name') return <span style={{ fontWeight: 700 }}>{customerDisplayName(customer)}</span>;
-                    if (key === 'outstanding_balance') {
-                      return (
-                        <span style={{ fontWeight: 700, color: hasCollectDue(customer.outstanding_balance) ? '#b91c1c' : 'var(--text-dim)' }}>
-                          {formatCollectDue(customer.outstanding_balance)}
-                        </span>
-                      );
-                    }
-                    return customer[key] || '—';
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          {selectedId && (
-            <div className="card" style={{ padding: '24px', position: 'sticky', top: '24px' }}>
-              {summaryLoading ? (
-                <AppLoader inline message="Loading profile…" />
-              ) : selectedCustomer ? (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', gap: '12px' }}>
+        {selectedId ? (
+          <div className="customer-profile">
+            {(isLoading || summaryLoading) && !selectedCustomer ? (
+              <AppLoader inline message="Loading profile…" />
+            ) : selectedCustomer ? (
+              <>
+                <div className="customer-profile__header">
+                  <button type="button" className="customer-profile__back" onClick={() => navigate('/customers')}>
+                    <ChevronLeft size={18} /> Customers
+                  </button>
+                  <div className="customer-profile__title-row">
                     <div>
-                      <h3 style={{ fontSize: '20px', fontWeight: '800' }}>{customerDisplayName(selectedCustomer)}</h3>
-                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Customer detail</p>
+                      <h3>{customerDisplayName(selectedCustomer)}</h3>
+                      <p className="customer-profile__code">{customerCode(selectedCustomer)}</p>
                     </div>
-                    <button type="button" onClick={() => navigate('/customers')} style={{ padding: '8px', color: 'var(--text-muted)', background: 'transparent' }} title="Close">
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px', fontSize: '14px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: 'var(--text-muted)' }}>
-                      <Phone size={16} /> {selectedCustomer.phone}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: 'var(--text-muted)' }}>
-                      <Mail size={16} /> {selectedCustomer.email || '—'}
-                    </div>
-                    {selectedCustomer.cnic && (
-                      <div style={{ gridColumn: 'span 2', fontFamily: 'monospace', fontSize: '13px' }}>CNIC: {selectedCustomer.cnic}</div>
-                    )}
-                    {selectedCustomer.address && (
-                      <div style={{ gridColumn: 'span 2', display: 'flex', gap: '8px', color: 'var(--text-muted)' }}>
-                        <MapPin size={16} style={{ flexShrink: 0, marginTop: 2 }} /> {selectedCustomer.address}
+                    {canManage && (
+                      <div className="customer-profile__actions">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleOpenFormModal(selectedCustomer)}
+                        >
+                          <Edit2 size={15} /> Edit
+                        </button>
+                        {!hasMonetaryTransactions && (
+                          <button
+                            type="button"
+                            className="btn-secondary customer-profile__delete"
+                            onClick={() => handleDelete(selectedCustomer)}
+                          >
+                            <Trash2 size={15} /> Delete
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleArchive(selectedCustomer)}
+                        >
+                          <Archive size={15} /> Archive
+                        </button>
                       </div>
                     )}
                   </div>
+                </div>
 
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '12px',
-                      marginBottom: '24px',
-                    }}
-                  >
-                    <div className="premium-card" style={{ padding: '16px' }}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Total events</p>
-                      <p style={{ fontSize: '22px', fontWeight: '800', marginTop: '4px' }}>{summary?.bookings_count ?? 0}</p>
+                <div className="card customer-profile__details">
+                  <div className="customer-profile__meta">
+                    <div><Phone size={16} /> {selectedCustomer.phone || '—'}</div>
+                    <div><Mail size={16} /> {selectedCustomer.email || '—'}</div>
+                    {selectedCustomer.cnic ? (
+                      <div className="customer-profile__cnic">CNIC: {selectedCustomer.cnic}</div>
+                    ) : null}
+                    {selectedCustomer.address ? (
+                      <div className="customer-profile__address">
+                        <MapPin size={16} /> {selectedCustomer.address}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="customer-profile__stats">
+                    <div className="premium-card">
+                      <p>Total events</p>
+                      <strong>{summary?.bookings_count ?? 0}</strong>
                     </div>
-                    <div className="premium-card" style={{ padding: '16px', borderColor: hasCollectDue(summary?.total_outstanding) ? '#fecaca' : undefined }}>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>Balance due</p>
-                      <p style={{ fontSize: '22px', fontWeight: '800', marginTop: '4px', color: hasCollectDue(summary?.total_outstanding) ? '#b91c1c' : 'var(--text-dim)' }}>
-                        {formatCollectDue(summary?.total_outstanding)}
-                      </p>
+                    <div className={`premium-card${hasCollectDue(summary?.total_outstanding) ? ' customer-profile__due' : ''}`}>
+                      <p>Balance due</p>
+                      <strong>{formatCollectDue(summary?.total_outstanding)}</strong>
                     </div>
                   </div>
+                </div>
 
-                  <h4 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="card customers-table-card customer-events-card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <div className="customer-events-heading">
                     <FileText size={16} /> Events
-                  </h4>
-
-                  {!summary?.bookings?.length ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
-                      <p style={{ margin: 0 }}>No events for this customer yet.</p>
-                    </div>
+                  </div>
+                  {summaryLoading ? (
+                    <AppLoader inline message="Loading events…" />
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '420px', overflowY: 'auto' }}>
-                      {summary.bookings.map((b) => {
-                        const remaining = bookingCollectDue(b);
+                    <DataTable
+                    variant="erp"
+                    sortable
+                    showColumnChooser
+                    pageSize={25}
+                    emptyTitle="No events found"
+                    emptyDescription={summary?.bookings?.length ? 'Try another date or filter.' : 'No events for this customer yet.'}
+                    toolbarStart={(
+                      <div className="customer-events-filters">
+                        <label>
+                          From
+                          <input type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
+                        </label>
+                        <label>
+                          To
+                          <input type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
+                        </label>
+                        <select value={eventType} onChange={(e) => setEventType(e.target.value)} aria-label="Filter by type">
+                          <option value="">All types</option>
+                          {eventTypeOptions.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                        <select value={eventVenue} onChange={(e) => setEventVenue(e.target.value)} aria-label="Filter by venue">
+                          <option value="">All venues</option>
+                          {eventVenueOptions.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                        <select value={eventBill} onChange={(e) => setEventBill(e.target.value)} aria-label="Filter by bill">
+                          <option value="all">All bills</option>
+                          <option value="due">Has due</option>
+                          <option value="settled">Settled</option>
+                        </select>
+                      </div>
+                    )}
+                    columns={[
+                      { key: 'event_id', label: 'Event ID', width: '130px' },
+                      { key: 'event_date', label: 'Date', width: '120px' },
+                      { key: 'time', label: 'Time', width: '140px' },
+                      { key: 'event_name', label: 'Type' },
+                      { key: 'venue_name', label: 'Venue' },
+                      { key: 'due', label: 'Due Amount', width: '120px' },
+                      { key: 'settled', label: 'Settled Amount', width: '130px' },
+                    ]}
+                    data={filteredEvents}
+                    onRowClick={(booking) => openBookingDetailPage(booking.id)}
+                    getSortValue={(row, key) => {
+                      if (key === 'event_id') return bookingEventId(row);
+                      if (key === 'event_date') return String(row.event_date || '');
+                      if (key === 'time') return bookingTimeLabel(row);
+                      if (key === 'event_name') return String(row.event_name || '');
+                      if (key === 'venue_name') return String(row.venue_name || '');
+                      if (key === 'due') return bookingCollectDue(row);
+                      if (key === 'settled') return parseAmount(row.advance_paid);
+                      return row[key];
+                    }}
+                    renderCell={(booking, key) => {
+                      if (key === 'event_id') {
+                        return <span className="customer-events-id">{bookingEventId(booking)}</span>;
+                      }
+                      if (key === 'event_date') return booking.event_date || '—';
+                      if (key === 'time') return bookingTimeLabel(booking);
+                      if (key === 'event_name') return booking.event_name || '—';
+                      if (key === 'venue_name') return booking.venue_name || '—';
+                      if (key === 'due') {
+                        const due = bookingCollectDue(booking);
                         return (
-                          <div
-                            key={b.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => openBookingDetailPage(b.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                openBookingDetailPage(b.id);
-                              }
-                            }}
-                            style={{
-                              padding: '16px',
-                              borderRadius: '12px',
-                              border: '1px solid var(--border)',
-                              background: '#fafafa',
-                              width: '100%',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <p style={{ fontWeight: '700', fontSize: '15px' }}>{b.event_name}</p>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                              {b.venue_name} · {b.event_date || '—'} · {b.slot || '—'}
-                            </p>
-                            <p style={{ fontSize: '13px', fontWeight: '700', marginTop: '8px', color: hasCollectDue(remaining) ? '#b91c1c' : 'var(--text-dim)' }}>
-                              Due {formatCollectDue(remaining)}
-                            </p>
-                          </div>
+                          <span style={{ fontWeight: 700, color: hasCollectDue(due) ? '#b91c1c' : 'var(--text-dim)' }}>
+                            {formatCollectDue(due)}
+                          </span>
                         );
-                      })}
-                    </div>
+                      }
+                      if (key === 'settled') {
+                        return <span style={{ fontWeight: 700 }}>{formatRs(booking.advance_paid)}</span>;
+                      }
+                      return booking[key] || '—';
+                    }}
+                  />
                   )}
-                </>
-              ) : null}
-            </div>
-          )}
-        </div>
+                </div>
+              </>
+            ) : (
+              <div className="card" style={{ padding: 24 }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)' }}>Customer not found.</p>
+                <button type="button" className="btn-secondary" style={{ marginTop: 12 }} onClick={() => navigate('/customers')}>
+                  Back to customers
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="card customers-table-card" style={{ padding: 0, overflow: 'hidden' }}>
+            {isLoading ? (
+              <AppLoader inline message="Loading customers…" />
+            ) : (
+              <DataTable
+                variant="erp"
+                sortable
+                showColumnChooser
+                pageSize={25}
+                emptyTitle="No customers found"
+                emptyDescription="Try another search or add a customer."
+                toolbarStart={(
+                  <SearchInput
+                    id="customers-list-search"
+                    className="customers-table-search"
+                    placeholder="Search ID, name, phone, CNIC..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-keyshortcuts="/"
+                  />
+                )}
+                toolbarEnd={canManage ? (
+                  <button type="button" className="btn-primary customers-toolbar-add" onClick={() => handleOpenFormModal()}>
+                    <UserPlus size={16} /> Add Customer
+                  </button>
+                ) : null}
+                columns={[
+                  { key: 'customer_code', label: 'ID', width: '110px' },
+                  { key: 'name', label: 'Customer' },
+                  { key: 'phone', label: 'Phone', width: '130px' },
+                  { key: 'cnic', label: 'CNIC', width: '140px' },
+                  { key: 'outstanding_balance', label: 'Due', width: '110px' },
+                ]}
+                data={filteredCustomers}
+                onRowClick={handleSelectCustomer}
+                getSortValue={(row, key) => {
+                  if (key === 'name') return customerDisplayName(row);
+                  if (key === 'customer_code') return customerCode(row);
+                  if (key === 'outstanding_balance') return Number(row.outstanding_balance || 0);
+                  return row[key];
+                }}
+                renderCell={(customer, key) => {
+                  if (key === 'customer_code') {
+                    return <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{customerCode(customer)}</span>;
+                  }
+                  if (key === 'name') return <span style={{ fontWeight: 700 }}>{customerDisplayName(customer)}</span>;
+                  if (key === 'outstanding_balance') {
+                    return (
+                      <span style={{ fontWeight: 700, color: hasCollectDue(customer.outstanding_balance) ? '#b91c1c' : 'var(--text-dim)' }}>
+                        {formatCollectDue(customer.outstanding_balance)}
+                      </span>
+                    );
+                  }
+                  return customer[key] || '—';
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {showFormModal && (

@@ -30,18 +30,18 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 class BookingInventoryItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='inventory_item.name', read_only=True)
     item_unit = serializers.CharField(source='inventory_item.unit', read_only=True)
-    item_price = serializers.DecimalField(
-        source='inventory_item.price_per_unit',
-        max_digits=10,
-        decimal_places=2,
-        read_only=True,
-    )
+    item_price = serializers.SerializerMethodField()
     booking_event = serializers.CharField(source='booking.event_name', read_only=True)
 
     class Meta:
         model = BookingInventoryItem
         fields = '__all__'
         read_only_fields = ['tenant']
+
+    def get_item_price(self, obj):
+        if obj.unit_price is not None:
+            return obj.unit_price
+        return obj.inventory_item.price_per_unit if obj.inventory_item_id else 0
 
     def validate(self, attrs):
         qty = attrs.get('quantity_used', self.instance.quantity_used if self.instance else 0)
@@ -64,6 +64,10 @@ class BookingInventoryItemSerializer(serializers.ModelSerializer):
             validated_data['tenant'] = request.user.tenant
         elif booking.tenant_id:
             validated_data['tenant'] = booking.tenant
+        if validated_data.get('unit_price') is None:
+            item = validated_data.get('inventory_item')
+            if item is not None:
+                validated_data['unit_price'] = item.price_per_unit or 0
         obj = super().create(validated_data)
         from .services import InventoryService
         InventoryService.apply_booking_allocation(

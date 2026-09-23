@@ -54,11 +54,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
   ].filter((item) => !item.pageKey || isGhPageVisible(item.pageKey));
 
   const acctBase = isGuestHouse ? '/gh/accounting' : '/accounting';
-  const journalPath = isGuestHouse ? '/gh/journal-entries' : '/journal-entries';
   const accountingLinks = [
     { name: 'Overview', path: acctBase },
     { name: 'Chart of Accounts', path: `${acctBase}/accounts` },
-    { name: 'Journal Entries', path: journalPath },
     { name: 'Reports', path: `${acctBase}/reports` },
   ];
   const accountingAdminLink = { name: 'Setup (Admin)', path: `${acctBase}/setup` };

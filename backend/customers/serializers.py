@@ -16,7 +16,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'tenant', 'created_at', 'first_name', 'last_name', 'outstanding_balance',
             'list_status_updated_at', 'list_status_updated_by', 'list_status_updated_by_name',
-            'created_by', 'updated_at',
+            'created_by', 'updated_at', 'customer_code',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_blank': True, 'allow_null': True},

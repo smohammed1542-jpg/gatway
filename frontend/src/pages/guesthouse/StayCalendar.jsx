@@ -12,6 +12,8 @@ import { getGuestHouseCalendar } from '../../api/guesthouse';
 import toast from 'react-hot-toast';
 import AppLoader from '../../components/AppLoader';
 import { formatCollectDue, hasCollectDue } from '../../utils/currency';
+import { formatHijriDayMonth, formatHijriLong, formatHijriMonthRange } from '../../utils/hijri';
+import { useShowHijriCalendar } from '../../hooks/useShowHijriCalendar';
 import { usePermissions } from '../../hooks/usePermissions';
 import StatusBadge from '../../components/ui/StatusBadge';
 import CancelStayModal from '../../components/guesthouse/CancelStayModal';
@@ -28,6 +30,7 @@ const STATUS_COLORS = {
 export default function StayCalendar() {
   const navigate = useNavigate();
   const { canOperate, canAccessPayments, canCancelStay } = usePermissions();
+  const [showHijri] = useShowHijriCalendar();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [stays, setStays] = useState([]);
@@ -90,7 +93,12 @@ export default function StayCalendar() {
       <div className="calendar-layout">
         <div className="premium-card stay-calendar">
           <div className="stay-calendar__toolbar">
-            <h3 className="stay-calendar__month">{format(currentDate, 'MMMM yyyy')}</h3>
+            <div>
+              <h3 className="stay-calendar__month">{format(currentDate, 'MMMM yyyy')}</h3>
+              {showHijri && (
+                <p className="calendar-hijri-month" lang="ar" dir="rtl">{formatHijriMonthRange(monthStart, monthEnd)}</p>
+              )}
+            </div>
             <div className="stay-calendar__toolbar-actions">
               <div className="stay-calendar__nav">
                 <button type="button" className="btn-secondary" onClick={() => setCurrentDate(subMonths(currentDate, 1))} aria-label="Previous month"><ChevronLeft /></button>
@@ -132,7 +140,12 @@ export default function StayCalendar() {
                     onDoubleClick={() => future && canOperate && goToBook(day)}
                   >
                     <span className="stay-calendar__day-top">
-                      {format(day, 'd')}
+                      <span className="calendar-day-nums">
+                        <span>{format(day, 'd')}</span>
+                        {showHijri && (
+                          <span className="calendar-day-hijri" lang="ar" dir="rtl">{formatHijriDayMonth(day)}</span>
+                        )}
+                      </span>
                       {future && isSameMonth(day, currentDate) && canOperate && (
                         <Plus size={12} color="var(--primary)" />
                       )}
@@ -175,6 +188,9 @@ export default function StayCalendar() {
               <span className="stay-calendar__future-badge">Future</span>
             )}
           </h4>
+          {showHijri && (
+            <p className="calendar-hijri-selected" lang="ar" dir="rtl">{formatHijriLong(selectedDate)}</p>
+          )}
           {selectedDayStays.length === 0 ? (
             <div className="stay-calendar__sidebar-empty">
               <p>No stays on this date.</p>

@@ -25,7 +25,7 @@ class UserSettingsSerializer(serializers.ModelSerializer):
             'notify_new_bookings', 'notify_payments',
             'notify_weekly_reports', 'notify_staff_activity',
             'sms_to_customers', 'whatsapp_to_customers',
-            'timezone', 'language', 'theme',
+            'timezone', 'language', 'theme', 'show_hijri_calendar',
         ]
 
 

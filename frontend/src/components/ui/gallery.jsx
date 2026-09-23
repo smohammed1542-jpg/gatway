@@ -106,7 +106,7 @@ function getRandomNumberInRange(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-const MotionImg = motion(
+const MotionImg = motion.create(
   forwardRef(function MotionImg(props, ref) {
     return <img ref={ref} {...props} />;
   }),

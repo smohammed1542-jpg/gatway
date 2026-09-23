@@ -1752,6 +1752,58 @@
   transition: all 0.2s ease;
 }
 
+.calendar-day-nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin-bottom: 6px;
+  min-width: 0;
+}
+
+.calendar-day-hijri,
+.calendar-hijri-month,
+.calendar-hijri-selected {
+  font-family: "Segoe UI", "Noto Naskh Arabic", "Traditional Arabic", Tahoma, sans-serif;
+  direction: rtl;
+  unicode-bidi: isolate;
+}
+
+.calendar-day-hijri {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.calendar-day-hijri--selected,
+.stay-calendar__day--selected .calendar-day-hijri {
+  color: var(--primary);
+  opacity: 0.85;
+}
+
+.calendar-hijri-month {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.calendar-hijri-selected {
+  margin: 0 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.stay-calendar__day-top .calendar-day-nums {
+  margin-bottom: 0;
+}
+
 /* ========== Breakpoints ========== */
 @media (max-width: 1200px) {
   :root {
@@ -1945,6 +1997,11 @@
 
   .split-layout--payments,
   .split-layout--customers {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-profile__meta,
+  .customer-profile__stats {
     grid-template-columns: 1fr;
   }
 

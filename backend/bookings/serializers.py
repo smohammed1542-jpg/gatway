@@ -12,6 +12,7 @@ class BookingSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     venue_name = serializers.SerializerMethodField()
     venue_capacity = serializers.SerializerMethodField()
+    venue_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
     decoration_package_name = serializers.CharField(source='decoration_package.name', read_only=True, allow_null=True)
 
     class Meta:
@@ -24,6 +25,7 @@ class BookingSerializer(serializers.ModelSerializer):
             'event_name': {'required': False, 'allow_blank': True},
             'slot': {'required': False, 'allow_blank': True, 'allow_null': True},
             'event_date': {'required': False, 'allow_null': True},
+            'additional_venues': {'read_only': True},
         }
 
     def get_customer_name(self, obj):
@@ -31,26 +33,71 @@ class BookingSerializer(serializers.ModelSerializer):
             return 'Draft — no client'
         return str(obj.customer)
 
+    def _halls_for(self, obj):
+        return obj.hall_list() if obj else []
+
     def get_venue_name(self, obj):
-        if not obj.venue_id:
-            return '—'
-        return obj.venue.name
+        names = [hall.name for hall in self._halls_for(obj)]
+        return ' + '.join(names) if names else '—'
 
     def get_venue_capacity(self, obj):
-        if not obj.venue_id:
+        halls = self._halls_for(obj)
+        if not halls:
             return None
-        return obj.venue.capacity
+        return sum(int(hall.capacity or 0) for hall in halls)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['venue_ids'] = instance.hall_ids()
+        data.pop('additional_venues', None)
+        return data
+
+    def _parse_venue_ids(self, value):
+        if value in (None, '', 'null', 'undefined'):
+            return None
+        if isinstance(value, str):
+            value = [part.strip() for part in value.split(',') if part.strip()]
+        ids = []
+        seen = set()
+        for item in value:
+            if item in ('', None, 'null', 'undefined'):
+                continue
+            vid = int(item)
+            if vid in seen:
+                continue
+            seen.add(vid)
+            ids.append(vid)
+        return ids
+
+    def _apply_venue_ids(self, booking, venue_ids):
+        ids = self._parse_venue_ids(venue_ids) or []
+        first = ids[0] if ids else None
+        rest = ids[1:]
+        if booking.venue_id != first:
+            booking.venue_id = first
+            booking.save(update_fields=['venue'])
+        booking.additional_venues.set(rest)
 
     def to_internal_value(self, data):
         # HTML clients commonly submit hidden optional time inputs as empty strings.
         # Normalize them before DRF's TimeField parsing runs.
         normalized = data.copy()
+        incoming_ids = None
+        if hasattr(normalized, 'pop'):
+            incoming_ids = normalized.get('venue_ids')
         for field in ('custom_start_time', 'custom_end_time', 'event_date', 'booking_date'):
             if normalized.get(field) == '':
                 normalized[field] = None
         for field in ('customer', 'venue', 'decoration_package'):
             if normalized.get(field) in ('', 'null', 'undefined'):
                 normalized[field] = None
+        parsed_ids = self._parse_venue_ids(incoming_ids) if incoming_ids is not None else None
+        if parsed_ids:
+            normalized['venue'] = parsed_ids[0]
+        elif parsed_ids is not None:
+            normalized['venue'] = None
+        if hasattr(normalized, 'pop'):
+            normalized.pop('additional_venues', None)
         if normalized.get('slot') in ('', None, 'null', 'undefined'):
             normalized['slot'] = None
         if not normalized.get('booking_date'):
@@ -60,7 +107,10 @@ class BookingSerializer(serializers.ModelSerializer):
             status = normalized.get('booking_status') or getattr(self.instance, 'booking_status', 'PENDING')
             if status in ('DRAFT', 'PENDING'):
                 normalized['event_name'] = 'Draft'
-        return super().to_internal_value(normalized)
+        ret = super().to_internal_value(normalized)
+        if parsed_ids is not None:
+            ret['venue_ids'] = parsed_ids
+        return ret
 
     def validate(self, data):
         instance = self.instance
@@ -79,6 +129,21 @@ class BookingSerializer(serializers.ModelSerializer):
             is_draft = False
 
         venue = data.get('venue', getattr(instance, 'venue', None) if instance else None)
+        venue_ids = data.get('venue_ids')
+        if venue_ids is None:
+            venue_ids = instance.hall_ids() if instance else ([venue.id] if venue else [])
+        else:
+            venue_ids = self._parse_venue_ids(venue_ids) or []
+            if venue_ids:
+                venue = Venue.objects.filter(pk=venue_ids[0]).first()
+                data['venue'] = venue
+            else:
+                venue = None
+                data['venue'] = None
+        halls = list(Venue.objects.filter(pk__in=venue_ids)) if venue_ids else []
+        halls_by_id = {hall.id: hall for hall in halls}
+        ordered_halls = [halls_by_id[vid] for vid in venue_ids if vid in halls_by_id]
+        combined_capacity = sum(int(hall.capacity or 0) for hall in ordered_halls)
         event_date = data.get('event_date', getattr(instance, 'event_date', None) if instance else None)
         slot = data.get('slot', getattr(instance, 'slot', None) if instance else None) or ''
         custom_start_time = data.get(
@@ -171,30 +236,35 @@ class BookingSerializer(serializers.ModelSerializer):
                 "Start date must be before end date."
             )
 
-        # Remaining seats on this event date (same hall can host multiple events if seats remain)
-        if not is_draft and venue and guest_count > venue.capacity:
+        # Remaining seats across selected halls (same slot)
+        if not is_draft and ordered_halls and guest_count > combined_capacity:
+            names = ' + '.join(hall.name for hall in ordered_halls)
             raise serializers.ValidationError(
-                f"Guest count ({guest_count}) exceeds the capacity of '{venue.name}' "
-                f"which is {venue.capacity} seats. Please reduce guests or choose a bigger hall."
+                f"Guest count ({guest_count}) exceeds the capacity of '{names}' "
+                f"which is {combined_capacity} seats. Please reduce guests or add another hall."
             )
 
-        if not is_draft and venue and start_date and end_date:
-            overlapping = Booking.objects.filter(
-                venue=venue,
-                booking_status__in=['PENDING', 'CONFIRMED'],
-            ).filter(
-                Q(start_date__lt=end_date, end_date__gt=start_date)
-            )
-            if self.instance:
-                overlapping = overlapping.exclude(id=self.instance.id)
-            occupied = 0
-            for other in overlapping:
-                occupied += (other.gents_count or 0) + (other.ladies_count or 0)
-            remaining = max(0, venue.capacity - occupied)
-            if guest_count > remaining:
+        if not is_draft and ordered_halls and start_date and end_date:
+            remaining_total = 0
+            for hall in ordered_halls:
+                overlapping = Booking.objects.filter(
+                    booking_status__in=['PENDING', 'CONFIRMED'],
+                ).filter(
+                    Q(start_date__lt=end_date, end_date__gt=start_date)
+                ).filter(
+                    Q(venue=hall) | Q(additional_venues=hall)
+                ).distinct()
+                if self.instance:
+                    overlapping = overlapping.exclude(id=self.instance.id)
+                occupied = 0
+                for other in overlapping:
+                    occupied += (other.gents_count or 0) + (other.ladies_count or 0)
+                remaining_total += max(0, int(hall.capacity or 0) - occupied)
+            if guest_count > remaining_total:
+                names = ' + '.join(hall.name for hall in ordered_halls)
                 raise serializers.ValidationError(
-                    f"Only {remaining} seats left in '{venue.name}' for this time "
-                    f"(capacity {venue.capacity}). Reduce guests or choose another hall."
+                    f"Only {remaining_total} seats left in '{names}' for this time "
+                    f"(capacity {combined_capacity}). Reduce guests or choose another hall."
                 )
 
         return data
@@ -208,8 +278,13 @@ class BookingSerializer(serializers.ModelSerializer):
         user = request.user if request and hasattr(request, 'user') else None
         if user and user.is_authenticated:
             validated_data['updated_by'] = user
+        venue_ids = validated_data.pop('venue_ids', None)
+        validated_data.pop('additional_venues', None)
         try:
-            return super().update(instance, validated_data)
+            booking = super().update(instance, validated_data)
+            if venue_ids is not None:
+                self._apply_venue_ids(booking, venue_ids)
+            return booking
         except ValueError as exc:
             # Accounting posts (unbalanced journal, etc.) → readable 400, not HTML 500.
             raise serializers.ValidationError({'detail': str(exc)}) from exc
@@ -225,9 +300,13 @@ class BookingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'detail': 'Your account has no hall tenant assigned. Contact admin.'}
             )
+        venue_ids = validated_data.pop('venue_ids', None)
+        validated_data.pop('additional_venues', None)
         advance = validated_data.get('advance_paid') or 0
         try:
             booking = super().create(validated_data)
+            if venue_ids is not None:
+                self._apply_venue_ids(booking, venue_ids)
             if advance and float(advance) > 0:
                 from finance.models import Payment
                 Payment.objects.create(

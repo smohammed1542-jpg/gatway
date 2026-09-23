@@ -84,6 +84,7 @@ class UserSettings(models.Model):
     timezone = models.CharField(max_length=64, default='Asia/Karachi')
     language = models.CharField(max_length=10, default='en')
     theme = models.CharField(max_length=10, default='light')
+    show_hijri_calendar = models.BooleanField(default=True)
 
     def __str__(self):
         return f'Settings for {self.user}'

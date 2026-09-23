@@ -218,9 +218,12 @@
 }
 
 .reservation-console__event-options button:hover,
-.reservation-console__event-options button[aria-selected='true'] {
+.reservation-console__event-options button[aria-selected='true'],
+.reservation-console__event-options button:focus,
+.reservation-console__event-options button:focus-visible {
   color: var(--primary);
   background: var(--primary-light);
+  outline: none;
 }
 
 .reservation-console input:disabled,
@@ -282,119 +285,6 @@
   font-size: 7px;
 }
 
-.reservation-console__client-name-wrap {
-  position: relative;
-}
-
-.reservation-console__client-name-field {
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-}
-
-.reservation-console__client-name-field input {
-  flex: 1;
-  min-width: 0;
-  border: 0 !important;
-  outline: none !important;
-  box-shadow: none !important;
-  border-radius: 6px 0 0 6px;
-  font-size: 15px !important;
-  font-weight: 600;
-  line-height: 1.25;
-  color: #0f2f2a;
-}
-
-.reservation-console__client-name-field input:focus {
-  border: 0 !important;
-  outline: none !important;
-  box-shadow: none !important;
-}
-
-.reservation-console__client-name-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  flex-shrink: 0;
-  border: 0;
-  outline: none;
-  box-shadow: none;
-  border-radius: 0 6px 6px 0;
-  background: var(--rc-blue);
-  color: #64748b;
-  cursor: pointer;
-}
-
-.reservation-console__client-name-toggle:focus,
-.reservation-console__client-name-toggle:focus-visible {
-  border: 0;
-  outline: none;
-  box-shadow: none;
-}
-
-.reservation-console__client-name-toggle:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.reservation-console__client-suggestions {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid var(--rc-line, #dbe4ef);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 20px rgb(15 23 42 / 12%);
-}
-
-.reservation-console__client-suggestions-empty {
-  padding: 10px 12px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.reservation-console__client-suggestions button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-bottom: 1px solid #f1f5f9;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.reservation-console__client-suggestions button:last-child {
-  border-bottom: 0;
-}
-
-.reservation-console__client-suggestions button:hover,
-.reservation-console__client-suggestions button.is-selected {
-  background: #f0f7ff;
-}
-
-.reservation-console__client-suggestions strong {
-  font-size: 12px;
-  color: var(--text, #0f172a);
-}
-
-.reservation-console__client-suggestions span {
-  font-size: 10px;
-  color: var(--text-muted, #64748b);
-}
-
 .reservation-console__client-hint {
   margin: 6px 0 0;
   font-size: 11px;
@@ -405,8 +295,7 @@
   color: #166534;
 }
 
-.reservation-console__client-grid label.has-error input,
-.reservation-console__client-select.has-error input {
+.reservation-console__client-grid label.has-error input {
   border-color: #dc2626;
 }
 
@@ -556,6 +445,12 @@
 .reservation-console__hall-grid button.is-selected {
   background: var(--rc-green);
   color: #fff;
+}
+
+.reservation-console__hall-grid button:focus-visible,
+.reservation-console__slot-options button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .reservation-console__hall-grid button.is-selected span {
@@ -954,6 +849,15 @@
   height: 20px;
   padding: 2px;
   text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.reservation-console__summary-lines input::-webkit-inner-spin-button,
+.reservation-console__summary-lines input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .reservation-console__status {
@@ -975,7 +879,9 @@
 
 .reservation-console__grand-total > div {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
   text-transform: uppercase;
 }
 
@@ -996,13 +902,14 @@
 
 .reservation-console__grand-total strong {
   display: block;
-  margin-top: 4px;
+  margin: 0;
   color: var(--rc-green);
   font-size: clamp(13px, 2.8vw, 17px);
   line-height: 1.2;
   overflow-wrap: anywhere;
   word-break: break-word;
-  max-width: 100%;
+  text-align: right;
+  flex: 1 1 auto;
 }
 
 .reservation-console__grand-total small {
@@ -1035,6 +942,15 @@
   border: 0;
   background: transparent;
   font-weight: 800;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.reservation-console__advance input::-webkit-inner-spin-button,
+.reservation-console__advance input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .reservation-console__balance {
@@ -1664,7 +1580,7 @@
 .reservation-console__inventory-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
   margin-top: -4px;
@@ -1811,6 +1727,20 @@
 .reservation-console__inventory-field--qty input {
   width: 100%;
   max-width: 72px;
+}
+
+.reservation-console__inventory-field--price input {
+  width: 100%;
+  max-width: 104px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.reservation-console__inventory-field--price input::-webkit-inner-spin-button,
+.reservation-console__inventory-field--price input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .reservation-console__inventory-line select,
@@ -1994,11 +1924,12 @@
 }
 
 .reservation-console__grand-total strong {
-  margin-top: 4px;
+  margin: 0;
   font-size: clamp(14px, 1.8vw, 18px);
   line-height: 1.25;
   overflow-wrap: anywhere;
   word-break: break-word;
+  text-align: right;
 }
 
 .reservation-console__grand-total small {
@@ -2572,7 +2503,11 @@
     grid-area: item;
   }
 
-  .reservation-console__inventory-field:not(.reservation-console__inventory-field--item):not(.reservation-console__inventory-field--qty):not(.reservation-console__inventory-field--amount) {
+  .reservation-console__inventory-field--price {
+    grid-area: price;
+  }
+
+  .reservation-console__inventory-field:not(.reservation-console__inventory-field--item):not(.reservation-console__inventory-field--qty):not(.reservation-console__inventory-field--amount):not(.reservation-console__inventory-field--price) {
     grid-area: price;
   }
 

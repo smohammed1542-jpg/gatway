@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from core.models import Tenant
+from .codes import allocate_customer_code
 
 class Customer(models.Model):
     LIST_STATUS_CHOICES = (
@@ -22,6 +23,7 @@ class Customer(models.Model):
     )
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='customers', null=True, blank=True)
+    customer_code = models.CharField(max_length=20, blank=True, default='')
     full_name = models.CharField(max_length=200, blank=True, default='')
     cnic = models.CharField(max_length=20, blank=True, default='')
     first_name = models.CharField(max_length=100, blank=True, default='')
@@ -65,6 +67,7 @@ class Customer(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_archived = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'customers'
@@ -73,7 +76,20 @@ class Customer(models.Model):
             models.Index(fields=['tenant', 'email']),
             models.Index(fields=['email']),
             models.Index(fields=['phone']),
+            models.Index(fields=['tenant', 'customer_code']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'customer_code'],
+                condition=~models.Q(customer_code=''),
+                name='uniq_tenant_customer_code',
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not str(self.customer_code or '').strip() and self.tenant_id:
+            self.customer_code = allocate_customer_code(self.tenant_id)
+        super().save(*args, **kwargs)
 
     @property
     def display_name(self):
@@ -83,3 +99,17 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.display_name
+
+    def has_monetary_transactions(self):
+        from django.db.models import Q
+        from finance.models import Payment
+
+        if self.bookings.filter(
+            Q(advance_paid__gt=0) | Q(total_price__gt=0) | Q(remaining_balance__gt=0)
+        ).exists():
+            return True
+        if Payment.objects.filter(booking__customer_id=self.pk, amount__gt=0).exclude(status='VOIDED').exists():
+            return True
+        if self.gh_stays.filter(Q(advance_paid__gt=0) | Q(total_amount__gt=0)).exists():
+            return True
+        return False

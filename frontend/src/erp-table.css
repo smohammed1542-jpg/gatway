@@ -139,9 +139,10 @@
   border-left: 1px solid var(--border);
 }
 
-.erp-table__th--sort {
-  cursor: pointer;
-  user-select: none;
+.erp-table__th--sort:focus,
+.erp-table__th--sort:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: -2px;
 }
 
 .erp-table__th-label {
@@ -154,8 +155,18 @@
   background: var(--surface-elevated);
 }
 
+.erp-table tbody tr:focus,
+.erp-table tbody tr:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: -2px;
+}
+
 .erp-table__row--selected td {
   background: var(--primary-light) !important;
+}
+
+.erp-table__row--cancelled td {
+  opacity: 0.7;
 }
 
 .erp-table thead th:first-child,

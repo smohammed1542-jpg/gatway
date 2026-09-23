@@ -44,7 +44,7 @@ def compute_booking_totals(booking, tax_rate=None, overtime_rate=None):
         allocations = getattr(booking, 'inventory_items', None)
         if allocations is not None:
             for allocation in allocations.select_related('inventory_item').filter(include_in_bill=True):
-                unit_price = Decimal(str(allocation.inventory_item.price_per_unit or 0))
+                unit_price = Decimal(str(getattr(allocation, 'unit_price', None) or allocation.inventory_item.price_per_unit or 0))
                 qty = Decimal(str(allocation.quantity_used or 0))
                 inventory_total += unit_price * qty
     total_before_tax = subtotal + extra_services + inventory_total

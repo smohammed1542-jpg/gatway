@@ -72,12 +72,10 @@ const AccountingDashboard = () => {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link className="btn-secondary" to={`${base}/reports?tab=trial-balance`}>Reports</Link>
-          <Link className="btn-secondary" to={isGuestHouse ? '/gh/journal-entries' : '/journal-entries'}>Journal Entries</Link>
         </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
         Bookings, payments, and expenses post to the general ledger automatically on the backend.
-        Use Journal Entries only for manual adjustments.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
         {cards.map((c) => (

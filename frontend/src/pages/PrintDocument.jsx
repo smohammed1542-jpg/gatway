@@ -19,6 +19,8 @@ import { formatCollectDuePKR, hasCollectDue } from '../utils/currency';
 import AppLogo from '../components/AppLogo';
 import { BRAND_FULL_NAME } from '../constants/brand';
 import usePersistentState from '../hooks/usePersistentState';
+import { useHallPageVisibility } from '../context/HallPageVisibilityContext';
+import { HALL_MODULE_KEYS } from '../constants/hallPages';
 import '../print.css';
 
 // HTML5 Canvas Digital Signature Pad Component
@@ -164,6 +166,8 @@ const PrintDocument = () => {
   const { bookingId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isModuleVisible } = useHallPageVisibility();
+  const showTax = isModuleVisible(HALL_MODULE_KEYS.SUMMARY_TAX);
   
   const [booking, setBooking] = useState(null);
   const [customer, setCustomer] = useState(null);
@@ -335,7 +339,7 @@ const PrintDocument = () => {
   const chargedInventoryLines = inventoryBillLines.filter((line) => line.includeInBill);
   const totalBeforeTax = subtotal + extraServices + inventoryTotal;
   const taxRatePercent = 5;
-  const taxAmount = totalBeforeTax * (taxRatePercent / 100);
+  const taxAmount = showTax ? totalBeforeTax * (taxRatePercent / 100) : 0;
   const grandTotal = totalBeforeTax + taxAmount;
   const remainingBalance = grandTotal - Number(advancePaid || 0);
   const showBillRow = (amount) => isEditable || Number(amount || 0) > 0;
@@ -790,10 +794,12 @@ const PrintDocument = () => {
                     <span>{isUrdu ? 'سب ٹوٹل' : 'Subtotal'}</span>
                     <strong>{fmt(totalBeforeTax)}</strong>
                   </div>
-                  <div className="pbill__totals-row">
-                    <span>{isUrdu ? `ٹیکس (${taxRatePercent}%)` : `Tax (${taxRatePercent}%)`}</span>
-                    <strong>{fmt(taxAmount)}</strong>
-                  </div>
+                  {showTax && (
+                    <div className="pbill__totals-row">
+                      <span>{isUrdu ? `ٹیکس (${taxRatePercent}%)` : `Tax (${taxRatePercent}%)`}</span>
+                      <strong>{fmt(taxAmount)}</strong>
+                    </div>
+                  )}
                   <div className="pbill__totals-row pbill__totals-row--grand">
                     <span>{isUrdu ? 'کل رقم' : 'Grand total'}</span>
                     <strong>PKR {fmt(grandTotal)}</strong>

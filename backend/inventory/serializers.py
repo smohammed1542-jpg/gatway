@@ -5,6 +5,7 @@ from .models import InventoryItem, BookingInventoryItem, InventoryTransaction
 
 class InventoryItemSerializer(serializers.ModelSerializer):
     allocated_quantity = serializers.SerializerMethodField()
+    available_quantity = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryItem
@@ -12,6 +13,10 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 
     def get_allocated_quantity(self, obj):
         return obj.booking_allocations.aggregate(total=Sum('quantity_used'))['total'] or 0
+
+    def get_available_quantity(self, obj):
+        # Booking save already posts this quantity out of on-hand stock.
+        return int(obj.quantity or 0)
 
     def validate_name(self, value):
         name = str(value or '').strip()

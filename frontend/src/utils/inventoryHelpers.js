@@ -13,8 +13,16 @@ export const CATEGORY_LABELS = {
   OTHER: 'Other',
 };
 
-export const getAvailableQty = (item) =>
-  Math.max(0, (item?.quantity || 0) - (item?.allocated_quantity || 0));
+export const getUsedQty = (item) => Number(item?.allocated_quantity || 0);
+
+/** On-hand stock. Booking quantities are already taken out of `quantity`. */
+export const getAvailableQty = (item) => {
+  if (item == null) return 0;
+  if (item.available_quantity != null && item.available_quantity !== '') {
+    return Number(item.available_quantity);
+  }
+  return Number(item.quantity || 0);
+};
 
 export const parseItemToForm = (item) => ({
   name: item.name,

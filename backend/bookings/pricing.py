@@ -4,7 +4,28 @@ DEFAULT_TAX_RATE = Decimal('0.05')
 DEFAULT_OVERTIME_RATE = Decimal('5000.00')
 
 
+def summary_tax_enabled(tenant):
+    """Booking Summary 'Tax (GST)' toggle. Off means GST is not added to the total."""
+    if tenant is None or not getattr(tenant, 'pk', None):
+        return True
+    if getattr(tenant, 'show_summary_tax', True) is False:
+        return False
+    from django.apps import apps
+    Visibility = apps.get_model('bookings', 'MarriageHallPageVisibility')
+    visible = (
+        Visibility.objects
+        .filter(tenant_id=tenant.pk, page_key='summary_tax')
+        .values_list('is_visible', flat=True)
+        .first()
+    )
+    if visible is False:
+        return False
+    return True
+
+
 def tenant_tax_rate(tenant):
+    if not summary_tax_enabled(tenant):
+        return Decimal('0')
     if tenant is not None and getattr(tenant, 'tax_rate', None) is not None:
         return Decimal(str(tenant.tax_rate))
     return DEFAULT_TAX_RATE

@@ -15,7 +15,7 @@ export const HALL_SUMMARY_LINES = [
   { field: 'show_summary_rate_per_head', module: HALL_MODULE_KEYS.SUMMARY_RATE_PER_HEAD, title: 'Rate / Head', desc: 'Show per-person rate after a hall is selected.' },
   { field: 'show_summary_food_venue', module: HALL_MODULE_KEYS.SUMMARY_FOOD_VENUE, title: 'Venue', desc: 'Show hall / food venue amount on the summary.' },
   { field: 'show_summary_combined_services', module: HALL_MODULE_KEYS.SUMMARY_COMBINED_SERVICES, title: 'Combined Services', desc: 'Show overtime, kitchen, décor, and add-ons total.' },
-  { field: 'show_summary_tax', module: HALL_MODULE_KEYS.SUMMARY_TAX, title: 'Tax (GST)', desc: 'Show tax line on the booking summary.' },
+  { field: 'show_summary_tax', module: HALL_MODULE_KEYS.SUMMARY_TAX, title: 'Tax (GST)', desc: 'When off, GST is not added to the booking total.' },
   { field: null, module: HALL_MODULE_KEYS.SUMMARY_INVENTORY, title: 'Inventory items', desc: 'Show billed inventory lines on the booking summary.' },
 ];
 

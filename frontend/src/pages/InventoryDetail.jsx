@@ -165,21 +165,21 @@ const InventoryDetail = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         <div className="premium-card" style={{ padding: '24px' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Package size={14} /> Total stock
+            <Package size={14} /> Stock
           </p>
           <p style={{ fontSize: '24px', fontWeight: '900' }}>
-            {item.quantity} <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-muted)' }}>{item.unit}</span>
+            {(Number(item.quantity || 0) + allocated).toLocaleString()} <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-muted)' }}>{item.unit}</span>
           </p>
         </div>
         <div className="premium-card" style={{ padding: '24px' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Layers size={14} /> Allocated
+            <Layers size={14} /> Used
           </p>
-          <p style={{ fontSize: '24px', fontWeight: '900', color: '#92400e' }}>{allocated}</p>
+          <p style={{ fontSize: '24px', fontWeight: '900', color: '#92400e' }}>{allocated.toLocaleString()}</p>
         </div>
         <div className="premium-card" style={{ padding: '24px' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Available</p>
-          <p style={{ fontSize: '24px', fontWeight: '900', color: available === 0 ? '#b91c1c' : '#166534' }}>{available}</p>
+          <p style={{ fontSize: '24px', fontWeight: '900', color: available <= 0 ? '#b91c1c' : '#166534' }}>{available.toLocaleString()}</p>
         </div>
         <div className="premium-card" style={{ padding: '24px' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -195,7 +195,7 @@ const InventoryDetail = () => {
         </div>
       </div>
 
-      {item.description && (
+      {item.description && !/unlimited stock/i.test(item.description) && (
         <div className="premium-card" style={{ padding: '24px', marginBottom: '24px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '10px' }}>Description</h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{item.description}</p>

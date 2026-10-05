@@ -757,7 +757,7 @@ const Settings = () => {
             {activeTab === 'Booking Summary' && isMarriageHall && isAdmin && (
               <div className="animate-fade-in">
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                  Every bill line on the booking summary appears here. Hidden lines stay off the panel; totals still calculate in the background.
+                  Every bill line on the booking summary appears here. Hidden lines stay off the panel. When Tax is off, GST is not added to the total.
                 </p>
                 {summaryModules.length === 0 && (
                   <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No bill lines found yet. Refresh after opening Bookings once.</p>

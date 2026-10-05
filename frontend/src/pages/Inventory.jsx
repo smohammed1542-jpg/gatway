@@ -197,7 +197,7 @@ const Inventory = () => {
               columns={[
                 { key: 'name', label: 'Item Name' },
                 { key: 'category', label: 'Category' },
-                { key: 'quantity', label: 'Stock / Allocated' },
+                { key: 'quantity', label: 'Used / Available' },
                 { key: 'price_per_unit', label: 'Price/Unit', width: '120px' },
                 { key: 'status', label: 'Status', width: '130px' },
               ]}
@@ -218,20 +218,19 @@ const Inventory = () => {
               ]}
               renderCell={(item, key) => {
                 if (key === 'name') {
-                  return (
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{item.name}</div>
-                      {item.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{item.description}</div>}
-                    </div>
-                  );
+                  return <div style={{ fontWeight: 600 }}>{item.name}</div>;
                 }
                 if (key === 'category') return CATEGORY_LABELS[item.category] || item.category;
                 if (key === 'quantity') {
+                  const used = Number(item.allocated_quantity || 0);
+                  const available = Number(
+                    item.available_quantity != null ? item.available_quantity : item.quantity || 0
+                  );
                   return (
                     <div>
-                      <div>{item.quantity} {item.unit} total</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                        Allocated: {item.allocated_quantity || 0} · Available: {Math.max(0, (item.quantity || 0) - (item.allocated_quantity || 0))}
+                      <div>Used: {used.toLocaleString()} {item.unit}</div>
+                      <div style={{ fontSize: 12, marginTop: 4, color: available < 0 ? '#b91c1c' : 'var(--text-muted)' }}>
+                        Available: {available.toLocaleString()} {item.unit}
                       </div>
                     </div>
                   );

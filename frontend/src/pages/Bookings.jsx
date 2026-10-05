@@ -543,7 +543,7 @@ const Bookings = () => {
   const inventoryTotal = inventorySummaryLines.reduce((sum, line) => sum + line.total, 0);
                         
   const totalBeforeTax = subtotal + extraServices + inventoryTotal;
-  const taxAmount = totalBeforeTax * taxRate;
+  const taxAmount = summaryVisibility.tax ? totalBeforeTax * taxRate : 0;
   const grandTotal = totalBeforeTax + taxAmount;
   const previousPaid = Number(formData.advance_paid || 0);
   const invoiceCollectAmount = isInvoice ? Number(invoiceCollectNow || 0) : 0;
@@ -2550,6 +2550,28 @@ const Bookings = () => {
                     const billAmount = item && Number.isFinite(quantity) && quantity > 0
                       ? unitPrice * quantity
                       : 0;
+                    const savedQtyForItem = item
+                      ? inventoryLines.reduce((sum, candidate) => (
+                        String(candidate.inventory_item) === String(item.id)
+                          ? sum + (Number(candidate.original_quantity) || 0)
+                          : sum
+                      ), 0)
+                      : 0;
+                    const formQtyForItem = item
+                      ? inventoryLines.reduce((sum, candidate) => (
+                        String(candidate.inventory_item) === String(item.id)
+                          ? sum + (Number(candidate.quantity_used) || 0)
+                          : sum
+                      ), 0)
+                      : 0;
+                    const usedQty = item
+                      ? Number(item.allocated_quantity || 0) - savedQtyForItem + formQtyForItem
+                      : 0;
+                    const availableQty = item
+                      ? Number(item.available_quantity != null ? item.available_quantity : item.quantity || 0)
+                        + savedQtyForItem
+                        - formQtyForItem
+                      : 0;
                     const selectedByOtherLines = new Set(
                       inventoryLines
                         .filter((_, itemIndex) => itemIndex !== index)
@@ -2687,6 +2709,11 @@ const Bookings = () => {
                         >
                           ×
                         </button>
+                        {item && (
+                          <p className={`reservation-console__inventory-stock${availableQty < 0 ? ' is-short' : ''}`}>
+                            Used {usedQty.toLocaleString()} · Available {availableQty.toLocaleString()}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -2822,7 +2849,7 @@ const Bookings = () => {
                   <span>Grand Total</span>
                   <strong>PKR {grandTotal.toLocaleString()}</strong>
                 </div>
-                <small>Inclusive Taxes</small>
+                {summaryVisibility.tax && <small>Inclusive Taxes</small>}
               </div>
               <label className="reservation-console__advance">
                 <span>{isInvoice ? 'Already Received' : 'Advance Amount Received'}</span>

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Wallet,
   Package,
+  Sparkles,
   CalendarDays,
   Receipt,
   X,
@@ -45,6 +46,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobile, isMobileOpen, onMobile
     ...(canAccessPayments ? [{ name: 'Payments', icon: Wallet, path: '/payments', pageKey: HALL_PAGE_KEYS.PAYMENTS }] : []),
     ...(canAccessExpenses ? [{ name: 'Expenses', icon: Receipt, path: '/expenses', pageKey: HALL_PAGE_KEYS.EXPENSES }] : []),
     { name: 'Inventory', icon: Package, path: '/inventory', pageKey: HALL_PAGE_KEYS.INVENTORY },
+    { name: 'Services', icon: Sparkles, path: '/services', pageKey: HALL_PAGE_KEYS.SERVICES },
   ].filter((item) => !item.pageKey || isHallPageVisible(item.pageKey));
 
   const guestHouseNavItems = [

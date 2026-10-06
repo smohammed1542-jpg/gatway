@@ -47,6 +47,7 @@ const ROUTE_TITLES = [
   [/^\/expenses$/, 'Expenses'],
   [/^\/inventory\/[^/]+$/, 'Inventory Detail'],
   [/^\/inventory$/, 'Inventory'],
+  [/^\/services$/, 'Services'],
   [/^\/decoration-packages\/[^/]+$/, 'Decoration Detail'],
   [/^\/decoration-packages$/, 'Decorations'],
   [/^\/reports$/, 'Reports'],

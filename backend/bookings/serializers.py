@@ -1,7 +1,6 @@
 from rest_framework import serializers
-from .models import Booking
+from .models import Booking, BookingService, HallService
 from venues.models import Venue
-from django.db.models import Q
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -140,10 +139,6 @@ class BookingSerializer(serializers.ModelSerializer):
             else:
                 venue = None
                 data['venue'] = None
-        halls = list(Venue.objects.filter(pk__in=venue_ids)) if venue_ids else []
-        halls_by_id = {hall.id: hall for hall in halls}
-        ordered_halls = [halls_by_id[vid] for vid in venue_ids if vid in halls_by_id]
-        combined_capacity = sum(int(hall.capacity or 0) for hall in ordered_halls)
         event_date = data.get('event_date', getattr(instance, 'event_date', None) if instance else None)
         slot = data.get('slot', getattr(instance, 'slot', None) if instance else None) or ''
         custom_start_time = data.get(
@@ -154,9 +149,6 @@ class BookingSerializer(serializers.ModelSerializer):
             'custom_end_time',
             getattr(instance, 'custom_end_time', None) if instance else None,
         )
-        gents_count = data.get('gents_count', getattr(instance, 'gents_count', 0) if instance else 0)
-        ladies_count = data.get('ladies_count', getattr(instance, 'ladies_count', 0) if instance else 0)
-        guest_count = (gents_count or 0) + (ladies_count or 0)
         customer = data.get('customer', getattr(instance, 'customer', None) if instance else None)
 
         if not is_draft:
@@ -236,36 +228,7 @@ class BookingSerializer(serializers.ModelSerializer):
                 "Start date must be before end date."
             )
 
-        # Remaining seats across selected halls (same slot)
-        if not is_draft and ordered_halls and guest_count > combined_capacity:
-            names = ' + '.join(hall.name for hall in ordered_halls)
-            raise serializers.ValidationError(
-                f"Guest count ({guest_count}) exceeds the capacity of '{names}' "
-                f"which is {combined_capacity} seats. Please reduce guests or add another hall."
-            )
-
-        if not is_draft and ordered_halls and start_date and end_date:
-            remaining_total = 0
-            for hall in ordered_halls:
-                overlapping = Booking.objects.filter(
-                    booking_status__in=['PENDING', 'CONFIRMED'],
-                ).filter(
-                    Q(start_date__lt=end_date, end_date__gt=start_date)
-                ).filter(
-                    Q(venue=hall) | Q(additional_venues=hall)
-                ).distinct()
-                if self.instance:
-                    overlapping = overlapping.exclude(id=self.instance.id)
-                occupied = 0
-                for other in overlapping:
-                    occupied += (other.gents_count or 0) + (other.ladies_count or 0)
-                remaining_total += max(0, int(hall.capacity or 0) - occupied)
-            if guest_count > remaining_total:
-                names = ' + '.join(hall.name for hall in ordered_halls)
-                raise serializers.ValidationError(
-                    f"Only {remaining_total} seats left in '{names}' for this time "
-                    f"(capacity {combined_capacity}). Reduce guests or choose another hall."
-                )
+        # Capacity overage is allowed — UI shows a soft warning only.
 
         return data
 
@@ -321,3 +284,85 @@ class BookingSerializer(serializers.ModelSerializer):
             return booking
         except ValueError as exc:
             raise serializers.ValidationError({'detail': str(exc)}) from exc
+
+
+class HallServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HallService
+        fields = [
+            'id', 'code', 'label', 'description', 'price', 'pricing_unit',
+            'is_active', 'sort_order', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        tenant = getattr(getattr(request, 'user', None), 'tenant', None)
+        label = (attrs.get('label') or (self.instance and self.instance.label) or '').strip()
+        if not label:
+            raise serializers.ValidationError({'label': 'Service name is required.'})
+        attrs['label'] = label
+
+        code = (attrs.get('code') or (self.instance and self.instance.code) or '').strip().upper()
+        if not code:
+            code = ''.join(ch if ch.isalnum() else '_' for ch in label.upper()).strip('_')[:32] or 'SERVICE'
+        attrs['code'] = code[:32]
+
+        if tenant:
+            label_qs = HallService.objects.filter(tenant=tenant, label__iexact=label)
+            code_qs = HallService.objects.filter(tenant=tenant, code__iexact=attrs['code'])
+            if self.instance:
+                label_qs = label_qs.exclude(pk=self.instance.pk)
+                code_qs = code_qs.exclude(pk=self.instance.pk)
+            if label_qs.exists():
+                raise serializers.ValidationError({'label': 'A service with this name already exists.'})
+            if code_qs.exists():
+                raise serializers.ValidationError({'code': 'A service with this code already exists.'})
+        return attrs
+
+
+class BookingServiceSerializer(serializers.ModelSerializer):
+    service_label = serializers.CharField(source='service.label', read_only=True)
+    service_price = serializers.DecimalField(
+        source='service.price', max_digits=12, decimal_places=2, read_only=True,
+    )
+    pricing_unit = serializers.CharField(source='service.pricing_unit', read_only=True)
+
+    class Meta:
+        model = BookingService
+        fields = [
+            'id', 'booking', 'service', 'service_label', 'service_price', 'pricing_unit',
+            'quantity', 'unit_price', 'include_in_bill', 'notes', 'tenant',
+        ]
+        read_only_fields = ['tenant', 'service_label', 'service_price', 'pricing_unit']
+
+    def validate(self, attrs):
+        qty = attrs.get('quantity', self.instance.quantity if self.instance else 0)
+        if qty is not None and int(qty) < 1:
+            raise serializers.ValidationError({'quantity': 'Quantity must be at least 1.'})
+        return attrs
+
+    @staticmethod
+    def _refresh_booking_totals(booking):
+        if booking:
+            booking.save()
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        booking = validated_data['booking']
+        if request and getattr(request.user, 'tenant_id', None):
+            validated_data['tenant'] = request.user.tenant
+        elif booking.tenant_id:
+            validated_data['tenant'] = booking.tenant
+        if validated_data.get('unit_price') is None:
+            service = validated_data.get('service')
+            if service is not None:
+                validated_data['unit_price'] = service.price or 0
+        obj = super().create(validated_data)
+        self._refresh_booking_totals(obj.booking)
+        return obj
+
+    def update(self, instance, validated_data):
+        obj = super().update(instance, validated_data)
+        self._refresh_booking_totals(obj.booking)
+        return obj

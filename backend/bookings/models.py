@@ -271,3 +271,56 @@ class MarriageHallPageMaintenance(MarriageHallPageVisibility):
         proxy = True
         verbose_name = 'MH page — maintenance'
         verbose_name_plural = '2 · MH pages — Maintenance & reopen time'
+
+
+class HallService(models.Model):
+    """Custom add-on the hall sells, such as DJ, photography, or valet."""
+
+    PRICING_UNITS = (
+        ('PER_EVENT', 'Per event'),
+        ('PER_GUEST', 'Per guest'),
+        ('PER_HOUR', 'Per hour'),
+    )
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='hall_services')
+    code = models.CharField(max_length=32)
+    label = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default='')
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    pricing_unit = models.CharField(max_length=20, choices=PRICING_UNITS, default='PER_EVENT')
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'label']
+        unique_together = [('tenant', 'code')]
+        verbose_name = 'MH service'
+        verbose_name_plural = 'MH — Services'
+
+    def __str__(self):
+        return self.label
+
+
+class BookingService(models.Model):
+    """Hall service allocated to a specific booking (DJ, photography, etc.)."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='booking_services', null=True, blank=True)
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='service_items')
+    service = models.ForeignKey(HallService, on_delete=models.CASCADE, related_name='booking_allocations')
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    include_in_bill = models.BooleanField(
+        default=True,
+        help_text='When true, quantity × unit price is added to the booking bill.',
+    )
+    notes = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        unique_together = [['booking', 'service']]
+        verbose_name = 'MH booking service'
+        verbose_name_plural = 'MH — Booking services'
+
+    def __str__(self):
+        return f'{self.booking_id} - {self.service.label} x{self.quantity}'

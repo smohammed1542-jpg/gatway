@@ -14,9 +14,15 @@ from finance.models import Payment, Expense
 
 from core.mixins import TenantQuerysetMixin, TenantAssignMixin
 from core.page_maintenance import page_maintenance_payload
-from core.permissions import IsAdminOrManager, IsAdminOrManagerOrStaffWrite, IsTenantOwner, IsMarriageHallApp
-from .models import Booking, MarriageHallPageVisibility
-from .serializers import BookingSerializer
+from core.permissions import (
+    IsAdminOrManager,
+    IsAdminOrManagerOrReadOnly,
+    IsAdminOrManagerOrStaffWrite,
+    IsTenantOwner,
+    IsMarriageHallApp,
+)
+from .models import Booking, BookingService, HallService, MarriageHallPageVisibility
+from .serializers import BookingSerializer, BookingServiceSerializer, HallServiceSerializer
 from .page_visibility import ensure_tenant_hall_pages, HALL_MODULE_KEYS, HALL_PAGE_KEYS
 
 
@@ -56,6 +62,44 @@ class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewS
 
         booking.refresh_from_db()
         return Response(BookingSerializer(booking, context={'request': request}).data)
+
+
+class HallServiceViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
+    queryset = HallService.objects.all().order_by('sort_order', 'label')
+    serializer_class = HallServiceSerializer
+    permission_classes = [IsMarriageHallApp, IsAdminOrManagerOrReadOnly, IsTenantOwner]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active', 'pricing_unit']
+    search_fields = ['label', 'code', 'description']
+    ordering_fields = ['label', 'price', 'sort_order', 'created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Keep inactive rows for retrieve/update/destroy so restore works.
+        if self.action == 'list' and self.request.query_params.get('include_inactive') != '1':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+
+class BookingServiceViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewSet):
+    queryset = BookingService.objects.all().order_by('-id')
+    serializer_class = BookingServiceSerializer
+    permission_classes = [IsMarriageHallApp, IsAdminOrManagerOrStaffWrite, IsTenantOwner]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['booking', 'service', 'include_in_bill']
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('booking', 'service')
+
+    def perform_destroy(self, instance):
+        booking = instance.booking
+        instance.delete()
+        if booking:
+            booking.save()
 
 
 class MarriageHallPageVisibilityView(APIView):

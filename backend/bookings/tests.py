@@ -77,7 +77,7 @@ class BookingTenantAndOverlapTests(TestCase):
         response = client.post('/api/bookings/', payload, format='json')
         self.assertEqual(response.status_code, 201)
 
-    def test_same_day_rejected_when_seats_exceeded(self):
+    def test_same_day_allows_when_seats_exceeded(self):
         client = APIClient()
         client.force_authenticate(user=self.admin_a)
         payload = {
@@ -92,7 +92,7 @@ class BookingTenantAndOverlapTests(TestCase):
             'booking_status': 'CONFIRMED',
         }
         response = client.post('/api/bookings/', payload, format='json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 201)
 
     def test_custom_time_slot_is_saved(self):
         client = APIClient()

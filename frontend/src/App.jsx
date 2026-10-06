@@ -15,6 +15,7 @@ import Expenses from './pages/Expenses';
 import ExpenseDetail from './pages/ExpenseDetail';
 import Inventory from './pages/Inventory';
 import InventoryDetail from './pages/InventoryDetail';
+import HallServices from './pages/HallServices';
 import DecorationPackages from './pages/DecorationPackages';
 import DecorationPackageDetail from './pages/DecorationPackageDetail';
 import Reports from './pages/Reports';
@@ -154,6 +155,7 @@ function App() {
           <Route path="/staff" element={<Navigate to="/settings?tab=staff" replace />} />
           <Route path="/inventory" element={hallPage(HALL_PAGE_KEYS.INVENTORY, <Inventory />)} />
           <Route path="/inventory/:itemId" element={hallPage(HALL_PAGE_KEYS.INVENTORY, <InventoryDetail />)} />
+          <Route path="/services" element={hallPage(HALL_PAGE_KEYS.SERVICES, <HallServices />)} />
           <Route path="/decoration-packages" element={hallPage(HALL_PAGE_KEYS.DECORATIONS, <DecorationPackages />)} />
           <Route path="/decoration-packages/:packageId" element={hallPage(HALL_PAGE_KEYS.DECORATIONS, <DecorationPackageDetail />)} />
           <Route path="/reports" element={hallPage(HALL_PAGE_KEYS.REPORTS, <ManagerRoute><Reports /></ManagerRoute>)} />

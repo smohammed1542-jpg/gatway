@@ -8,6 +8,7 @@ DEFAULT_HALL_PAGES = (
     ('payments', 'Payments', 50),
     ('expenses', 'Expenses', 60),
     ('inventory', 'Inventory', 70),
+    ('services', 'Services', 75),
     ('decorations', 'Decoration Packages', 80),
     ('reports', 'Reports', 90),
     ('notifications', 'Notifications', 100),

@@ -8,11 +8,30 @@ from core.models import Tenant
 
 from .models import (
     Booking,
+    BookingService,
+    HallService,
     MarriageHallBookSummary,
     MarriageHallPageLive,
     MarriageHallPageMaintenance,
 )
 from .page_visibility import ensure_tenant_hall_pages, HALL_MODULE_KEYS, HALL_PAGE_KEYS
+
+
+@admin.register(HallService)
+class HallServiceAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
+    list_display = ('label', 'code', 'price', 'pricing_unit', 'is_active', 'sort_order', 'tenant')
+    list_filter = ('pricing_unit', 'is_active', 'tenant')
+    search_fields = ('label', 'code', 'description')
+    list_editable = ('is_active', 'sort_order')
+    ordering = ('tenant', 'sort_order', 'label')
+
+
+@admin.register(BookingService)
+class BookingServiceAdmin(TenantScopedAdminMixin, admin.ModelAdmin):
+    list_display = ('booking', 'service', 'quantity', 'unit_price', 'include_in_bill', 'tenant')
+    list_filter = ('include_in_bill', 'tenant')
+    search_fields = ('booking__booking_id', 'booking__event_name', 'service__label')
+    raw_id_fields = ('booking', 'service')
 
 
 @admin.register(Booking)

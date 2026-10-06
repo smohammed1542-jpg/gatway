@@ -261,9 +261,11 @@ textarea:focus {
 .bookings-table-card .erp-table-toolbar .bookings-list-filters {
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .bookings-table-card .erp-table-toolbar .bookings-date-filter {
@@ -273,6 +275,7 @@ textarea:focus {
   border-radius: 8px;
   background: var(--surface);
   flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .bookings-table-card .bookings-date-filter input[type="date"] {
@@ -609,6 +612,75 @@ textarea:focus {
   font-weight: 600;
   white-space: nowrap;
   flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .bookings-table-card .erp-table-toolbar__start {
+    flex: 1 1 100%;
+  }
+
+  .bookings-table-card .bookings-table-search,
+  .customers-table-card .customers-table-search {
+    width: min(100%, 280px);
+    max-width: 100%;
+    flex: 1 1 220px;
+  }
+
+  .bookings-table-card .erp-table-toolbar .bookings-list-filters {
+    margin-left: 0;
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .bookings-table-card .erp-table-toolbar {
+    justify-content: flex-start;
+  }
+
+  .bookings-table-card .bookings-table-search,
+  .customers-table-card .customers-table-search {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .bookings-table-card .erp-table-toolbar .bookings-list-filters {
+    width: 100%;
+  }
+
+  .bookings-table-card .erp-table-toolbar .bookings-date-filter {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .bookings-table-card .bookings-date-filter input[type="date"],
+  .bookings-table-card .bookings-status-filter select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bookings-table-card .erp-view-fields {
+    margin-left: auto;
+  }
+
+  .bookings-table-card .bookings-toolbar-new {
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .bookings-table-card .erp-table-toolbar .bookings-date-filter {
+    flex: 1 1 100%;
+  }
+
+  .bookings-table-card .erp-view-fields span {
+    display: none;
+  }
+
+  .bookings-table-card .bookings-toolbar-new {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
 }
 
 .bookings-table-card,

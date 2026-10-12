@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PackagePlus, Trash2, Edit, X, Filter, ChevronRight } from 'lucide-react';
+import { PackagePlus, Sparkles, Trash2, Edit, X, Filter, ChevronRight } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
 import client from '../api/client';
 import toast from 'react-hot-toast';
@@ -144,9 +144,24 @@ const Inventory = () => {
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>Track and manage your hall&apos;s supplies and equipment.</p>
           </div>
           {canManage && (
-          <button className="btn-primary" onClick={() => openModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <PackagePlus size={18} /> Add Item
-          </button>
+            <div className="page-header__actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => navigate('/services')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Sparkles size={18} /> Add Service
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => openModal()}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <PackagePlus size={18} /> Add Item
+              </button>
+            </div>
           )}
         </div>
 

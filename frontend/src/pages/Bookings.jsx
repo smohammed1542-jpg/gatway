@@ -274,8 +274,7 @@ const Bookings = () => {
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const inventoryHydratedRef = useRef(true);
   const servicesHydratedRef = useRef(true);
-  const lockedGrandTotalRef = useRef(null);
-  const [grandTotalDraft, setGrandTotalDraft] = useState(null);
+  const [venuePriceEdited, setVenuePriceEdited] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'create', 'edit', 'invoice'
   const [editingId, setEditingId] = useState(null);
@@ -312,7 +311,8 @@ const Bookings = () => {
     custom_end_time: '',
     gents_count: '',
     ladies_count: '',
-    rate_per_head: 1200,
+    venue_charge: '',
+    rate_per_head: 0,
     overtime_hours: '',
     kitchen_charge: '',
     decoration_charge: '',
@@ -522,9 +522,14 @@ const Bookings = () => {
     return () => document.removeEventListener('pointerdown', closeEventOptions);
   }, []);
 
-  // Recalculate calculations in real-time
+  // Hall selection fills Rate / Head. Editing Venue replaces it with venue ÷ guests.
   const totalAttendance = Number(formData.gents_count || 0) + Number(formData.ladies_count || 0);
-  const subtotal = totalAttendance * Number(formData.rate_per_head || 0);
+  const subtotal = Number(formData.venue_charge || 0);
+  const selectedHall = halls.find((hall) => String(hall.id) === String(formVenueIds(formData)[0]));
+  const selectedHallRate = Number(selectedHall?.price_per_day || selectedHall?.price_per_head || 0);
+  const ratePerHead = venuePriceEdited && totalAttendance > 0
+    ? subtotal / totalAttendance
+    : (selectedHall ? selectedHallRate : Number(formData.rate_per_head || 0));
   
   // Overtime rate: 5000 PKR per hour
   const extraServices = (Number(formData.overtime_hours || 0) * overtimeRate) + 
@@ -593,50 +598,6 @@ const Bookings = () => {
   const remainingBeforeCollect = grandTotal - previousPaid;
   const remainingBalance = remainingBeforeCollect - invoiceCollectAmount;
   const isPosted = isPostedBooking(formData.booking_status);
-  const addonExtrasTotal = extraServices + inventoryTotal + hallServicesTotal;
-  const grandTotalTaxFactor = summaryVisibility.tax ? (1 + Number(taxRate || 0)) : 1;
-
-  /** Typing a grand total sets rate/head = (total − add-ons) ÷ guests. */
-  const applyGrandTotalAsPerHead = (rawValue, guestCount = totalAttendance, extras = addonExtrasTotal) => {
-    const desired = toFloatField(rawValue);
-    if (desired === '') {
-      lockedGrandTotalRef.current = null;
-      setGrandTotalDraft('');
-      return;
-    }
-    const desiredNum = Math.max(0, Number(desired) || 0);
-    lockedGrandTotalRef.current = desiredNum;
-    setGrandTotalDraft(String(desired));
-    const factor = summaryVisibility.tax ? (1 + Number(taxRate || 0)) : 1;
-    if (guestCount > 0) {
-      const subtotalNeeded = desiredNum / factor - extras;
-      const rate = Math.max(0, subtotalNeeded / guestCount);
-      setFormData((prev) => ({ ...prev, rate_per_head: Number(rate.toFixed(2)) }));
-    }
-  };
-
-  const commitGrandTotalDraft = () => {
-    if (grandTotalDraft == null) return;
-    if (grandTotalDraft === '') {
-      setGrandTotalDraft(null);
-      return;
-    }
-    // Keep typed total visible until guests exist and rate can be applied.
-    if (totalAttendance <= 0 && lockedGrandTotalRef.current != null) {
-      setGrandTotalDraft(String(Math.round(lockedGrandTotalRef.current)));
-      return;
-    }
-    setGrandTotalDraft(null);
-  };
-
-  useEffect(() => {
-    if (isPosted || lockedGrandTotalRef.current == null) return;
-    if (totalAttendance <= 0) return;
-    if (grandTotalDraft != null) return; // don't fight while typing
-    applyGrandTotalAsPerHead(lockedGrandTotalRef.current, totalAttendance, addonExtrasTotal);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute rate when guests/add-ons change
-  }, [totalAttendance, addonExtrasTotal, grandTotalTaxFactor, isPosted]);
-
   const resetForm = (overrides = {}) => {
     setFormData({
       booking_id: createBookingRefId(bookings),
@@ -651,7 +612,8 @@ const Bookings = () => {
       custom_end_time: '',
       gents_count: '',
       ladies_count: '',
-      rate_per_head: 1200,
+      venue_charge: '',
+      rate_per_head: 0,
       overtime_hours: '',
       kitchen_charge: '',
       decoration_charge: '',
@@ -681,8 +643,7 @@ const Bookings = () => {
     setInventoryLoading(false);
     inventoryHydratedRef.current = true;
     servicesHydratedRef.current = true;
-    lockedGrandTotalRef.current = null;
-    setGrandTotalDraft(null);
+    setVenuePriceEdited(false);
     setScannedClient(null);
     setScanProcessing(false);
     setSavingScannedClient(false);
@@ -992,11 +953,11 @@ const Bookings = () => {
     const id = String(hall.id);
     const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
     const first = halls.find((item) => String(item.id) === next[0]);
-    lockedGrandTotalRef.current = null;
-    setGrandTotalDraft(null);
+    const hallRate = Number(first?.price_per_day || first?.price_per_head || 0);
+    setVenuePriceEdited(false);
     setFormData(withVenues({
       ...formData,
-      rate_per_head: first ? (first.price_per_day || first.price_per_head || 1200) : 1200,
+      rate_per_head: hallRate,
     }, next));
     if (!current.includes(id) && next.length === 1 && hallsForSelect.length <= 1) {
       advanceReservationStep('hall', { venue: next[0], venues: next });
@@ -1044,7 +1005,12 @@ const Bookings = () => {
       custom_end_time: booking.custom_end_time || '',
       gents_count: numFromApi(booking.gents_count),
       ladies_count: numFromApi(booking.ladies_count),
-      rate_per_head: booking.rate_per_head || 1200,
+      venue_charge: (() => {
+        const guests = Number(booking.gents_count || 0) + Number(booking.ladies_count || 0);
+        const rate = Number(booking.rate_per_head || 0);
+        return guests > 0 && rate > 0 ? Number((guests * rate).toFixed(2)) : '';
+      })(),
+      rate_per_head: booking.rate_per_head || 0,
       overtime_hours: numFromApi(booking.overtime_hours),
       kitchen_charge: numFromApi(booking.kitchen_charge),
       decoration_charge: numFromApi(booking.decoration_charge),
@@ -1060,8 +1026,7 @@ const Bookings = () => {
     setCnicLookupStatus(booking.cnic ? 'found' : '');
     setSelectedDecorationId(booking.decoration_package ? String(booking.decoration_package) : '');
     setInvoiceCollectNow('');
-    lockedGrandTotalRef.current = null;
-    setGrandTotalDraft(null);
+    setVenuePriceEdited(Number(booking.gents_count || 0) + Number(booking.ladies_count || 0) > 0 && Number(booking.rate_per_head || 0) > 0);
     await Promise.all([
       loadBookingInventory(booking.id),
       loadBookingServices(booking.id),
@@ -1648,7 +1613,7 @@ const Bookings = () => {
         custom_end_time: formData.slot === 'custom' ? (formData.custom_end_time || null) : null,
         gents_count: parseInt(formData.gents_count || 0, 10) || 0,
         ladies_count: parseInt(formData.ladies_count || 0, 10) || 0,
-        rate_per_head: parseFloat(formData.rate_per_head || 0) || 0,
+        rate_per_head: Number(ratePerHead.toFixed(2)) || 0,
         overtime_hours: parseFloat(formData.overtime_hours || 0) || 0,
         kitchen_charge: parseFloat(formData.kitchen_charge || 0) || 0,
         decoration_charge: parseFloat(formData.decoration_charge || 0) || 0,
@@ -3009,28 +2974,39 @@ const Bookings = () => {
                 {summaryVisibility.ratePerHead && (
                   <div>
                     <span>Rate / Head</span>
+                    <b>{ratePerHead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                  </div>
+                )}
+                {summaryVisibility.venue && (
+                  <div>
+                    <span>Venue</span>
                     <label>
                       <input
+                        className="reservation-console__venue-input"
                         type="number"
                         min="0"
                         step="1"
                         disabled={isPosted}
-                        aria-label="Rate per head"
+                        aria-label="Venue price"
                         placeholder="0"
-                        value={displayNumField(formData.rate_per_head)}
+                        value={displayNumField(formData.venue_charge)}
                         onChange={(e) => {
-                          lockedGrandTotalRef.current = null;
-                          setGrandTotalDraft(null);
-                          setFormData({ ...formData, rate_per_head: toFloatField(e.target.value) });
+                          const venue = toFloatField(e.target.value);
+                          const edited = venue !== '' && venue != null;
+                          setVenuePriceEdited(edited);
+                          setFormData({
+                            ...formData,
+                            venue_charge: venue,
+                            rate_per_head: edited && totalAttendance > 0
+                              ? Number((Number(venue) / totalAttendance).toFixed(2))
+                              : selectedHallRate,
+                          });
                         }}
                         onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
                         onWheel={(e) => e.currentTarget.blur()}
                       />
                     </label>
                   </div>
-                )}
-                {summaryVisibility.venue && (
-                  <div><span>Venue</span><b>{subtotal.toLocaleString()}</b></div>
                 )}
                 {summaryVisibility.combinedServices && extraServices > 0 && (
                   <div><span>Combined Services</span><b>{extraServices.toLocaleString()}</b></div>
@@ -3060,34 +3036,7 @@ const Bookings = () => {
               <div className="reservation-console__grand-total">
                 <div>
                   <span>Grand Total</span>
-                  {isPosted ? (
-                    <strong>PKR {grandTotal.toLocaleString()}</strong>
-                  ) : (
-                    <label className="reservation-console__grand-total-input">
-                      <span className="reservation-console__grand-total-prefix">PKR</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        aria-label="Grand total"
-                        placeholder="0"
-                        value={
-                          grandTotalDraft != null
-                            ? grandTotalDraft
-                            : (grandTotal > 0 ? String(Math.round(grandTotal)) : '')
-                        }
-                        onFocus={() => {
-                          setGrandTotalDraft(
-                            grandTotal > 0 ? String(Math.round(grandTotal)) : (grandTotalDraft ?? '')
-                          );
-                        }}
-                        onChange={(e) => applyGrandTotalAsPerHead(e.target.value)}
-                        onBlur={commitGrandTotalDraft}
-                        onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
-                        onWheel={(e) => e.currentTarget.blur()}
-                      />
-                    </label>
-                  )}
+                  <strong>PKR {grandTotal.toLocaleString()}</strong>
                 </div>
                 {summaryVisibility.tax && <small>Inclusive Taxes</small>}
               </div>

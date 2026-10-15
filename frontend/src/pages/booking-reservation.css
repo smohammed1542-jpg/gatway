@@ -1970,6 +1970,10 @@
   padding: 3px;
 }
 
+.reservation-console__summary-lines input.reservation-console__venue-input {
+  width: 96px;
+}
+
 .reservation-console__summary-inventory > span {
   display: flex;
   flex-direction: column;

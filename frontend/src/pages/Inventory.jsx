@@ -151,7 +151,7 @@ const Inventory = () => {
                 onClick={() => navigate('/services')}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
-                <Sparkles size={18} /> Add Service
+                <Sparkles size={18} /> Services
               </button>
               <button
                 type="button"

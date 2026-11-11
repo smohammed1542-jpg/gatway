@@ -13,10 +13,13 @@ from venues.models import Venue
 from inventory.models import InventoryItem
 from rest_framework import viewsets
 from finance.models import Payment
+from django.db import transaction
 from .models import UserSettings, NotificationLog
 from .serializers import TenantSerializer, UserSettingsSerializer, NotificationLogSerializer
 from core.mixins import TenantQuerysetMixin
 from core.permissions import IsAdminOrManagerOrReadOnly, IsTenantOwner
+from .data_reset import reset_tenant_business_data
+from accounting.models import AuditLog
 
 class DashboardStatsView(APIView):
     permission_classes = [IsAuthenticated, IsMarriageHallApp]
@@ -196,6 +199,43 @@ class TenantDetailView(APIView):
             from bookings.page_visibility import sync_tenant_book_summary
             sync_tenant_book_summary(tenant)
         return Response(serializer.data)
+
+
+class TenantBusinessDataResetView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOnly]
+
+    @transaction.atomic
+    def delete(self, request):
+        tenant = request.user.tenant
+        if not tenant:
+            return Response(
+                {'detail': 'This account is not linked to a tenant.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        expected_confirmation = 'DELETE'
+        if request.data.get('confirmation') != expected_confirmation:
+            return Response(
+                {'detail': f'Type "{expected_confirmation}" to confirm this reset.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        deleted_records = reset_tenant_business_data(tenant)
+        AuditLog.record(
+            tenant,
+            action='CREATE',
+            entity_type='tenant_reset',
+            entity_id=tenant.pk,
+            message=f'{deleted_records} business records permanently deleted.',
+            actor=request.user,
+            reason='Admin requested tenant business data reset.',
+            previous_value={'deleted_records': deleted_records},
+            new_value={'settings_and_logins_preserved': True},
+        )
+        return Response({
+            'detail': 'Tenant business data reset complete.',
+            'deleted_records': deleted_records,
+        })
 
 
 class UserSettingsView(APIView):

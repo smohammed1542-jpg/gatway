@@ -23,7 +23,13 @@ import {
 import client from '../api/client';
 import { changePassword, updateMe, uploadAvatar } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
-import { getTenant, updateTenant, getUserSettings, updateUserSettings } from '../api/core';
+import {
+  getTenant,
+  updateTenant,
+  getUserSettings,
+  updateUserSettings,
+  resetTenantBusinessData,
+} from '../api/core';
 import toast from 'react-hot-toast';
 import { useTheme } from '../context/ThemeContext';
 import { useShowHijriCalendar } from '../hooks/useShowHijriCalendar';
@@ -166,6 +172,8 @@ const Settings = () => {
     theme: 'light',
     show_hijri_calendar: true,
   });
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [isResettingTenantData, setIsResettingTenantData] = useState(false);
 
   const loadSettings = async () => {
     try {
@@ -413,6 +421,24 @@ const Settings = () => {
       toast.error(parseApiError(err));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const resetConfirmationPhrase = 'DELETE';
+
+  const handleResetTenantData = async (event) => {
+    event.preventDefault();
+    if (!isAdmin || !tenantData?.name || resetConfirmation !== resetConfirmationPhrase) return;
+
+    setIsResettingTenantData(true);
+    try {
+      await resetTenantBusinessData(resetConfirmation);
+      setResetConfirmation('');
+      toast.success('Tenant business data permanently deleted.');
+    } catch (err) {
+      toast.error(parseApiError(err));
+    } finally {
+      setIsResettingTenantData(false);
     }
   };
 
@@ -1038,6 +1064,56 @@ const Settings = () => {
                     <option value="UTC">(GMT+00:00) UTC</option>
                   </select>
                 </InputGroup>
+                {isAdmin && tenantData?.name && (
+                  <section style={{
+                    marginTop: 32,
+                    padding: 20,
+                    border: '1px solid #e8b4b4',
+                    borderRadius: 8,
+                    background: '#fff8f8',
+                  }}>
+                    <h3 style={{ margin: '0 0 6px', color: '#991b1b', fontSize: 15, fontWeight: 800 }}>
+                      Danger zone
+                    </h3>
+                    <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13 }}>
+                      Permanently delete this tenant’s halls, rooms, bookings, customers, services, inventory, stays, payments, expenses, and accounting history. Tenant settings, user accounts, and login preferences will remain. This cannot be undone.
+                    </p>
+                    <form onSubmit={handleResetTenantData} style={{ display: 'grid', gap: 10, maxWidth: 480 }}>
+                      <label htmlFor="tenant-reset-confirmation" style={{ color: 'var(--text-main)', fontSize: 12, fontWeight: 700 }}>
+                        Type <code>{resetConfirmationPhrase}</code> to confirm
+                      </label>
+                      <input
+                        id="tenant-reset-confirmation"
+                        type="text"
+                        autoComplete="off"
+                        value={resetConfirmation}
+                        onChange={(event) => setResetConfirmation(event.target.value)}
+                        disabled={isResettingTenantData}
+                      />
+                      <button
+                        type="submit"
+                        disabled={isResettingTenantData || resetConfirmation !== resetConfirmationPhrase}
+                        style={{
+                          justifySelf: 'start',
+                          padding: '10px 14px',
+                          border: '1px solid #b42318',
+                          borderRadius: 6,
+                          background: '#b42318',
+                          color: '#fff',
+                          fontWeight: 700,
+                          cursor: isResettingTenantData || resetConfirmation !== resetConfirmationPhrase
+                            ? 'not-allowed'
+                            : 'pointer',
+                          opacity: isResettingTenantData || resetConfirmation !== resetConfirmationPhrase
+                            ? 0.55
+                            : 1,
+                        }}
+                      >
+                        {isResettingTenantData ? 'Deleting tenant data…' : 'Delete all tenant data'}
+                      </button>
+                    </form>
+                  </section>
+                )}
               </div>
             )}
           </div>

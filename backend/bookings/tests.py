@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -10,6 +11,7 @@ from bookings.models import Booking
 from core.models import Tenant
 from customers.models import Customer
 from finance.models import Payment
+from inventory.models import BookingInventoryItem, InventoryItem
 from venues.models import Venue
 
 
@@ -38,7 +40,7 @@ class BookingTenantAndOverlapTests(TestCase):
             tenant=self.tenant_a, name='Main', location='Floor 1', capacity=500, price_per_day=100000
         )
         self.event_date = date.today() + timedelta(days=30)
-        Booking.objects.create(
+        self.booking = Booking.objects.create(
             tenant=self.tenant_a,
             customer=self.customer_a,
             venue=self.venue_a,
@@ -50,6 +52,113 @@ class BookingTenantAndOverlapTests(TestCase):
             rate_per_head=Decimal('1000'),
             booking_status='CONFIRMED',
         )
+
+    def test_confirmed_unpaid_booking_can_be_deleted(self):
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+
+        response = client.delete(f'/api/bookings/{self.booking.id}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Booking.objects.filter(pk=self.booking.id).exists())
+
+    def test_staff_cannot_delete_booking(self):
+        staff = User.objects.create_user(
+            username='staff_a',
+            email='staff_a@test.com',
+            password='pass12345',
+            role='STAFF',
+            tenant=self.tenant_a,
+        )
+        client = APIClient()
+        client.force_authenticate(user=staff)
+
+        response = client.delete(f'/api/bookings/{self.booking.id}/')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Booking.objects.filter(pk=self.booking.id).exists())
+
+    def test_pending_booking_can_be_deleted(self):
+        booking = Booking.objects.create(
+            tenant=self.tenant_a,
+            customer=self.customer_a,
+            venue=self.venue_a,
+            event_name='Pending draft',
+            booking_status='PENDING',
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+
+        response = client.delete(f'/api/bookings/{booking.id}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Booking.objects.filter(pk=booking.id).exists())
+
+    def test_booking_with_payment_cannot_be_deleted(self):
+        booking = Booking.objects.create(
+            tenant=self.tenant_a,
+            customer=self.customer_a,
+            venue=self.venue_a,
+            event_name='Paid pending draft',
+            booking_status='PENDING',
+        )
+        Payment.objects.create(
+            tenant=self.tenant_a,
+            booking=booking,
+            amount=Decimal('100'),
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+
+        response = client.delete(f'/api/bookings/{booking.id}/')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Booking.objects.filter(pk=booking.id).exists())
+
+    def test_completed_booking_cannot_be_deleted(self):
+        booking = Booking.objects.create(
+            tenant=self.tenant_a,
+            customer=self.customer_a,
+            venue=self.venue_a,
+            event_name='Completed booking',
+            booking_status='COMPLETED',
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+
+        response = client.delete(f'/api/bookings/{booking.id}/')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Booking.objects.filter(pk=booking.id).exists())
+
+    def test_deleting_pending_booking_reverses_inventory_allocations(self):
+        booking = Booking.objects.create(
+            tenant=self.tenant_a,
+            customer=self.customer_a,
+            venue=self.venue_a,
+            event_name='Allocated pending draft',
+            booking_status='PENDING',
+        )
+        item = InventoryItem.objects.create(
+            tenant=self.tenant_a,
+            name='Chair',
+            unit='pcs',
+            quantity=9,
+        )
+        BookingInventoryItem.objects.create(
+            tenant=self.tenant_a,
+            booking=booking,
+            inventory_item=item,
+            quantity_used=1,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.admin_a)
+
+        with patch('inventory.services.InventoryService.reverse_booking_allocation') as reverse_allocation:
+            response = client.delete(f'/api/bookings/{booking.id}/')
+
+        self.assertEqual(response.status_code, 204)
+        reverse_allocation.assert_called_once()
 
     def test_tenant_user_cannot_see_other_tenant_bookings(self):
         client = APIClient()

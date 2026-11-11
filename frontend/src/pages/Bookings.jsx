@@ -27,6 +27,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import client from '../api/client';
+import { deleteBooking } from '../api/bookings';
 import { formatCollectDue, formatCollectDuePKR, bookingCollectDue, hasCollectDue } from '../utils/currency';
 import toast from 'react-hot-toast';
 import { customerDisplayName, buildCustomerPayload } from '../utils/customer';
@@ -498,6 +499,29 @@ const Bookings = () => {
       toast.error('Failed to load data from server');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteBooking = async (booking) => {
+    if (['COMPLETED', 'CANCELLED'].includes(booking.booking_status)) {
+      toast.error('Completed or cancelled bookings cannot be deleted');
+      return;
+    }
+    if (booking.payment_status !== 'UNPAID' || Number(booking.advance_paid || 0) > 0) {
+      toast.error('Bookings with payment records or an advance cannot be deleted');
+      return;
+    }
+    const bookingRef = displayBookingId(booking);
+    if (!window.confirm(`Delete booking ${bookingRef}? Any allocated inventory will be returned to stock. This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteBooking(booking.id);
+      setBookings((current) => current.filter((item) => item.id !== booking.id));
+      toast.success('Booking deleted');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Could not delete booking');
     }
   };
 
@@ -2002,6 +2026,7 @@ const Bookings = () => {
                   ...(canManage && !isPostedBooking(booking.booking_status) ? [{ label: 'Invoice', icon: <FileText size={14} />, onClick: () => handleInvoiceClick(booking) }] : []),
                   { label: 'Print', icon: <Printer size={14} />, onClick: () => handlePrintRowClick(booking) },
                   ...(canManage && !isPostedBooking(booking.booking_status) ? [{ label: 'Cancel', icon: <XCircle size={14} />, danger: true, onClick: () => setCancelTarget(booking) }] : []),
+                  ...(canManage ? [{ label: 'Delete', icon: <Trash2 size={14} />, danger: true, onClick: () => handleDeleteBooking(booking) }] : []),
                 ]}
                 renderCell={(booking, key) => {
                   if (key === 'booking_id') {

@@ -39,9 +39,46 @@ class BookingViewSet(TenantQuerysetMixin, TenantAssignMixin, viewsets.ModelViewS
     def get_queryset(self):
         return super().get_queryset().select_related('customer', 'venue', 'decoration_package').prefetch_related('additional_venues')
 
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [IsMarriageHallApp(), IsAdminOrManager(), IsTenantOwner()]
+        return super().get_permissions()
+
     @transaction.atomic
     def perform_create(self, serializer):
         super().perform_create(serializer)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        booking = self.get_object()
+        if booking.booking_status not in ('DRAFT', 'PENDING', 'CONFIRMED'):
+            return Response(
+                {'detail': 'Completed or cancelled bookings must be kept for financial history.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if booking.advance_paid > 0 or Payment.objects.filter(booking=booking).exists():
+            return Response(
+                {'detail': 'This booking has payment records or an advance and cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if booking.booking_status == 'CONFIRMED':
+            booking.booking_status = 'CANCELLED'
+            booking.cancelled_at = timezone.now()
+            booking.cancellation_reason = 'Deleted by administrator'
+            booking.save(update_fields=[
+                'booking_status', 'cancelled_at', 'cancellation_reason', 'updated_at',
+            ])
+
+        from inventory.models import BookingInventoryItem
+        from inventory.services import InventoryService
+
+        allocations = BookingInventoryItem.objects.filter(booking=booking).select_for_update().select_related('inventory_item')
+        for allocation in allocations:
+            InventoryService.reverse_booking_allocation(allocation, user=request.user)
+
+        booking.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

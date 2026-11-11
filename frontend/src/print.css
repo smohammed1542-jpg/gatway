@@ -30,6 +30,33 @@
   margin-right: auto;
 }
 
+.pdoc__brand-text p .pdoc__copy-type {
+  margin-left: 3px;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media print {
+  .print-document-workspace {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .printable-document-container {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .printable-document-container + .printable-document-container {
+    break-before: page;
+    page-break-before: always;
+  }
+}
+
 /* Guest House print — compact single A5 page */
 .gh-print-doc {
   font-size: 12px;
@@ -350,13 +377,13 @@
 
 /* Hall booking print preview toolbar */
 .print-doc-toolbar {
-  --pdt-bg: #0b1220;
-  --pdt-surface: #141c2c;
-  --pdt-border: rgba(148, 163, 184, 0.16);
-  --pdt-text: #e2e8f0;
-  --pdt-muted: #94a3b8;
-  --pdt-accent: #3d9b2f;
-  --pdt-accent-soft: rgba(61, 155, 47, 0.16);
+  --pdt-bg: rgba(255, 255, 255, 0.78);
+  --pdt-surface: rgba(248, 250, 248, 0.58);
+  --pdt-border: rgba(199, 211, 202, 0.72);
+  --pdt-text: #26332b;
+  --pdt-muted: #68756c;
+  --pdt-accent: #347d2f;
+  --pdt-accent-soft: rgba(225, 241, 222, 0.8);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -368,6 +395,9 @@
   padding: 10px 20px;
   background: var(--pdt-bg);
   border-bottom: 1px solid var(--pdt-border);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.07);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
   box-sizing: border-box;
 }
 
@@ -385,11 +415,16 @@
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 8px rgba(31, 41, 51, 0.04);
+  backdrop-filter: blur(10px);
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .print-doc-toolbar__back:hover {
-  border-color: rgba(148, 163, 184, 0.35);
-  background: #1a2438;
+  border-color: #adc0b1;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(31, 41, 51, 0.08);
+  transform: translateY(-1px);
 }
 
 .print-doc-toolbar__tabs {
@@ -406,7 +441,9 @@
   padding: 3px;
   border: 1px solid var(--pdt-border);
   border-radius: 10px;
-  background: var(--pdt-surface);
+  background: rgba(247, 250, 247, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 2px 8px rgba(31, 41, 51, 0.04);
+  backdrop-filter: blur(10px);
   overflow-x: auto;
 }
 
@@ -424,16 +461,18 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .print-doc-toolbar__tab:hover {
   color: var(--pdt-text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .print-doc-toolbar__tab.is-active {
   background: var(--pdt-accent-soft);
-  color: #b7f0a8;
+  color: #286522;
+  box-shadow: inset 0 0 0 1px rgba(52, 125, 47, 0.12), 0 2px 8px rgba(52, 125, 47, 0.1);
 }
 
 .print-doc-toolbar__tab svg {
@@ -455,7 +494,9 @@
   padding: 3px;
   border: 1px solid var(--pdt-border);
   border-radius: 8px;
-  background: var(--pdt-surface);
+  background: rgba(248, 250, 248, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
 }
 
 .print-doc-toolbar__lang button {
@@ -469,11 +510,13 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
 }
 
 .print-doc-toolbar__lang button.is-active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(225, 241, 222, 0.82);
   color: var(--pdt-text);
+  box-shadow: inset 0 0 0 1px rgba(52, 125, 47, 0.1);
 }
 
 .print-doc-toolbar__print {
@@ -490,10 +533,49 @@
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(52, 125, 47, 0.18);
+  transition: filter 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .print-doc-toolbar__print:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.04);
+  box-shadow: 0 6px 16px rgba(52, 125, 47, 0.24);
+  transform: translateY(-1px);
+}
+
+.print-doc-toolbar__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--pdt-border);
+  border-radius: 8px;
+  background: var(--pdt-surface);
+  color: var(--pdt-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 8px rgba(31, 41, 51, 0.04);
+  backdrop-filter: blur(10px);
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.print-doc-toolbar__edit.is-active {
+  background: var(--pdt-accent-soft);
+  color: #286522;
+  box-shadow: inset 0 0 0 1px rgba(52, 125, 47, 0.12), 0 2px 8px rgba(52, 125, 47, 0.1);
+}
+
+.print-doc-toolbar__edit:hover {
+  border-color: #adc0b1;
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.print-doc-toolbar__edit.is-active:hover {
+  background: rgba(225, 241, 222, 0.95);
 }
 
 @media (max-width: 900px) {
@@ -537,6 +619,10 @@
   }
 
   .print-doc-toolbar__print span {
+    display: none;
+  }
+
+  .print-doc-toolbar__edit span {
     display: none;
   }
 }
@@ -614,7 +700,7 @@
 
 .pbill__totals {
   width: 100%;
-  max-width: 280px;
+  max-width: 240px;
   margin: 16px 0 0 auto;
 }
 
@@ -622,10 +708,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 7px 0;
+  gap: 12px;
+  padding: 8px 0;
   border-bottom: 1px solid #f1f5f9;
   font-size: 12px;
+}
+
+.pbill__totals-row--tax {
+  font-size: 11px;
 }
 
 .pbill__totals-row span:first-child {
@@ -638,8 +728,19 @@
   font-weight: 700;
 }
 
+.pbill__totals-row--subtotal {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid #cbd5e1;
+}
+
+.pbill__totals-row--subtotal span:first-child {
+  color: #334155;
+  font-weight: 700;
+}
+
 .pbill__totals-row--grand {
-  margin-top: 6px;
+  margin-top: 8px;
   padding: 10px 12px;
   border: 1px solid #dbe7d8;
   border-radius: 8px;
@@ -693,6 +794,11 @@
 
 .pbill__totals-row--due.is-cleared strong {
   color: #15803d;
+}
+
+.pbill__totals-row--advance {
+  margin-top: 4px;
+  border-bottom: 0;
 }
 
 .pbill-advance {
@@ -870,6 +976,11 @@
 .pdoc__docmeta-row span {
   color: var(--pdoc-muted);
   font-weight: 600;
+}
+
+.pdoc__docmeta-ref {
+  min-width: 23px;
+  text-align: left;
 }
 
 .pdoc__docmeta-row strong {

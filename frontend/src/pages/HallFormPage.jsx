@@ -293,7 +293,6 @@ export default function HallFormPage() {
                   <input
                     type="number"
                     min={0}
-                    required
                     value={form.price_per_day}
                     onChange={(e) => setForm({ ...form, price_per_day: e.target.value })}
                     placeholder="e.g. 250000"

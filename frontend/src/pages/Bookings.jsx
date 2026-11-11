@@ -2528,7 +2528,7 @@ const Bookings = () => {
                       className="reservation-console__add-inventory"
                       disabled={availableInventoryCatalog.length === 0}
                       onClick={() => {
-                        setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false, unit_price: '' }]);
+                        setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: true, unit_price: '' }]);
                         window.setTimeout(() => {
                           const selects = document.querySelectorAll('.reservation-console__inventory-line--inventory .reservation-console__inventory-field--item select');
                           selects[selects.length - 1]?.focus();
@@ -2675,7 +2675,7 @@ const Bookings = () => {
                                 ...next[index],
                                 inventory_item: e.target.value,
                                 quantity_used: 1,
-                                include_in_bill: false,
+                                include_in_bill: true,
                                 unit_price: selectedItem?.price_per_unit ?? '',
                               };
                               setInventoryLines(next);
@@ -2974,7 +2974,7 @@ const Bookings = () => {
                 {summaryVisibility.ratePerHead && (
                   <div>
                     <span>Rate / Head</span>
-                    <b>{ratePerHead.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                    <b>{ratePerHead.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b>
                   </div>
                 )}
                 {summaryVisibility.venue && (
@@ -3560,7 +3560,7 @@ const Bookings = () => {
                     <button
                       type="button"
                       className="btn-secondary"
-                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: false, unit_price: '' }])}
+                      onClick={() => setInventoryLines([...inventoryLines, { inventory_item: '', quantity_used: 1, include_in_bill: true, unit_price: '' }])}
                       style={{ alignSelf: 'flex-start' }}
                     >
                       + Add inventory item

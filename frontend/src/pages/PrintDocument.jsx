@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppLoader from '../components/AppLoader';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -10,157 +10,17 @@ import {
   User,
   Edit,
   Save,
-  Check,
   XCircle,
 } from 'lucide-react';
 import client from '../api/client';
+import { listBookingServices } from '../api/hallServices';
 import toast from 'react-hot-toast';
 import { formatCollectDuePKR, hasCollectDue } from '../utils/currency';
 import AppLogo from '../components/AppLogo';
-import { BRAND_FULL_NAME } from '../constants/brand';
 import usePersistentState from '../hooks/usePersistentState';
 import { useHallPageVisibility } from '../context/HallPageVisibilityContext';
 import { HALL_MODULE_KEYS } from '../constants/hallPages';
 import '../print.css';
-
-// HTML5 Canvas Digital Signature Pad Component
-const SignaturePad = ({ label, subtitle, onSave }) => {
-  const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSigned, setHasSigned] = useState(false);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = '#0f172a'; // Deep Navy Ink
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Set canvas resolution for crisp drawing
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
-
-    // Initial white background fill
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, rect.width, rect.height);
-  }, []);
-
-  const getCoordinates = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-
-    if (e.touches && e.touches.length > 0) {
-      return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
-      };
-    } else {
-      return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      };
-    }
-  };
-
-  const startDrawing = (e) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const { x, y } = getCoordinates(e);
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-  };
-
-  const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const { x, y } = getCoordinates(e);
-
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    setHasSigned(true);
-  };
-
-  const stopDrawing = () => {
-    if (!isDrawing) return;
-    setIsDrawing(false);
-    const canvas = canvasRef.current;
-    if (canvas && hasSigned) {
-      onSave(canvas.toDataURL());
-    }
-  };
-
-  const clear = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, rect.width, rect.height);
-    setHasSigned(false);
-    onSave(null);
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '18px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: '12px', fontWeight: '800', color: '#f1f5f9' }}>{label}</span>
-        <span style={{ fontSize: '9px', color: '#94a3b8' }}>{subtitle}</span>
-      </div>
-      
-      <div style={{ 
-        border: '1px solid rgba(255, 255, 255, 0.1)', 
-        borderRadius: '10px', 
-        overflow: 'hidden', 
-        backgroundColor: 'white', 
-        cursor: 'crosshair',
-        touchAction: 'none' // Essential to stop scrolling on mobile/tablet while signing
-      }}>
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-          style={{ display: 'block', width: '100%', height: '80px' }}
-        />
-      </div>
-      
-      <button 
-        type="button" 
-        onClick={clear}
-        style={{
-          alignSelf: 'flex-end',
-          padding: '4px 10px',
-          fontSize: '9px',
-          fontWeight: '700',
-          color: hasSigned ? '#ef4444' : '#64748b',
-          backgroundColor: hasSigned ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.05)',
-          border: '1px solid ' + (hasSigned ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.08)'),
-          borderRadius: '6px',
-          cursor: 'pointer',
-          transition: 'all 0.2s'
-        }}
-      >
-        Clear Pad
-      </button>
-    </div>
-  );
-};
 
 const PrintDocument = () => {
   const { bookingId } = useParams();
@@ -174,10 +34,6 @@ const PrintDocument = () => {
   const [venue, setVenue] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDocType, setActiveDocType] = usePersistentState('print-document-tab', 'final_bill');
-
-  // Digital Signatures Base64 States
-  const [officerSig, setOfficerSig] = useState(null);
-  const [customerSig, setCustomerSig] = useState(null);
 
   // Editable State Variables
   const [isEditable, setIsEditable] = useState(false);
@@ -205,6 +61,7 @@ const PrintDocument = () => {
   const [generatorCharge, setGeneratorCharge] = useState(0);
   const [advancePaid, setAdvancePaid] = useState(0);
   const [inventoryBillLines, setInventoryBillLines] = useState([]);
+  const [serviceBillLines, setServiceBillLines] = useState([]);
 
   useEffect(() => {
     const fetchPrintData = async () => {
@@ -230,10 +87,11 @@ const PrintDocument = () => {
         setAdvancePaid(Number(bookingData.advance_paid || 0));
         setCustomerCnic(bookingData.cnic || '');
 
-        const [customerRes, venueRes, inventoryRes] = await Promise.all([
+        const [customerRes, venueRes, inventoryRes, serviceRows] = await Promise.all([
           client.get(`/customers/${bookingData.customer}/`),
           client.get(`/venues/${bookingData.venue}/`),
           client.get(`/inventory/booking-items/?booking=${bookingId}`).catch(() => ({ data: [] })),
+          listBookingServices(bookingId).catch(() => []),
         ]);
         
         setCustomer(customerRes.data);
@@ -255,6 +113,20 @@ const PrintDocument = () => {
             return {
               id: row.id,
               name: row.item_name || 'Add-on item',
+              unitPrice,
+              quantity,
+              price: unitPrice * (Number.isFinite(quantity) && quantity > 0 ? quantity : 0),
+              includeInBill: Boolean(row.include_in_bill),
+            };
+          })
+        );
+        setServiceBillLines(
+          (Array.isArray(serviceRows) ? serviceRows : []).map((row) => {
+            const unitPrice = Number(row.unit_price ?? row.service_price ?? 0);
+            const quantity = Number(row.quantity || 0);
+            return {
+              id: row.id,
+              name: row.service_label || 'Service',
               unitPrice,
               quantity,
               price: unitPrice * (Number.isFinite(quantity) && quantity > 0 ? quantity : 0),
@@ -336,8 +208,13 @@ const PrintDocument = () => {
     (sum, line) => (line.includeInBill ? sum + Number(line.price || 0) : sum),
     0
   );
+  const serviceTotal = serviceBillLines.reduce(
+    (sum, line) => (line.includeInBill ? sum + Number(line.price || 0) : sum),
+    0
+  );
   const chargedInventoryLines = inventoryBillLines.filter((line) => line.includeInBill);
-  const totalBeforeTax = subtotal + extraServices + inventoryTotal;
+  const chargedServiceLines = serviceBillLines.filter((line) => line.includeInBill);
+  const totalBeforeTax = subtotal + extraServices + inventoryTotal + serviceTotal;
   const taxRatePercent = 5;
   const taxAmount = showTax ? totalBeforeTax * (taxRatePercent / 100) : 0;
   const grandTotal = totalBeforeTax + taxAmount;
@@ -455,12 +332,15 @@ const PrintDocument = () => {
   const partyLeftLabel = activeDocType === 'operations_report'
     ? (isUrdu ? 'کسٹمر' : 'Customer')
     : (isUrdu ? 'بل وصول کنندہ' : 'Billed to');
+  const billCopies = activeDocType === 'final_bill'
+    ? (isUrdu ? ['کسٹمر بل', 'ایڈمن بل'] : ['Customer Bill', 'Admin Bill'])
+    : [null];
 
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#0f172a', // Sleek Premium Dark Slate Background
-      color: '#f8fafc',
+      backgroundColor: '#eef2ef',
+      color: '#1f2933',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       paddingBottom: '60px',
       boxSizing: 'border-box'
@@ -478,10 +358,7 @@ const PrintDocument = () => {
           #non-printable-toolbar {
             display: none !important;
           }
-          #non-printable-sig-panel {
-            display: none !important;
-          }
-          #printable-document-container {
+          .printable-document-container {
             padding: 0 !important;
             margin: 0 !important;
             background: transparent !important;
@@ -552,6 +429,27 @@ const PrintDocument = () => {
         </div>
 
         <div className="print-doc-toolbar__actions">
+          <button
+            type="button"
+            className={`print-doc-toolbar__edit${isEditable ? ' is-active' : ''}`}
+            aria-label={isEditable ? 'Disable invoice editing' : 'Enable invoice editing'}
+            aria-pressed={isEditable}
+            onClick={() => setIsEditable(!isEditable)}
+          >
+            <Edit size={16} />
+            <span>{isEditable ? 'Editing' : 'Edit'}</span>
+          </button>
+          {isEditable && (
+            <button
+              type="button"
+              className="print-doc-toolbar__print print-doc-toolbar__save"
+              onClick={handleSaveChanges}
+              disabled={isSaving}
+            >
+              <Save size={16} />
+              <span>{isSaving ? 'Saving' : 'Save'}</span>
+            </button>
+          )}
           <div className="print-doc-toolbar__lang" role="group" aria-label="Print language">
             <button
               type="button"
@@ -576,11 +474,12 @@ const PrintDocument = () => {
         </div>
       </div>
 
-      {/* Side-by-Side Flex Workspace Container */}
-      <div style={{
+      {/* Print workspace */}
+      <div className="print-document-workspace" style={{
         display: 'flex',
+        flexDirection: 'column',
         justifyContent: 'center',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         gap: '28px',
         maxWidth: '1100px',
         margin: '24px auto 0 auto',
@@ -589,23 +488,28 @@ const PrintDocument = () => {
       }}>
         
         {/* Left Side: A5 centered sheet layout */}
-        <div id="printable-document-container" className="print-page-a5" style={{
-          flex: '1',
-          boxSizing: 'border-box'
-        }}>
+        {billCopies.map((copyLabel, copyIndex) => (
+          <div
+            id={copyIndex === 0 ? 'printable-document-container' : undefined}
+            className="printable-document-container print-page-a5"
+            style={{ flex: 'none', width: '100%', boxSizing: 'border-box' }}
+            key={copyLabel || 'single-copy'}
+          >
           
           <div className="printable-card pdoc">
             <header className="pdoc__header">
               <div className="pdoc__brand">
                 <AppLogo size="sm" tone="dark" />
                 <div className="pdoc__brand-text">
-                  <h1>{BRAND_FULL_NAME}</h1>
-                  <p>{isUrdu ? 'ویینیو مینجمنٹ' : 'Venue management'}</p>
+                  <h1>Gateway Marriage Hall</h1>
+                  <p>
+                    {copyLabel && <span className="pdoc__copy-type">{copyLabel}</span>}
+                  </p>
                 </div>
               </div>
               <div className="pdoc__docmeta">
                 <div className="pdoc__docmeta-row">
-                  <span>{isUrdu ? 'حوالہ' : 'Ref'}</span>
+                  <span className="pdoc__docmeta-ref">{isUrdu ? 'حوالہ' : 'Ref'}</span>
                   <strong>{booking.booking_id || `BK-${booking.id}`}</strong>
                 </div>
                 <div className="pdoc__docmeta-row">
@@ -662,6 +566,44 @@ const PrintDocument = () => {
                   </span>
                 </div>
 
+                {(inventoryBillLines.length > 0 || serviceBillLines.length > 0) && (
+                  <table className="pbill__table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '58%' }}>{isUrdu ? 'آئٹم / سروس' : 'Item / Service'}</th>
+                        <th className="pbill__num" style={{ width: '14%' }}>{isUrdu ? 'تعداد' : 'Qty'}</th>
+                        <th className="pbill__num" style={{ width: '28%' }}>{isUrdu ? 'فی یونٹ قیمت' : 'Unit price (PKR)'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inventoryBillLines.map((line) => (
+                        <tr key={`inventory-${line.id}`}>
+                          <td>
+                            <span className="pbill__item">{line.name}</span>
+                            <span className="pbill__meta">
+                              {isUrdu ? 'انوینٹری' : 'Inventory'}{line.includeInBill ? '' : (isUrdu ? ' · بل میں شامل نہیں' : ' · Not billed')}
+                            </span>
+                          </td>
+                          <td className="pbill__num">{fmt(line.quantity)}</td>
+                          <td className="pbill__num">{fmt(line.unitPrice)}</td>
+                        </tr>
+                      ))}
+                      {serviceBillLines.map((line) => (
+                        <tr key={`service-${line.id}`}>
+                          <td>
+                            <span className="pbill__item">{line.name}</span>
+                            <span className="pbill__meta">
+                              {isUrdu ? 'سروس' : 'Service'}{line.includeInBill ? '' : (isUrdu ? ' · بل میں شامل نہیں' : ' · Not billed')}
+                            </span>
+                          </td>
+                          <td className="pbill__num">{fmt(line.quantity)}</td>
+                          <td className="pbill__num">{fmt(line.unitPrice)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
                 <div className="pbill-summary">
                   <div className="pbill-summary__row">
                     <span>{isUrdu ? 'اندازاً کل بل' : 'Estimated grand total'}</span>
@@ -677,26 +619,6 @@ const PrintDocument = () => {
                   </div>
                 </div>
 
-                <div className="pbill-terms">
-                  <h5>{isUrdu ? 'شرائط' : 'Terms'}</h5>
-                  <ol>
-                    <li>
-                      {isUrdu
-                        ? `ایڈوانس PKR ${fmt(advancePaid)} ہال سلاٹ محفوظ کرتا ہے۔`
-                        : `Advance of PKR ${fmt(advancePaid)} reserves this venue slot.`}
-                    </li>
-                    <li>
-                      {isUrdu
-                        ? `باقی رقم ${formatCollectDuePKR(remainingBalance)} ایونٹ سے کم از کم 24 گھنٹے پہلے ادا کرنی ہوگی۔`
-                        : `Outstanding balance ${formatCollectDuePKR(remainingBalance)} is due at least 24 hours before the event.`}
-                    </li>
-                    <li>
-                      {isUrdu
-                        ? 'ایونٹ سے 14 دن سے کم پہلے منسوخی پر ایڈوانس قابلِ واپسی نہیں۔'
-                        : 'Cancellations within 14 days of the event forfeit the advance deposit.'}
-                    </li>
-                  </ol>
-                </div>
               </div>
             )}
 
@@ -786,16 +708,27 @@ const PrintDocument = () => {
                         <td className="pbill__num">{fmt(line.price)}</td>
                       </tr>
                     ))}
+                    {chargedServiceLines.map((line) => (
+                      <tr key={`service-${line.id}`}>
+                        <td>
+                          <span className="pbill__item">{line.name}</span>
+                          <span className="pbill__meta">{isUrdu ? 'سروس' : 'Service'}</span>
+                        </td>
+                        <td className="pbill__num">{fmt(line.quantity)}</td>
+                        <td className="pbill__num">{fmt(line.unitPrice)}</td>
+                        <td className="pbill__num">{fmt(line.price)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
 
                 <div className="pbill__totals">
-                  <div className="pbill__totals-row">
+                  <div className="pbill__totals-row pbill__totals-row--subtotal">
                     <span>{isUrdu ? 'سب ٹوٹل' : 'Subtotal'}</span>
                     <strong>{fmt(totalBeforeTax)}</strong>
                   </div>
                   {showTax && (
-                    <div className="pbill__totals-row">
+                    <div className="pbill__totals-row pbill__totals-row--tax">
                       <span>{isUrdu ? `ٹیکس (${taxRatePercent}%)` : `Tax (${taxRatePercent}%)`}</span>
                       <strong>{fmt(taxAmount)}</strong>
                     </div>
@@ -804,7 +737,7 @@ const PrintDocument = () => {
                     <span>{isUrdu ? 'کل رقم' : 'Grand total'}</span>
                     <strong>PKR {fmt(grandTotal)}</strong>
                   </div>
-                  <div className="pbill__totals-row">
+                  <div className="pbill__totals-row pbill__totals-row--advance">
                     <span>{isUrdu ? 'ایڈوانس وصول' : 'Advance received'}</span>
                     <strong>PKR {isEditable
                       ? renderInput(advancePaid, setAdvancePaid, 'number', { width: '90px', textAlign: 'right' })
@@ -998,14 +931,12 @@ const PrintDocument = () => {
             <div className="pdoc__sigs">
               <div className="pdoc__sig">
                 <div className="pdoc__sig-line">
-                  {officerSig ? <img src={officerSig} alt="Officer signature" /> : null}
                 </div>
                 <strong>{isUrdu ? 'آفیسر دستخط' : 'Officer signature'}</strong>
                 <span>{isUrdu ? 'مینجمنٹ' : 'Management'}</span>
               </div>
               <div className="pdoc__sig">
                 <div className="pdoc__sig-line">
-                  {customerSig ? <img src={customerSig} alt="Customer signature" /> : null}
                 </div>
                 <strong>{isUrdu ? 'کسٹمر دستخط' : 'Customer signature'}</strong>
                 <span>{isUrdu ? 'کلائنٹ' : 'Client'}</span>
@@ -1014,122 +945,8 @@ const PrintDocument = () => {
 
           </div>
 
-        </div>
-
-        {/* Right Side: Sticky Digital Signature Pad & Edit Control Panel */}
-        <div id="non-printable-sig-panel" style={{
-          width: '320px',
-          position: 'sticky',
-          top: '100px',
-          backgroundColor: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '16px',
-          padding: '24px',
-          boxSizing: 'border-box'
-        }}>
-          
-          {/* Editable Control section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px' }}>
-            <div style={{ backgroundColor: isEditable ? 'rgba(91, 213, 30, 0.15)' : 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Edit size={16} color={isEditable ? '#5BD51E' : '#94a3b8'} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <h3 style={{ fontSize: '15px', fontWeight: '900', color: 'white', margin: 0 }}>Editable Mode</h3>
-              <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>پرنٹ ایڈیٹ پینل</p>
-            </div>
-            
-            {/* Toggle switch */}
-            <button 
-              onClick={() => setIsEditable(!isEditable)}
-              style={{
-                padding: '6px 12px',
-                fontSize: '11px',
-                fontWeight: '700',
-                backgroundColor: isEditable ? '#5BD51E' : 'rgba(255,255,255,0.05)',
-                color: 'white',
-                border: '1px solid ' + (isEditable ? '#5BD51E' : 'rgba(255,255,255,0.1)'),
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              {isEditable ? 'ON' : 'OFF'}
-            </button>
           </div>
-
-          {/* Save Changes Button if edited */}
-          {isEditable && (
-            <button 
-              onClick={handleSaveChanges}
-              disabled={isSaving}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                backgroundColor: '#166534',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '12px',
-                fontWeight: '700',
-                fontSize: '13px',
-                cursor: 'pointer',
-                marginBottom: '20px',
-                transition: 'all 0.2s',
-                opacity: isSaving ? 0.6 : 1
-              }}
-              onMouseEnter={(e) => { if(!isSaving) e.currentTarget.style.backgroundColor = '#15803d'; }}
-              onMouseLeave={(e) => { if(!isSaving) e.currentTarget.style.backgroundColor = '#166534'; }}
-            >
-              <Save size={16} /> {isSaving ? 'Saving to Database...' : 'Save to Database'}
-            </button>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ backgroundColor: 'rgba(91, 213, 30, 0.1)', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Check size={16} color="#5BD51E" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: '900', color: 'white', margin: 0 }}>Signature Station</h3>
-              <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>دستخط کا ڈیجیٹل پینل</p>
-            </div>
-          </div>
-          
-          <p style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.5', marginBottom: '20px' }}>
-            Draw directly inside the pads below. Signatures sync onto the A5 sheet.
-          </p>
-
-          {/* Canvas Signature Pad 1: Officer */}
-          <SignaturePad 
-            label="1. Authorized Officer" 
-            subtitle="انتظامی دستخط"
-            onSave={(dataUrl) => setOfficerSig(dataUrl)}
-          />
-
-          {/* Canvas Signature Pad 2: Customer */}
-          <SignaturePad 
-            label="2. Customer Signature" 
-            subtitle="گاہک کے دستخط"
-            onSave={(dataUrl) => setCustomerSig(dataUrl)}
-          />
-
-          <div style={{ 
-            marginTop: '20px', 
-            padding: '12px', 
-            borderRadius: '10px', 
-            backgroundColor: 'rgba(91, 213, 30, 0.05)', 
-            border: '1px solid rgba(91, 213, 30, 0.1)',
-            fontSize: '10px',
-            color: '#5BD51E',
-            lineHeight: '1.4',
-            textAlign: 'center',
-            fontWeight: '600'
-          }}>
-            ✍️ Touchscreen tablets or mobile screens can be used to sign directly with a finger or stylus.
-          </div>
-        </div>
+        ))}
 
       </div>
     </div>

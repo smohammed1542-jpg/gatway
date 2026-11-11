@@ -74,9 +74,6 @@ const AccountingDashboard = () => {
           <Link className="btn-secondary" to={`${base}/reports?tab=trial-balance`}>Reports</Link>
         </div>
       </div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
-        Bookings, payments, and expenses post to the general ledger automatically on the backend.
-      </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
         {cards.map((c) => (
           <StatCard key={c.label} label={c.label} value={formatRs(c.value)} icon={Wallet} />
